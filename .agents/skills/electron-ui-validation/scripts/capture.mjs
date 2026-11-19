@@ -31,13 +31,22 @@ const app = await electron.launch({
   env: { ...process.env, APP_BACKGROUND_LAUNCH: '1' }
 })
 const logs = []
-app.process().stdout?.on('data', (chunk) => logs.push(`[main] ${chunk}`.trimEnd()))
-app.process().stderr?.on('data', (chunk) => logs.push(`[main:err] ${chunk}`.trimEnd()))
+app.on('console', (message) => logs.push(`[main:${message.type()}] ${message.text()}`))
+app.process().stderr?.on('data', (chunk) => logs.push(`[main:stderr] ${chunk}`.trimEnd()))
 try {
   const page = await app.firstWindow()
-  page.on('console', (message) => logs.push(`[renderer:${message.type()}] ${message.text()}`))
-  page.on('pageerror', (error) => logs.push(`[renderer:error] ${error.message}`))
-  await page.waitForLoadState('load')
+  // The page may have started before these listeners existed; reload so startup output is captured in full, once.
+  let reloaded = false
+  page.on('console', (message) => {
+    if (reloaded) logs.push(`[renderer:${message.type()}] ${message.text()}`)
+  })
+  page.on('pageerror', (error) => {
+    if (reloaded) logs.push(`[renderer:error] ${error.message}`)
+  })
+  page.once('framenavigated', () => {
+    reloaded = true
+  })
+  await page.reload({ waitUntil: 'load' })
   for (const text of values.click) {
     await page.getByText(text, { exact: true }).click()
   }

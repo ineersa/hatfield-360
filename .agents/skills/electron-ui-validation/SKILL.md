@@ -14,7 +14,7 @@ pnpm build
 node .agents/skills/electron-ui-validation/scripts/capture.mjs [--out test-results/x.png] [--click "Button text"]...
 ```
 
-It prints the accessibility tree (roles, names, text) and main + renderer console output, including uncaught renderer errors, and saves a screenshot. `--click` takes exact visible text and repeats in order. Read the screenshot with the Read tool to check layout and visuals. The accessibility tree is the cheaper check for content and state.
+It prints the accessibility tree (roles, names, text), main-process console output and stderr, and renderer console output including uncaught errors from startup (it reloads the page once its listeners are attached), and saves a screenshot. `--click` takes exact visible text and repeats in order. Read the screenshot with the Read tool to check layout and visuals. The accessibility tree is the cheaper check for content and state.
 
 With no display (SSH, CI, sandbox), prefix the command with `xvfb-run -a`. If the error is `The platform failed to initialize`, that's the cause.
 
@@ -33,5 +33,5 @@ A behavior that must stay working gets a Playwright spec in `tests/e2e/` (see `a
 ## Troubleshooting
 
 - Stale UI: `out/` is from an older build; rerun `pnpm build`.
-- `window.desktop` undefined: the preload failed to load. Check `[main:err]` output and that the preload is still a single CJS file in `out/preload/index.js` (sandboxed preloads can't load ESM or other modules).
+- `window.desktop` undefined: the preload failed to load. Check `[main:stderr]` output and that the preload is still a single CJS file in `out/preload/index.js` (sandboxed preloads can't load ESM or other modules).
 - Blank page: look for `[renderer:error]` lines and CSP violations.

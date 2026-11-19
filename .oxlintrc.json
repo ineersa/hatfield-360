@@ -116,6 +116,29 @@
       "rules": {
         "no-console": "off"
       }
+    },
+    {
+      "files": ["src/main/**"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "electron",
+                "importNames": ["ipcMain"],
+                "message": "Register IPC handlers with handleTrusted from src/main/ipc/trusted-ipc.ts."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["src/main/ipc/trusted-ipc.ts"],
+      "rules": {
+        "no-restricted-imports": "off"
+      }
     }
   ],
   "ignorePatterns": ["out/**", ".claude/skills/**"]

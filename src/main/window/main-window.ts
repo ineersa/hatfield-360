@@ -1,5 +1,6 @@
-import { BrowserWindow, shell } from 'electron'
+import { BrowserWindow } from 'electron'
 import { join } from 'node:path'
+import { rendererEntryUrl } from './renderer-entry'
 import { isBackgroundLaunch } from './window-launch-mode'
 
 export function createMainWindow(): BrowserWindow {
@@ -22,19 +23,10 @@ export function createMainWindow(): BrowserWindow {
     window.once('ready-to-show', () => window.show())
   }
 
-  window.webContents.setWindowOpenHandler(({ url }) => {
-    if (url.startsWith('https://') || url.startsWith('http://')) {
-      void shell.openExternal(url)
-    }
-    return { action: 'deny' }
-  })
+  // The window only ever shows the app. Opening external links needs an explicit, validated IPC capability.
+  window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
   window.webContents.on('will-navigate', (event) => event.preventDefault())
 
-  const devServerUrl = process.env.ELECTRON_RENDERER_URL
-  if (devServerUrl) {
-    void window.loadURL(devServerUrl)
-  } else {
-    void window.loadFile(join(__dirname, '../renderer/index.html'))
-  }
+  void window.loadURL(rendererEntryUrl())
   return window
 }

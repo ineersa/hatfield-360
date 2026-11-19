@@ -35,7 +35,8 @@ Process boundary rules (enforced by lint where possible):
 - Windows keep `contextIsolation: true`, `sandbox: true`, `nodeIntegration: false`. Don't loosen them.
 - The renderer never imports `electron`, `node:*`, or anything from `src/main` / `src/preload`. It talks to main only through `window.desktop`.
 - Every IPC capability is declared once in `src/shared` (channel name + request/response types in `DesktopApi`), handled in `src/main/ipc/`, bridged in `src/preload/`. Use the `ipc-contract` skill.
-- Main validates any input arriving over IPC; the renderer is untrusted.
+- Register handlers with `handleTrusted` (`src/main/ipc/trusted-ipc.ts`), never raw `ipcMain.handle`; it rejects calls from frames other than the app's own page. Main validates any input arriving over IPC; the renderer is untrusted.
+- The window never navigates or opens new windows. External links need an explicit IPC capability that validates the URL before `shell.openExternal`.
 - Keep the main process responsive: no sync fs/child_process calls on hot paths.
 
 # Repo Rules
