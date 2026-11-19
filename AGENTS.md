@@ -1,6 +1,6 @@
 # Hatfield 360
 
-Electron desktop app: React renderer, Node main process, sandboxed preload bridge. Package manager is pnpm (version pinned in `package.json`), runtime Node 24 (`.nvmrc`).
+Electron desktop app: React renderer, Node main process, sandboxed preload bridge. What we are building and the target layout: [product vision](docs/product/vision.md). Package manager is pnpm (version pinned in `package.json`), runtime Node 24 (`.nvmrc`).
 
 # Commands
 
