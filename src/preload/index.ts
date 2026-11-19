@@ -17,10 +17,17 @@ const desktopApi: DesktopApi = {
     return () => ipcRenderer.removeListener(WORKSPACE_CHANNELS.changed, listener)
   },
   getSettings: () => ipcRenderer.invoke(SETTINGS_CHANNELS.get),
+  updateSetting: (key, value) => ipcRenderer.invoke(SETTINGS_CHANNELS.update, key, value),
+  openSettingsFile: () => ipcRenderer.invoke(SETTINGS_CHANNELS.openFile),
   subscribeSettings: (callback) => {
     const listener = (_event: unknown, settings: SettingsView): void => callback(settings)
     ipcRenderer.on(SETTINGS_CHANNELS.changed, listener)
     return () => ipcRenderer.removeListener(SETTINGS_CHANNELS.changed, listener)
+  },
+  subscribeShowSettings: (callback) => {
+    const listener = (): void => callback()
+    ipcRenderer.on(SETTINGS_CHANNELS.showPage, listener)
+    return () => ipcRenderer.removeListener(SETTINGS_CHANNELS.showPage, listener)
   }
 }
 

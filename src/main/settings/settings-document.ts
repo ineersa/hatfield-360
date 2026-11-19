@@ -1,20 +1,23 @@
-import { type ParseError, parse, printParseErrorCode } from 'jsonc-parser'
+import { applyEdits, modify, type ParseError, parse, printParseErrorCode } from 'jsonc-parser'
 import { isPlainObject } from '../../shared/plain-object'
 import {
   DEFAULT_SETTINGS,
   FONT_SIZE_RANGE,
   ICON_THEMES,
   type IconTheme,
+  type SettingKey,
   type Settings
 } from '../../shared/settings-api'
 
 export type ParsedSettings = {
   values: Settings
+  /** Settings the file sets, in file order. */
+  customized: SettingKey[]
+  /** The file is a JSON object (or empty), so single settings can be written into it. */
+  editable: boolean
   /** One line per problem, in file order; empty when the file is fine. */
   problems: string[]
 }
-
-type SettingKey = keyof Settings
 
 /** A checked value, or why it was rejected. A clamped value is used but still reported. */
 type Checked<T> = { value: T; problem?: string } | { problem: string }
@@ -56,7 +59,7 @@ const CHECKS: { [K in SettingKey]: (value: unknown) => Checked<Settings[K]> } = 
   'workbench.iconTheme': iconTheme
 }
 
-const isSettingKey = (key: string): key is SettingKey => Object.hasOwn(CHECKS, key)
+export const isSettingKey = (key: string): key is SettingKey => Object.hasOwn(CHECKS, key)
 
 /** `CloseBraceExpected` → `close brace expected`. */
 function describeParseError(error: ParseError): string {
@@ -87,13 +90,16 @@ function applySetting<K extends SettingKey>(
  * use defaults; bad values and an unreadable file keep `lastGood`.
  */
 export function parseSettings(text: string, lastGood: Settings): ParsedSettings {
-  if (text.trim() === '') return { values: { ...DEFAULT_SETTINGS }, problems: [] }
+  if (text.trim() === '') {
+    return { values: { ...DEFAULT_SETTINGS }, customized: [], editable: true, problems: [] }
+  }
+  const unchanged = { values: lastGood, customized: [], editable: false }
   const errors: ParseError[] = []
   const data: unknown = parse(text, errors, { allowTrailingComma: true })
   const [error] = errors
   if (error) {
     return {
-      values: lastGood,
+      ...unchanged,
       problems: [
         `settings.json is not valid JSON (line ${lineOf(text, error.offset)}: ${describeParseError(error)}); keeping the previous settings.`
       ]
@@ -101,15 +107,44 @@ export function parseSettings(text: string, lastGood: Settings): ParsedSettings 
   }
   if (!isPlainObject(data)) {
     return {
-      values: lastGood,
+      ...unchanged,
       problems: ['settings.json must be a JSON object; keeping the previous settings.']
     }
   }
   const values: Settings = { ...DEFAULT_SETTINGS }
+  const customized: SettingKey[] = []
   const problems: string[] = []
   for (const [key, raw] of Object.entries(data)) {
-    if (isSettingKey(key)) applySetting(values, key, raw, lastGood, problems)
-    else problems.push(`Unknown setting "${key}".`)
+    if (isSettingKey(key)) {
+      applySetting(values, key, raw, lastGood, problems)
+      customized.push(key)
+    } else {
+      problems.push(`Unknown setting "${key}".`)
+    }
   }
-  return { values, problems }
+  return { values, customized, editable: true, problems }
+}
+
+/** A value from the Settings page: checked like the file's, clamped sizes accepted, anything else refused. */
+export function checkSettingValue<K extends SettingKey>(key: K, raw: unknown): Settings[K] {
+  const checked = CHECKS[key](raw)
+  if (!('value' in checked)) throw new Error(`"${key}" ${checked.problem}.`)
+  return checked.value
+}
+
+/**
+ * settings.json contents with one setting changed, keeping the user's comments and layout. A
+ * default value is removed instead, so the file holds only what the user changed.
+ */
+export function withSetting<K extends SettingKey>(
+  text: string,
+  key: K,
+  value: Settings[K] | null
+): string {
+  const kept = value === null || value === DEFAULT_SETTINGS[key] ? undefined : value
+  const base = text.trim() === '' ? '{}\n' : text
+  const edits = modify(base, [key], kept, {
+    formattingOptions: { insertSpaces: true, tabSize: 2, eol: '\n' }
+  })
+  return applyEdits(base, edits)
 }

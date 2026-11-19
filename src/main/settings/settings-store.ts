@@ -3,8 +3,14 @@ import { type FSWatcher, watch } from 'node:fs'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { Notice } from '../../shared/notice'
-import { DEFAULT_SETTINGS, type Settings, type SettingsView } from '../../shared/settings-api'
-import { parseSettings } from './settings-document'
+import {
+  DEFAULT_SETTINGS,
+  type SettingKey,
+  type Settings,
+  type SettingsView
+} from '../../shared/settings-api'
+import { writeFileAtomic } from '../files/atomic-write'
+import { checkSettingValue, parseSettings, withSetting } from './settings-document'
 
 type ChangeListener = (view: SettingsView) => void
 
@@ -21,6 +27,8 @@ function hasCode(error: unknown, code: string): boolean {
 /** The user's settings.json, reloaded and pushed to windows whenever the file changes. */
 class SettingsStore {
   private values: Settings = DEFAULT_SETTINGS
+  private customized: SettingKey[] = []
+  private editable = true
   private notice: Notice | null = null
   private noticeCount = 0
   /** The file contents last applied; a save that changes nothing is not pushed again. */
@@ -45,7 +53,23 @@ class SettingsStore {
   async view(): Promise<SettingsView> {
     this.loaded ??= this.enqueue(() => this.reload())
     await this.loaded
-    return { values: this.values, notice: this.notice }
+    return this.snapshot()
+  }
+
+  /** Writes one setting into settings.json (null resets it) and applies it right away. */
+  update(key: SettingKey, value: unknown): Promise<void> {
+    return this.enqueue(async () => {
+      const checked = value === null ? null : checkSettingValue(key, value)
+      const text = await this.readText()
+      if (!parseSettings(text, this.values).editable) {
+        throw new Error(
+          'settings.json has errors. Fix them in the file first (Open settings.json).'
+        )
+      }
+      await writeFileAtomic(this.file(), withSetting(text, key, checked))
+      // The watcher would pick this up too; reloading now keeps the page in step with the write.
+      await this.reload()
+    })
   }
 
   /** Follows saves to settings.json. The folder is watched, since editors often save by replacing the file. */
@@ -92,19 +116,24 @@ class SettingsStore {
     return run
   }
 
-  private async reload(): Promise<void> {
-    let text: string
+  private async readText(): Promise<string> {
     try {
-      text = await readFile(this.file(), 'utf8')
+      return await readFile(this.file(), 'utf8')
     } catch (error) {
       // No file means every setting is at its default.
       if (!hasCode(error, 'ENOENT')) throw error
-      text = ''
+      return ''
     }
+  }
+
+  private async reload(): Promise<void> {
+    const text = await this.readText()
     if (text === this.appliedText) return
     this.appliedText = text
-    const { values, problems } = parseSettings(text, this.values)
+    const { values, customized, editable, problems } = parseSettings(text, this.values)
     this.values = values
+    this.customized = customized
+    this.editable = editable
     if (problems.length > 0) this.setNotice(`Settings: ${problems.join(' ')}`)
     else this.notice = null
     this.publish()
@@ -115,8 +144,17 @@ class SettingsStore {
     this.notice = { id: this.noticeCount, message: text }
   }
 
+  private snapshot(): SettingsView {
+    return {
+      values: this.values,
+      customized: this.customized,
+      editable: this.editable,
+      notice: this.notice
+    }
+  }
+
   private publish(): void {
-    const view = { values: this.values, notice: this.notice }
+    const view = this.snapshot()
     for (const listener of this.listeners) listener(view)
   }
 }

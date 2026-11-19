@@ -7,6 +7,7 @@ import {
   pickAndOpenWorkspaceFile,
   pickAndSaveWorkspaceAs
 } from '../workspace/workspace-dialogs'
+import { showSettingsPage } from '../ipc/settings-ipc'
 import { openSettingsFile } from '../settings/open-settings-file'
 import { settingsStore } from '../settings/settings-store'
 import { WORKSPACE_FILE_EXTENSION } from '../workspace/workspace-file'
@@ -117,9 +118,14 @@ function buildAppMenu(view: WorkspaceView | null): void {
         label: 'Preferences',
         submenu: [
           {
+            id: 'open-settings',
+            label: 'Settings',
+            accelerator: 'CommandOrControl+,',
+            click: fromMenu(showSettingsPage, (error) => settingsStore.report(error))
+          },
+          {
             id: 'open-settings-json',
             label: 'Open Settings (JSON)',
-            accelerator: 'CommandOrControl+,',
             click: fromMenu(openSettingsFile, (error) => settingsStore.report(error))
           }
         ]

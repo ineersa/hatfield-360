@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { DEFAULT_SETTINGS, type Settings } from '../../shared/settings-api'
-import { parseSettings } from './settings-document'
+import { parseSettings, withSetting } from './settings-document'
 
 const lastGood: Settings = {
   ...DEFAULT_SETTINGS,
@@ -11,9 +11,16 @@ const lastGood: Settings = {
 
 describe('parseSettings', () => {
   it('uses defaults for an empty file and for keys the file leaves out', () => {
-    expect(parseSettings('', lastGood)).toEqual({ values: DEFAULT_SETTINGS, problems: [] })
+    expect(parseSettings('', lastGood)).toEqual({
+      values: DEFAULT_SETTINGS,
+      customized: [],
+      editable: true,
+      problems: []
+    })
     expect(parseSettings('{ "app.fontSize": 15 }', lastGood)).toEqual({
       values: { ...DEFAULT_SETTINGS, 'app.fontSize': 15 },
+      customized: ['app.fontSize'],
+      editable: true,
       problems: []
     })
   })
@@ -39,6 +46,16 @@ describe('parseSettings', () => {
         'editor.fontSize': 15,
         'workbench.iconTheme': 'lucide'
       },
+      customized: [
+        'app.fontFamily',
+        'app.fontSize',
+        'terminal.fontFamily',
+        'terminal.fontSize',
+        'editor.fontFamily',
+        'editor.fontSize',
+        'workbench.iconTheme'
+      ],
+      editable: true,
       problems: []
     })
   })
@@ -46,12 +63,16 @@ describe('parseSettings', () => {
   it('keeps the last good settings when the file is not valid JSON or not an object', () => {
     expect(parseSettings('{\n  "app.fontSize": 15\n  "editor.fontSize": 14\n}', lastGood)).toEqual({
       values: lastGood,
+      customized: [],
+      editable: false,
       problems: [
         'settings.json is not valid JSON (line 3: comma expected); keeping the previous settings.'
       ]
     })
     expect(parseSettings('[1, 2]', lastGood)).toEqual({
       values: lastGood,
+      customized: [],
+      editable: false,
       problems: ['settings.json must be a JSON object; keeping the previous settings.']
     })
   })
@@ -75,6 +96,15 @@ describe('parseSettings', () => {
         'editor.fontFamily': 'Fira Code',
         'workbench.iconTheme': 'lucide'
       },
+      customized: [
+        'app.fontSize',
+        'terminal.fontSize',
+        'editor.fontSize',
+        'editor.fontFamily',
+        'app.fontFamily',
+        'workbench.iconTheme'
+      ],
+      editable: true,
       problems: [
         '"app.fontSize" must be a number.',
         '"terminal.fontSize" must be between 8 and 32; using 8.',
@@ -85,5 +115,44 @@ describe('parseSettings', () => {
         'Unknown setting "app.fontsize".'
       ]
     })
+  })
+})
+
+describe('withSetting', () => {
+  const file = `{
+  // My fonts
+  "app.fontFamily": "Noto Sans",
+  "app.fontSize": 16,
+}
+`
+
+  it('changes one setting and keeps comments and the other settings', () => {
+    expect(withSetting(file, 'app.fontSize', 18)).toBe(`{
+  // My fonts
+  "app.fontFamily": "Noto Sans",
+  "app.fontSize": 18,
+}
+`)
+    expect(withSetting(file, 'workbench.iconTheme', 'lucide')).toBe(`{
+  // My fonts
+  "app.fontFamily": "Noto Sans",
+  "app.fontSize": 16,
+  "workbench.iconTheme": "lucide",
+}
+`)
+  })
+
+  it('removes a setting that is reset or set back to its default', () => {
+    const expected = `{
+  // My fonts
+  "app.fontFamily": "Noto Sans",
+}
+`
+    expect(withSetting(file, 'app.fontSize', null)).toBe(expected)
+    expect(withSetting(file, 'app.fontSize', DEFAULT_SETTINGS['app.fontSize'])).toBe(expected)
+  })
+
+  it('starts an empty file as a JSON object', () => {
+    expect(withSetting('', 'editor.fontSize', 15)).toBe('{\n  "editor.fontSize": 15\n}\n')
   })
 })

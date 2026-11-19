@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { SettingsMessage } from '@/components/settings/SettingsMessage'
+import { SettingsPage } from '@/components/settings/SettingsPage'
 import { useAppFont } from '@/components/settings/use-app-font'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { WelcomeScreen } from '@/components/workspace/WelcomeScreen'
@@ -25,9 +26,12 @@ export function AppShell(): React.JSX.Element {
   const workspaceEmpty = useWorkspaceStore((state) => state.workspace?.folders.length === 0)
 
   const connectSettings = useSettingsStore((state) => state.connect)
+  const settingsOpen = useShellLayoutStore((state) => state.settingsOpen)
+  const openSettings = useShellLayoutStore((state) => state.openSettings)
 
   useEffect(() => connectWorkspace(), [connectWorkspace])
   useEffect(() => connectSettings(), [connectSettings])
+  useEffect(() => window.desktop.subscribeShowSettings(openSettings), [openSettings])
   useAppFont()
   useEffect(() => {
     document.title = workspaceName ? `${workspaceName} — Hatfield 360` : 'Hatfield 360'
@@ -82,8 +86,13 @@ export function AppShell(): React.JSX.Element {
                 />
               </>
             )}
-            <main aria-label={view.label} className="flex min-w-0 flex-1 rounded-xl bg-island">
-              {workspaceEmpty ? (
+            <main
+              aria-label={settingsOpen ? 'Settings' : view.label}
+              className="flex min-w-0 flex-1 rounded-xl bg-island"
+            >
+              {settingsOpen ? (
+                <SettingsPage />
+              ) : workspaceEmpty ? (
                 <WelcomeScreen />
               ) : (
                 <div className="flex flex-1 flex-col items-center justify-center gap-3 p-8 text-center">
