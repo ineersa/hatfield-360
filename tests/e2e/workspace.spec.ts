@@ -30,7 +30,7 @@ async function clickFileMenu(app: ElectronApplication, id: string): Promise<void
 
 const folderList = (page: Page) => page.getByRole('list', { name: 'Workspace folders' })
 
-test('File menu has the workspace actions', async () => {
+test('File menu has the workspace actions and the menu bar is shown', async () => {
   await withApp(async (app) => {
     const labels = await app.evaluate(({ Menu }) =>
       Menu.getApplicationMenu()
@@ -39,6 +39,11 @@ test('File menu has the workspace actions', async () => {
         .map((item) => item.label)
     )
     expect(labels?.slice(0, 2)).toEqual(['Open Folder…', 'Add Folder to Workspace…'])
+    // Linux and Windows draw the menu bar in the window, always shown like VS Code's; macOS uses the top bar.
+    const menuBarVisible = await app.evaluate(({ BrowserWindow }) =>
+      BrowserWindow.getAllWindows()[0]?.isMenuBarVisible()
+    )
+    expect(menuBarVisible).toBe(process.platform !== 'darwin')
   })
 })
 

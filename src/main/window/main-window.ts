@@ -13,7 +13,6 @@ export function createMainWindow(): BrowserWindow {
     minWidth: 600,
     minHeight: 400,
     show: false,
-    autoHideMenuBar: true,
     // Islands Dark frame colour, so the window doesn't flash white before the renderer paints.
     backgroundColor: '#26282c',
     // Linux takes the window/taskbar icon from here; macOS and Windows use the packaged app icon.
