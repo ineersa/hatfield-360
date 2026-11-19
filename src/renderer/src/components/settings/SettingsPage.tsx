@@ -1,5 +1,5 @@
 import { FileJson, FolderRoot, RotateCcw, X } from 'lucide-react'
-import { useEffect, useId } from 'react'
+import { useEffect, useId, useState } from 'react'
 import { CatppuccinRootFolderIcon } from '@/components/icons/CatppuccinIcons'
 import { cn } from '@/lib/class-names'
 import { cssFontFamily } from '@/lib/css-font-family'
@@ -61,27 +61,33 @@ function IconThemeSetting(): React.JSX.Element {
         <h3 id={headingId} className="font-semibold">
           File icons
         </h3>
-        <p className="text-muted-foreground">Icons for folders and files in the panels.</p>
+        <p className="text-muted-foreground">
+          Icons for folders and files. For now the project folders in the Projects panel use them;
+          the Files view will use them for every file.
+        </p>
       </div>
-      <div role="radiogroup" aria-labelledby={headingId} className="flex gap-2">
-        {ICON_THEME_CHOICES.map(({ theme, name, Icon }) => (
-          <label
-            key={theme}
-            className="flex h-11 cursor-pointer items-center gap-2.5 rounded-lg border border-border px-3 has-checked:border-primary has-checked:bg-selection has-focus-visible:ring-2 has-focus-visible:ring-ring has-disabled:cursor-default has-disabled:opacity-50"
-          >
-            <input
-              type="radio"
-              name="workbench.iconTheme"
-              value={theme}
-              checked={current === theme}
-              disabled={!editable}
-              onChange={() => void update('workbench.iconTheme', theme)}
-              className="sr-only"
-            />
-            <Icon className="size-[18px] shrink-0" />
-            {name}
-          </label>
-        ))}
+      <div className="flex items-center gap-2">
+        <div role="radiogroup" aria-labelledby={headingId} className="flex gap-2">
+          {ICON_THEME_CHOICES.map(({ theme, name, Icon }) => (
+            <label
+              key={theme}
+              className="flex h-11 cursor-pointer items-center gap-2.5 rounded-lg border border-border px-3 has-checked:border-primary has-checked:bg-selection has-focus-visible:ring-2 has-focus-visible:ring-ring has-disabled:cursor-default has-disabled:opacity-50"
+            >
+              <input
+                type="radio"
+                name="workbench.iconTheme"
+                value={theme}
+                checked={current === theme}
+                disabled={!editable}
+                onChange={() => void update('workbench.iconTheme', theme)}
+                className="sr-only"
+              />
+              <Icon className="size-[18px] shrink-0" />
+              {name}
+            </label>
+          ))}
+        </div>
+        <ResetButton settingKey="workbench.iconTheme" label="File icons" />
       </div>
     </section>
   )
@@ -168,6 +174,49 @@ const FONT_SETTINGS: {
   }
 ]
 
+/** Resets every setting after the user confirms, since it can't be undone from the page. */
+function ResetAllButton(): React.JSX.Element | null {
+  const anyCustomized = useSettingsStore((state) => state.customized.length > 0)
+  const editable = useSettingsStore((state) => state.editable)
+  const resetAll = useSettingsStore((state) => state.resetAll)
+  const [confirming, setConfirming] = useState(false)
+  if (!anyCustomized) return null
+  if (!confirming) {
+    return (
+      <button
+        type="button"
+        disabled={!editable}
+        onClick={() => setConfirming(true)}
+        className={HEADER_BUTTON_CLASS}
+      >
+        <RotateCcw className="size-4" aria-hidden />
+        Reset all to defaults
+      </button>
+    )
+  }
+  return (
+    <div role="group" aria-label="Reset all settings" className="flex items-center gap-1">
+      <span className="px-1 text-muted-foreground">Reset every setting?</span>
+      <button
+        type="button"
+        onClick={() => {
+          setConfirming(false)
+          void resetAll()
+        }}
+        className={cn(HEADER_BUTTON_CLASS, 'text-destructive')}
+      >
+        Reset
+      </button>
+      <button type="button" onClick={() => setConfirming(false)} className={HEADER_BUTTON_CLASS}>
+        Cancel
+      </button>
+    </div>
+  )
+}
+
+const HEADER_BUTTON_CLASS =
+  'flex h-9 items-center gap-2 rounded-lg px-2.5 font-medium text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none disabled:opacity-50'
+
 /** The settings in settings.json as a form; every change is written to the file right away. */
 export function SettingsPage(): React.JSX.Element {
   const editable = useSettingsStore((state) => state.editable)
@@ -190,6 +239,7 @@ export function SettingsPage(): React.JSX.Element {
       <div className="flex w-full max-w-2xl flex-col">
         <header className="flex items-center gap-2 pb-2">
           <h1 className="flex-1 text-ui-lg font-semibold">Settings</h1>
+          <ResetAllButton />
           <button
             type="button"
             onClick={() => void openFile()}

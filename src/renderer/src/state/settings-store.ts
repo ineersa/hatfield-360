@@ -21,6 +21,8 @@ type SettingsState = {
   connect: () => () => void
   /** null resets the setting to its default. */
   update: <K extends SettingKey>(key: K, value: Settings[K] | null) => Promise<void>
+  /** Puts every setting back to its default; stops at the first one main refuses. */
+  resetAll: () => Promise<void>
   openFile: () => Promise<void>
 }
 
@@ -63,6 +65,12 @@ export const useSettingsStore = create<SettingsState>((set, get) => {
         set({ error: null })
       } catch (error) {
         set({ values: previous, error: mainErrorMessage(error) })
+      }
+    },
+    resetAll: async () => {
+      for (const key of get().customized) {
+        await get().update(key, null)
+        if (get().error) return
       }
     },
     openFile: () => run(() => window.desktop.openSettingsFile())

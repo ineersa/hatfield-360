@@ -166,6 +166,23 @@ test('the Settings page applies each change as it is made and writes it into set
           'editor.fontFamily': 'My Mono, monospace'
         })
 
+        // Reset all asks first, then puts every setting back, the icon set included.
+        await expect(settingsPage.getByRole('button', { name: 'Reset File icons' })).toBeVisible()
+        await settingsPage.getByRole('button', { name: 'Reset all to defaults' }).click()
+        await settingsPage.getByRole('button', { name: 'Cancel' }).click()
+        await expect(projectIcon(page, folderName)).toHaveAttribute('data-icon-theme', 'lucide')
+        await settingsPage.getByRole('button', { name: 'Reset all to defaults' }).click()
+        await settingsPage
+          .getByRole('group', { name: 'Reset all settings' })
+          .getByRole('button', { name: 'Reset' })
+          .click()
+        await expect(projectIcon(page, folderName)).toHaveAttribute('data-icon-theme', 'catppuccin')
+        await expect(page.locator('body')).toHaveCSS('font-size', '14px')
+        await expect.poll(readSettings).toEqual({})
+        await expect(
+          settingsPage.getByRole('button', { name: 'Reset all to defaults' })
+        ).toHaveCount(0)
+
         // Edits to the file show up on the open page; a broken file locks it.
         await writeFile(settings, '{ "terminal.fontSize": 18 }')
         await expect(settingsPage.getByLabel('Terminal font size', { exact: true })).toHaveValue(
