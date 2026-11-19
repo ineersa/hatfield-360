@@ -1,0 +1,2 @@
+# Wait 3 days before installing freshly published versions (supply-chain hygiene).
+minimumReleaseAge: 4320

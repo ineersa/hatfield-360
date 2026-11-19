@@ -1,0 +1,11 @@
+{
+  "extends": "./tsconfig.base.json",
+  "include": ["../src/renderer/src/**/*", "../src/shared/**/*"],
+  "compilerOptions": {
+    "composite": true,
+    "lib": ["es2023", "dom", "dom.iterable"],
+    "types": [],
+    "jsx": "react-jsx",
+    "paths": { "@/*": ["../src/renderer/src/*"] }
+  }
+}

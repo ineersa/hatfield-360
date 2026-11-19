@@ -1,0 +1,14 @@
+{
+  "singleQuote": true,
+  "semi": false,
+  "printWidth": 100,
+  "trailingComma": "none",
+  "ignorePatterns": [
+    "pnpm-lock.yaml",
+    "out/**",
+    "test-results/**",
+    "playwright-report/**",
+    ".claude/skills/**",
+    ".hatfield/**"
+  ]
+}
