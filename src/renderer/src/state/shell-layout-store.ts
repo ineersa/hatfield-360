@@ -2,16 +2,8 @@ import { create } from 'zustand'
 import type { ShellViewId } from '@/components/shell/shell-views'
 
 export const SIDE_PANEL_MIN_WIDTH = 180
-const SIDE_PANEL_MAX_WIDTH = 640
+export const SIDE_PANEL_MAX_WIDTH = 640
 const SIDE_PANEL_DEFAULT_WIDTH = 300
-/** Width the main area keeps when the side panel is wide and the window is narrow. */
-const MAIN_AREA_MIN_WIDTH = 320
-
-/** Widest the side panel may render in a container of this width, leaving the main area usable. */
-export function sidePanelMaxWidth(containerWidth: number, handleWidth: number): number {
-  const available = containerWidth - handleWidth - MAIN_AREA_MIN_WIDTH
-  return Math.max(SIDE_PANEL_MIN_WIDTH, Math.min(SIDE_PANEL_MAX_WIDTH, available))
-}
 
 type SidePanelState = { width: number; collapsed: boolean }
 

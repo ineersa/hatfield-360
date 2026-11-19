@@ -6,6 +6,8 @@ export const SIDE_PANEL_HANDLE_WIDTH = 6
 type SidePanelResizeHandleProps = {
   label: string
   width: number
+  /** On screen width, which is smaller than `width` when a narrow window caps the panel. */
+  renderedWidth: () => number
   minWidth: number
   maxWidth: number
   onWidthChange: (width: number) => void
@@ -14,6 +16,7 @@ type SidePanelResizeHandleProps = {
 export function SidePanelResizeHandle({
   label,
   width,
+  renderedWidth,
   minWidth,
   maxWidth,
   onWidthChange
@@ -23,7 +26,7 @@ export function SidePanelResizeHandle({
   const onPointerDown = (event: PointerEvent<HTMLDivElement>): void => {
     if (event.button !== 0) return
     event.currentTarget.setPointerCapture(event.pointerId)
-    drag.current = { startX: event.clientX, startWidth: width }
+    drag.current = { startX: event.clientX, startWidth: renderedWidth() }
   }
 
   const onPointerMove = (event: PointerEvent<HTMLDivElement>): void => {
@@ -39,9 +42,10 @@ export function SidePanelResizeHandle({
   }
 
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>): void => {
+    const current = Math.round(renderedWidth())
     const next = {
-      ArrowLeft: width - KEYBOARD_STEP_PX,
-      ArrowRight: width + KEYBOARD_STEP_PX,
+      ArrowLeft: current - KEYBOARD_STEP_PX,
+      ArrowRight: current + KEYBOARD_STEP_PX,
       Home: minWidth,
       End: maxWidth
     }[event.key]
