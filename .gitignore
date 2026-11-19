@@ -10,3 +10,11 @@
 /.hatfield/extensions/vendor/
 /.hatfield/extensions/composer.lock
 /.hatfield/skills/task-workflow/
+
+# Node / build output
+node_modules/
+/out/
+/test-results/
+/playwright-report/
+*.tsbuildinfo
+/release/

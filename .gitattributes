@@ -1,0 +1,2 @@
+# LF everywhere, including Windows checkouts: the formatter and shell hooks expect it.
+* text=auto eol=lf

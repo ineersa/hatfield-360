@@ -1,0 +1,11 @@
+{
+  "files": [],
+  "references": [
+    { "path": "./config/tsconfig.node.json" },
+    { "path": "./config/tsconfig.web.json" }
+  ],
+  // Mirrors the renderer alias in config/tsconfig.web.json so tools reading the root config (shadcn) resolve it too.
+  "compilerOptions": {
+    "paths": { "@/*": ["./src/renderer/src/*"] }
+  }
+}
