@@ -1,43 +1,33 @@
 @import 'tailwindcss';
+@import '@fontsource-variable/inter';
+@import './themes/islands-dark.css';
 
-/* Design tokens: the single source for color roles. Add roles here, never ad-hoc colors in components. */
-:root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --border: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: oklch(0.145 0 0);
-    --foreground: oklch(0.985 0 0);
-    --muted-foreground: oklch(0.708 0 0);
-    --destructive: oklch(0.704 0.191 22.216);
-    --primary: oklch(0.922 0 0);
-    --primary-foreground: oklch(0.205 0 0);
-    --accent: oklch(0.269 0 0);
-    --accent-foreground: oklch(0.985 0 0);
-    --border: oklch(1 0 0 / 10%);
-    --ring: oklch(0.556 0 0);
-  }
-}
-
+/*
+ * Colour roles: every component uses these, never ad-hoc colours. Values come from the active
+ * app theme (assets/themes/, selected by data-theme on <html>).
+ *   background  window frame behind the islands (activity bar, status bar, gaps)
+ *   island      rounded panels: side panel, main area
+ *   accent      hover / subtle fill; selection: selected row; primary: active control, focus ring
+ */
 @theme inline {
+  --font-sans: 'Inter Variable', system-ui, sans-serif;
   --color-background: var(--background);
+  --color-island: var(--island);
   --color-foreground: var(--foreground);
   --color-muted-foreground: var(--muted-foreground);
-  --color-destructive: var(--destructive);
-  --color-primary: var(--primary);
-  --color-primary-foreground: var(--primary-foreground);
+  --color-border: var(--border);
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
-  --color-border: var(--border);
+  --color-selection: var(--selection);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-destructive: var(--destructive);
   --color-ring: var(--ring);
+}
+
+body {
+  background-color: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+  font-size: 13px;
 }
