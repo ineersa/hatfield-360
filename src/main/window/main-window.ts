@@ -9,6 +9,9 @@ export function createMainWindow(): BrowserWindow {
   const window = new BrowserWindow({
     width: 1200,
     height: 800,
+    // Narrowest window that still fits the activity bar, a minimum side panel and a usable main area.
+    minWidth: 600,
+    minHeight: 400,
     show: false,
     autoHideMenuBar: true,
     // Islands Dark frame colour, so the window doesn't flash white before the renderer paints.

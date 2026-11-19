@@ -1,6 +1,7 @@
 import { useRef, type KeyboardEvent, type PointerEvent } from 'react'
 
 const KEYBOARD_STEP_PX = 16
+export const SIDE_PANEL_HANDLE_WIDTH = 6
 
 type SidePanelResizeHandleProps = {
   label: string
@@ -63,7 +64,8 @@ export function SidePanelResizeHandle({
       onPointerUp={endDrag}
       onPointerCancel={endDrag}
       onKeyDown={onKeyDown}
-      className="group relative w-1.5 shrink-0 cursor-col-resize touch-none focus-visible:outline-none"
+      style={{ width: SIDE_PANEL_HANDLE_WIDTH }}
+      className="group relative shrink-0 cursor-col-resize touch-none focus-visible:outline-none"
     >
       <div className="absolute inset-y-3 left-1/2 w-0.5 -translate-x-1/2 rounded-full transition-colors group-hover:bg-primary group-focus-visible:bg-primary group-active:bg-primary" />
     </div>

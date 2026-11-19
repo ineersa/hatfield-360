@@ -79,6 +79,36 @@ test('side panel resizes by dragging and by keyboard, within 180 to 640 px', asy
   })
 })
 
+test('a narrow window shrinks the side panel so the main area stays on screen', async () => {
+  await withApp(async (app, page) => {
+    const setWindowWidth = (width: number) =>
+      app.evaluate(({ BrowserWindow }, newWidth) => {
+        const window = BrowserWindow.getAllWindows()[0]
+        if (!window) throw new Error('no window')
+        window.setSize(newWidth, 800)
+      }, width)
+
+    await resizeHandle(page, 'Agents').focus()
+    await page.keyboard.press('End')
+    expect(await panelWidth(page, 'Agents')).toBe(640)
+
+    await setWindowWidth(600)
+    await expect.poll(() => page.evaluate('window.innerWidth')).toBe(600)
+    await expect.poll(() => panelWidth(page, 'Agents')).toBeLessThan(640)
+    const main = await page.getByRole('main', { name: 'Agents' }).boundingBox()
+    const handle = await resizeHandle(page, 'Agents').boundingBox()
+    if (!main || !handle) throw new Error('layout is not rendered')
+    expect(main.x + main.width).toBeLessThanOrEqual(600)
+    expect(main.width).toBeGreaterThanOrEqual(320)
+    expect(handle.x + handle.width).toBeLessThan(main.x + 1)
+    expect(await page.evaluate('document.documentElement.scrollWidth')).toBe(600)
+
+    // The chosen width is kept and comes back when there is room again.
+    await setWindowWidth(1200)
+    await expect.poll(() => panelWidth(page, 'Agents')).toBe(640)
+  })
+})
+
 test('each view keeps its own side panel width and collapsed state', async () => {
   await withApp(async (_app, page) => {
     await viewButton(page, 'Files').click()
