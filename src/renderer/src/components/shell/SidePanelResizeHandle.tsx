@@ -9,7 +9,8 @@ type SidePanelResizeHandleProps = {
   /** On screen width, which is smaller than `width` when a narrow window caps the panel. */
   renderedWidth: () => number
   minWidth: number
-  maxWidth: number
+  /** Widest the panel can be in the current window. */
+  maxWidth: () => number
   onWidthChange: (width: number) => void
 }
 
@@ -47,7 +48,7 @@ export function SidePanelResizeHandle({
       ArrowLeft: current - KEYBOARD_STEP_PX,
       ArrowRight: current + KEYBOARD_STEP_PX,
       Home: minWidth,
-      End: maxWidth
+      End: maxWidth()
     }[event.key]
     if (next === undefined) return
     event.preventDefault()
@@ -61,7 +62,6 @@ export function SidePanelResizeHandle({
       aria-orientation="vertical"
       aria-valuenow={width}
       aria-valuemin={minWidth}
-      aria-valuemax={maxWidth}
       tabIndex={0}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}

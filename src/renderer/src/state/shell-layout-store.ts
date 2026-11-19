@@ -2,7 +2,6 @@ import { create } from 'zustand'
 import type { ShellViewId } from '@/components/shell/shell-views'
 
 export const SIDE_PANEL_MIN_WIDTH = 180
-export const SIDE_PANEL_MAX_WIDTH = 640
 const SIDE_PANEL_DEFAULT_WIDTH = 300
 
 type SidePanelState = { width: number; collapsed: boolean }
@@ -30,9 +29,7 @@ export const useShellLayoutStore = create<ShellLayoutState>((set) => ({
     })
   },
   setPanelWidth: (view, width) => {
-    const clamped = Math.round(
-      Math.min(SIDE_PANEL_MAX_WIDTH, Math.max(SIDE_PANEL_MIN_WIDTH, width))
-    )
+    const clamped = Math.round(Math.max(SIDE_PANEL_MIN_WIDTH, width))
     set((state) => ({
       panels: { ...state.panels, [view]: { ...state.panels[view], width: clamped } }
     }))

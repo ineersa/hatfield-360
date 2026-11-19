@@ -1,23 +1,24 @@
 import { useRef } from 'react'
 import { TooltipProvider } from '@/components/ui/tooltip'
-import {
-  SIDE_PANEL_MAX_WIDTH,
-  SIDE_PANEL_MIN_WIDTH,
-  useShellLayoutStore
-} from '@/state/shell-layout-store'
+import { SIDE_PANEL_MIN_WIDTH, useShellLayoutStore } from '@/state/shell-layout-store'
 import { ActivityBar } from './ActivityBar'
 import { SHELL_VIEWS } from './shell-views'
 import { SIDE_PANEL_HANDLE_WIDTH, SidePanelResizeHandle } from './SidePanelResizeHandle'
 import { StatusBar } from './StatusBar'
 
-/** Width the main area keeps when the side panel is wide and the window is narrow. */
-const MAIN_AREA_MIN_WIDTH = 320
+/** Sliver of main area that stays visible however wide the side panel gets, as in JetBrains IDEs. */
+const MAIN_AREA_MIN_WIDTH = 120
 
 export function AppShell(): React.JSX.Element {
   const activeView = useShellLayoutStore((state) => state.activeView)
   const panel = useShellLayoutStore((state) => state.panels[state.activeView])
   const setPanelWidth = useShellLayoutStore((state) => state.setPanelWidth)
   const aside = useRef<HTMLElement>(null)
+  // Measured when the user resizes, so it always matches the current window.
+  const maxWidth = (): number => {
+    const container = aside.current?.parentElement?.clientWidth ?? 0
+    return Math.max(SIDE_PANEL_MIN_WIDTH, container - SIDE_PANEL_HANDLE_WIDTH - MAIN_AREA_MIN_WIDTH)
+  }
   const view = SHELL_VIEWS.find((candidate) => candidate.id === activeView) ?? SHELL_VIEWS[0]
   if (!view) throw new Error('No shell views defined')
 
@@ -32,7 +33,7 @@ export function AppShell(): React.JSX.Element {
                 <aside
                   aria-label={`${view.label} panel`}
                   ref={aside}
-                  // CSS caps the panel in narrow windows; the chosen width is kept and returns when there is room.
+                  // CSS caps the panel when the window narrows; the chosen width returns when there is room.
                   style={{
                     width: panel.width,
                     minWidth: SIDE_PANEL_MIN_WIDTH,
@@ -50,8 +51,8 @@ export function AppShell(): React.JSX.Element {
                   width={panel.width}
                   renderedWidth={() => aside.current?.getBoundingClientRect().width ?? panel.width}
                   minWidth={SIDE_PANEL_MIN_WIDTH}
-                  maxWidth={SIDE_PANEL_MAX_WIDTH}
-                  onWidthChange={(next) => setPanelWidth(view.id, next)}
+                  maxWidth={maxWidth}
+                  onWidthChange={(next) => setPanelWidth(view.id, Math.min(next, maxWidth()))}
                 />
               </>
             )}
