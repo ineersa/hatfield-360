@@ -1,4 +1,5 @@
 import { readFile } from 'node:fs/promises'
+import { resolve } from 'node:path'
 import { writeFileAtomic } from './atomic-write'
 import {
   EMPTY_WORKSPACE_DOCUMENT,
@@ -8,6 +9,13 @@ import {
 import { fromStoredFolderPath, toStoredFolderPath } from './workspace-folder-paths'
 
 export const WORKSPACE_FILE_EXTENSION = '.hatfield-workspace'
+
+/** The absolute path with the workspace extension, which save dialogs on Linux don't add. */
+export function withWorkspaceExtension(file: string): string {
+  return resolve(
+    file.endsWith(WORKSPACE_FILE_EXTENSION) ? file : `${file}${WORKSPACE_FILE_EXTENSION}`
+  )
+}
 
 export type ReadWorkspaceFile =
   | { status: 'ok'; folders: string[] }

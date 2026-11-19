@@ -14,7 +14,12 @@ import {
   withRecent,
   writeAppState
 } from './app-state'
-import { readWorkspaceFile, WORKSPACE_FILE_EXTENSION, writeWorkspaceFile } from './workspace-file'
+import {
+  readWorkspaceFile,
+  WORKSPACE_FILE_EXTENSION,
+  withWorkspaceExtension,
+  writeWorkspaceFile
+} from './workspace-file'
 
 type ChangeListener = (view: WorkspaceView) => void
 
@@ -170,16 +175,16 @@ class WorkspaceStore {
       if (workspace.problem) throw new Error(workspace.problem)
       const folders = workspace.folders.filter((folder) => folder !== path)
       if (folders.length === workspace.folders.length) return false
-      workspace.folders = folders
       await writeWorkspaceFile(workspace.file, folders)
+      workspace.folders = folders
       return true
     })
   }
 
   openWorkspaceFile(file: string): Promise<void> {
     return this.change(async (session) => {
-      session.workspace = await loadWorkspaceFile(resolve(file))
-      await this.remember(session, session.workspace.file)
+      const workspace = await loadWorkspaceFile(resolve(file))
+      await this.switchTo(session, workspace, remembered(session.state, workspace.file))
     })
   }
 
@@ -188,18 +193,14 @@ class WorkspaceStore {
     return this.change(async (session) => {
       const { workspace } = session
       if (workspace.problem) throw new Error(workspace.problem)
-      const target = file.endsWith(WORKSPACE_FILE_EXTENSION)
-        ? resolve(file)
-        : resolve(`${file}${WORKSPACE_FILE_EXTENSION}`)
+      const target = withWorkspaceExtension(file)
       if (target === this.defaultFile()) throw new Error('Choose another place for the workspace.')
       await writeWorkspaceFile(target, workspace.folders)
-      session.workspace = {
-        file: target,
-        isDefault: false,
-        folders: workspace.folders,
-        problem: null
-      }
-      await this.remember(session, target)
+      await this.switchTo(
+        session,
+        { file: target, isDefault: false, folders: workspace.folders, problem: null },
+        remembered(session.state, target)
+      )
     })
   }
 
@@ -227,8 +228,8 @@ class WorkspaceStore {
         return 'opened'
       }
       if (!(await isFile(target.path))) return 'missing'
-      session.workspace = await loadWorkspaceFile(target.path)
-      await this.remember(session, target.path)
+      const workspace = await loadWorkspaceFile(target.path)
+      await this.switchTo(session, workspace, remembered(session.state, target.path))
       return 'opened'
     })
   }
@@ -236,15 +237,13 @@ class WorkspaceStore {
   removeRecent(target: RecentTarget): Promise<void> {
     return this.change(async (session) => {
       const recent = session.state.recent.filter((item) => !isSameItem(item, target))
-      session.state = { ...session.state, recent }
-      await writeAppState(this.stateFile(), session.state)
+      await this.saveState(session, { ...session.state, recent })
     })
   }
 
   clearRecent(): Promise<void> {
     return this.change(async (session) => {
-      session.state = { ...session.state, recent: [] }
-      await writeAppState(this.stateFile(), session.state)
+      await this.saveState(session, { ...session.state, recent: [] })
     })
   }
 
@@ -292,33 +291,38 @@ class WorkspaceStore {
   }
 
   private async openDefault(session: Session): Promise<void> {
-    session.workspace = await loadDefaultWorkspace(this.defaultFile())
-    session.state = { ...session.state, current: null }
-    await writeAppState(this.stateFile(), session.state)
+    const workspace = await loadDefaultWorkspace(this.defaultFile())
+    await this.switchTo(session, workspace, { ...session.state, current: null })
+  }
+
+  // The session changes only after the write succeeds, so main never runs ahead of what the window shows.
+  private async saveState(session: Session, state: AppState): Promise<void> {
+    await writeAppState(this.stateFile(), state)
+    session.state = state
+  }
+
+  private async switchTo(
+    session: Session,
+    workspace: OpenWorkspace,
+    state: AppState
+  ): Promise<void> {
+    await this.saveState(session, state)
+    session.workspace = workspace
   }
 
   private async addFolderTo(session: Session, folder: string): Promise<boolean> {
     const { workspace } = session
     if (workspace.problem) throw new Error(workspace.problem)
     if (!(await isDirectory(folder))) throw new Error(`Not a folder: ${folder}`)
-    session.state = {
-      ...session.state,
-      recent: withRecent(session.state.recent, { kind: 'folder', path: folder })
+    const added = !workspace.folders.includes(folder)
+    if (added) {
+      const folders = [...workspace.folders, folder]
+      await writeWorkspaceFile(workspace.file, folders)
+      workspace.folders = folders
     }
-    await writeAppState(this.stateFile(), session.state)
-    if (workspace.folders.includes(folder)) return false
-    workspace.folders = [...workspace.folders, folder]
-    await writeWorkspaceFile(workspace.file, workspace.folders)
-    return true
-  }
-
-  /** Records the workspace file as open and most recent. */
-  private async remember(session: Session, file: string): Promise<void> {
-    session.state = {
-      current: file,
-      recent: withRecent(session.state.recent, { kind: 'workspace', path: file })
-    }
-    await writeAppState(this.stateFile(), session.state)
+    const recent = withRecent(session.state.recent, { kind: 'folder', path: folder })
+    await this.saveState(session, { ...session.state, recent })
+    return added
   }
 
   private ready(): Promise<Session> {
@@ -361,6 +365,11 @@ class WorkspaceStore {
     this.queue = run.catch(() => undefined)
     return run
   }
+}
+
+/** App state with the workspace file open and most recent. */
+function remembered(state: AppState, file: string): AppState {
+  return { current: file, recent: withRecent(state.recent, { kind: 'workspace', path: file }) }
 }
 
 function isSameItem(item: RecentItem, target: RecentTarget): boolean {

@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { WelcomeScreen } from '@/components/workspace/WelcomeScreen'
+import { WorkspaceMessage } from '@/components/workspace/WorkspaceMessage'
 import { SIDE_PANEL_MIN_WIDTH, useShellLayoutStore } from '@/state/shell-layout-store'
 import { useWorkspaceStore } from '@/state/workspace-store'
 import { ActivityBar } from './ActivityBar'
@@ -35,6 +36,7 @@ export function AppShell(): React.JSX.Element {
   return (
     <TooltipProvider>
       <div className="flex h-screen flex-col bg-background text-foreground">
+        <WorkspaceMessage />
         <div className="flex min-h-0 flex-1 pt-1.5 pr-1.5">
           <ActivityBar />
           <div className="flex min-w-0 flex-1">

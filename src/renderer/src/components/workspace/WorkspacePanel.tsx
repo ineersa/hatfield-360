@@ -59,13 +59,11 @@ function ProjectRow({ folder }: { folder: WorkspaceFolder }): React.JSX.Element 
 /** Agents side panel: the open workspace's project folders. */
 export function WorkspacePanel(): React.JSX.Element {
   const workspace = useWorkspaceStore((state) => state.workspace)
-  const error = useWorkspaceStore((state) => state.error)
   const addFolder = useWorkspaceStore((state) => state.addFolder)
 
   const folders = workspace?.folders ?? []
-  // With no folders the welcome screen shows errors and notices; the panel keeps the workspace's own problem.
-  const problem =
-    (folders.length > 0 ? (error ?? workspace?.notice) : null) ?? workspace?.problem ?? null
+  // Action errors and notices show in the shell's workspace message; the panel shows why the workspace is read-only.
+  const problem = workspace?.problem ?? null
 
   return (
     <>

@@ -21,3 +21,21 @@ export function submenuLabels(app: ElectronApplication, id: string): Promise<str
     id
   )
 }
+
+/** Runs the handler of a submenu entry found by label (Open Recent entries have no ids). */
+export async function clickSubmenuItem(
+  app: ElectronApplication,
+  parentId: string,
+  label: string
+): Promise<void> {
+  await app.evaluate(
+    ({ Menu }, [itemId, itemLabel]) => {
+      const item = Menu.getApplicationMenu()
+        ?.getMenuItemById(itemId)
+        ?.submenu?.items.find((entry) => entry.label === itemLabel)
+      if (!item) throw new Error(`no menu item ${itemLabel} under ${itemId}`)
+      Reflect.apply(item.click, item, [])
+    },
+    [parentId, label] as const
+  )
+}

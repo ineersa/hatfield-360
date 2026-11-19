@@ -1,4 +1,4 @@
-import { CircleAlert, FileX, FolderOpen, FolderX, House, Layers, X } from 'lucide-react'
+import { FileX, FolderOpen, FolderX, House, Layers, X } from 'lucide-react'
 import { CatppuccinRootFolderIcon } from '@/components/icons/CatppuccinIcons'
 import { cn } from '@/lib/class-names'
 import { useWorkspaceStore } from '@/state/workspace-store'
@@ -48,7 +48,7 @@ function RecentRow({ entry }: { entry: RecentEntry }): React.JSX.Element {
       </button>
       {entry.current ? <span className="shrink-0 pr-3 text-muted-foreground">current</span> : null}
       {entry.missing ? <span className="shrink-0 pr-1 text-destructive">missing</span> : null}
-      {entry.stored ? null : (
+      {entry.stored && !entry.missing ? null : (
         <button
           type="button"
           aria-label={`Remove ${entry.name} from Recent`}
@@ -68,11 +68,9 @@ const startActionClass =
 /** Main area of an empty workspace: open a folder, open a workspace file, or pick something recent. */
 export function WelcomeScreen(): React.JSX.Element | null {
   const workspace = useWorkspaceStore((state) => state.workspace)
-  const error = useWorkspaceStore((state) => state.error)
   const addFolder = useWorkspaceStore((state) => state.addFolder)
   const openWorkspaceFile = useWorkspaceStore((state) => state.openWorkspaceFile)
   if (!workspace) return null
-  const message = error ?? workspace.notice
 
   return (
     <div className="flex min-h-0 w-full flex-1 justify-center overflow-y-auto px-8 py-12">
@@ -81,12 +79,6 @@ export function WelcomeScreen(): React.JSX.Element | null {
           <h1 className="text-2xl font-semibold">Hatfield 360</h1>
           <p className="text-muted-foreground">{workspace.name} has no folders yet.</p>
         </header>
-        {message ? (
-          <p role="alert" className="flex gap-2 text-destructive">
-            <CircleAlert className="mt-0.5 size-4 shrink-0" aria-hidden />
-            {message}
-          </p>
-        ) : null}
         <section aria-labelledby="welcome-start" className="flex flex-col gap-1">
           <h2 id="welcome-start" className="px-2.5 font-medium text-muted-foreground">
             Start

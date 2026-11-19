@@ -5,10 +5,10 @@ import {
   type OpenDialogOptions,
   type SaveDialogOptions
 } from 'electron'
-import { mkdir } from 'node:fs/promises'
-import { join } from 'node:path'
+import { mkdir, stat } from 'node:fs/promises'
+import { basename, join, resolve } from 'node:path'
 import type { RecentTarget } from '../../shared/workspace-api'
-import { WORKSPACE_FILE_EXTENSION } from './workspace-file'
+import { WORKSPACE_FILE_EXTENSION, withWorkspaceExtension } from './workspace-file'
 import { workspaceStore } from './workspace-store'
 
 const WORKSPACE_FILE_FILTERS = [
@@ -26,6 +26,15 @@ function showSaveDialog(parent: BrowserWindow | null, options: SaveDialogOptions
 
 function showMessageBox(parent: BrowserWindow | null, options: MessageBoxOptions) {
   return parent ? dialog.showMessageBox(parent, options) : dialog.showMessageBox(options)
+}
+
+async function exists(path: string): Promise<boolean> {
+  try {
+    await stat(path)
+    return true
+  } catch {
+    return false
+  }
 }
 
 /** Asks for a folder with the native picker and adds it to the open workspace. */
@@ -68,7 +77,20 @@ export async function pickAndSaveWorkspaceAs(
     filters: WORKSPACE_FILE_FILTERS
   })
   if (result.canceled || !result.filePath) return
-  await workspaceStore.saveWorkspaceAs(result.filePath)
+  const target = withWorkspaceExtension(result.filePath)
+  // The dialog only checked the name as typed; adding the extension can land on an existing file.
+  if (target !== resolve(result.filePath) && (await exists(target))) {
+    const { response } = await showMessageBox(parent, {
+      type: 'warning',
+      message: `"${basename(target)}" already exists. Replace it?`,
+      detail: target,
+      buttons: ['Replace', 'Cancel'],
+      defaultId: 1,
+      cancelId: 1
+    })
+    if (response !== 0) return
+  }
+  await workspaceStore.saveWorkspaceAs(target)
 }
 
 /** Opens a Recent entry; when its file or folder is gone, offers to remove it from Recent. */
