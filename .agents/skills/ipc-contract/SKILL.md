@@ -10,7 +10,7 @@ The renderer is an untrusted, sandboxed web page. Its only door to main is `wind
 ## Adding a capability
 
 1. **Contract (`src/shared/`)**: add the channel to `IPC_CHANNELS` and the method to `DesktopApi` with explicit request/response types. Data must be structured-clone safe: plain objects, arrays, primitives, Date, no functions or class instances. When a domain grows, give it its own `src/shared/<domain>-api.ts` and compose it into `DesktopApi`.
-2. **Main (`src/main/ipc/<domain>-ipc.ts`)**: export `register<Domain>Ipc()` using `handleTrusted` from `src/main/ipc/trusted-ipc.ts` (never raw `ipcMain.handle`: it rejects calls from any frame other than the app's own page), and call it from `src/main/index.ts` before the window is created. Validate every argument at runtime; types don't exist at the boundary. Keep handlers thin and put real logic in a named module under `src/main/<domain>/` so it's unit-testable without Electron.
+2. **Main (`src/main/ipc/<domain>-ipc.ts`)**: export `register<Domain>Ipc()` using `handleTrusted` from `src/main/ipc/trusted-ipc.ts` (never raw `ipcMain.handle`: it rejects calls from any frame other than the app's own page), and call it from `src/main/index.ts` before the window is created. Handlers receive `unknown` arguments: validate every one at runtime, since types don't exist at the boundary. Keep handlers thin and put real logic in a named module under `src/main/<domain>/`.
 3. **Preload (`src/preload/index.ts`)**: add one line mapping the method to `ipcRenderer.invoke(channel, ...args)`. No logic, no Node APIs, and never expose `ipcRenderer` itself or a generic "invoke any channel" function.
 4. **Renderer**: call `window.desktop.<method>()` from a zustand store action (`src/renderer/src/state/`) or a hook, not inline in many components. Calls can reject: catch in the action and keep an `error` in state that the UI renders (see `app-info-store.ts`).
 
@@ -18,12 +18,12 @@ Main → renderer pushes (events): add a `subscribe<Thing>(callback) => unsubscr
 
 ## Testing
 
-- Pure logic behind a handler gets a unit test at the module that owns it (`src/main/<domain>/*.test.ts`).
-- The end-to-end wire (renderer → preload → main → renderer) is proven once per user-visible flow in `tests/e2e/`. Don't unit-test the preload mapping or re-assert channel names.
+- The end-to-end wire (renderer → preload → main → renderer) is proven once per user-visible flow in `tests/e2e/`, against the real app. Don't unit-test the preload mapping or re-assert channel names.
+- Pure logic behind a handler gets a unit test only when it has specific, meaningful behavior worth pinning (parsing, validation, policies), using real inputs. No mocks or stubs without explicit user authorization (see AGENTS.md).
 
 ## Checklist
 
 - [ ] Contract types in `src/shared` and no Electron/Node/React imports there (lint enforces this).
 - [ ] Handler registered with `handleTrusted`, inputs validated in main, errors returned as typed results or thrown with clear messages.
 - [ ] No new `webPreferences` loosening, no remote URLs loaded.
-- [ ] `pnpm check` and `pnpm test:e2e` pass.
+- [ ] `pnpm verify` passes.

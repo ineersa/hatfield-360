@@ -6,6 +6,7 @@
   "ignorePatterns": [
     "pnpm-lock.yaml",
     "out/**",
+    "release/**",
     "test-results/**",
     "playwright-report/**",
     ".claude/skills/**",

@@ -30,6 +30,10 @@ Attach with Playwright `chromium.connectOverCDP('http://127.0.0.1:9333')`. The f
 
 A behavior that must stay working gets a Playwright spec in `tests/e2e/` (see `app-launch.spec.ts` for the launch pattern), run with `pnpm test:e2e`. Assert through roles/labels/test ids, not CSS classes. One spec per user-visible flow; don't duplicate unit-level checks.
 
+Screenshots (from specs or `capture.mjs`) are evidence to look at, not regression tests: nothing compares them to a baseline. Visual assertions (`toHaveScreenshot`) come later, once a UI design is worth protecting.
+
+The same spec doubles as the packaged-app smoke test: with `E2E_EXECUTABLE=<path to packaged binary>` it launches that instead of the checkout (`pnpm package` writes `release/linux-unpacked/hatfield-360` on Linux).
+
 ## Troubleshooting
 
 - Stale UI: `out/` is from an older build; rerun `pnpm build`.

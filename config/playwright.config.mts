@@ -6,5 +6,6 @@ export default defineConfig({
   outputDir: resolve(import.meta.dirname, '../test-results'),
   timeout: 60_000,
   workers: 1,
+  forbidOnly: true,
   reporter: process.env.CI ? 'github' : 'list'
 })

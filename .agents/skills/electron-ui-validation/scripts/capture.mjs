@@ -14,11 +14,11 @@ const { values } = parseArgs({
   }
 })
 
-// A hidden window may not have composited its first frame yet (notably under xvfb).
+// Under xvfb a hidden window's first capture can fail or hang until a frame is composited, so each attempt is short.
 async function screenshotWhenPainted(page, path) {
   for (let attempt = 1; ; attempt++) {
     try {
-      return await page.screenshot({ path })
+      return await page.screenshot({ path, timeout: 1_000 })
     } catch (error) {
       if (attempt >= 20) throw error
       await new Promise((done) => setTimeout(done, 250))

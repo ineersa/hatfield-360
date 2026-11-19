@@ -1,2 +1,5 @@
 # Wait 3 days before installing freshly published versions (supply-chain hygiene).
 minimumReleaseAge: 4320
+allowBuilds:
+  # Squirrel.Windows installer support; the release uses NSIS, so its install script never needs to run.
+  electron-winstaller: false

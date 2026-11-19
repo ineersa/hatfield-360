@@ -1,0 +1,19 @@
+# Packaging config: `pnpm package` bundles with electron-vite, then electron-builder packages `out/` for the current OS.
+appId: io.github.ineersa.hatfield360
+productName: Hatfield 360
+directories:
+  output: release
+files:
+  - out/**
+  - package.json
+linux:
+  target: AppImage
+  executableName: hatfield-360
+  category: Development
+mac:
+  target: [dmg, zip]
+  # Unsigned until a signing identity exists; Gatekeeper requires right-click → Open on first launch.
+  identity: null
+win:
+  target: nsis
+publish: null

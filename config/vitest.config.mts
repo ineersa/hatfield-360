@@ -5,27 +5,10 @@ const root = resolve(import.meta.dirname, '..')
 
 export default defineConfig({
   root,
-  resolve: {
-    alias: { '@': resolve(root, 'src/renderer/src') }
-  },
   test: {
-    projects: [
-      {
-        extends: true,
-        test: {
-          name: 'node',
-          environment: 'node',
-          include: ['src/{main,preload,shared}/**/*.test.ts']
-        }
-      },
-      {
-        extends: true,
-        test: {
-          name: 'renderer',
-          environment: 'happy-dom',
-          include: ['src/renderer/**/*.test.{ts,tsx}']
-        }
-      }
-    ]
+    environment: 'node',
+    include: ['src/**/*.test.ts'],
+    // A focused test would silently skip its siblings, locally as well as in CI.
+    allowOnly: false
   }
 })

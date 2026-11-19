@@ -8,17 +8,12 @@ Delete, don't update, tests that:
 - Assemble production pieces instead of calling the real entry point.
 - Assert nothing meaningful: `expect(true)`, lone `toBeDefined()`, `.not.toBe('')`, unpinned `toThrow()`.
 - Assert only mock calls or values the mock itself supplied.
-- Claim pixel, layout or interaction coverage from happy-dom markup or Tailwind class strings. Rendered UI is proven with Playwright against the real app.
+- Claim pixel, layout or interaction coverage from DOM-emulation markup or Tailwind class strings. Rendered UI is proven with Playwright against the real app.
 - Re-test one contract at every layer (shared, IPC, renderer).
 - Use Cartesian `it.each`, or branch inside a parameterized body, instead of one case per distinct behavior.
 - Copy inventories, constants, defaults, versions, channel names or counts.
 - Assert copy text that isn't the behavior under test.
 - Test third-party behavior (React, zustand, Radix, Electron itself).
 - Reach into private state or add test-only exports, globals or code paths to production code.
-- Wait on real time or networks instead of fake timers and local fixtures.
-
-Mocks that:
-
-- Implement the behavior under test, or supply outputs production should generate.
-- Contradict the real producer they stand in for.
-- Are hand-copied across files instead of one shared typed fake.
+- Depend on real networks or sleep on wall-clock time.
+- Use mocks, stubs, fakes, `vi.mock`, `vi.stubGlobal` or spies standing in for a collaborator. These need explicit user authorization; without it, test through the real collaborator (integration or E2E) or don't add the test.

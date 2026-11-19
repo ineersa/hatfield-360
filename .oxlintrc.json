@@ -1,6 +1,6 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["typescript", "react", "react-hooks", "import", "unicorn", "oxc"],
+  "plugins": ["typescript", "react", "react-hooks", "import", "unicorn", "oxc", "vitest"],
   "categories": {
     "correctness": "error",
     "suspicious": "warn"
@@ -44,7 +44,17 @@
       {
         "allow": ["**/*.css"]
       }
-    ]
+    ],
+    "typescript/no-floating-promises": "error",
+    "typescript/no-misused-promises": "error",
+    "typescript/await-thenable": "error",
+    "typescript/no-unsafe-assignment": "error",
+    "typescript/no-unsafe-call": "error",
+    "typescript/no-unsafe-member-access": "error",
+    "typescript/no-unsafe-return": "error",
+    "typescript/no-unsafe-argument": "error",
+    "typescript/no-require-imports": "error",
+    "vitest/no-focused-tests": "error"
   },
   "overrides": [
     {
@@ -54,61 +64,19 @@
       }
     },
     {
-      "files": ["electron.vite.config.ts", "config/*.mts"],
+      "files": ["electron.vite.config.ts", "config/**/*.mts", "config/**/*.mjs"],
       "rules": {
         "import/no-default-export": "off"
       }
     },
     {
-      "files": ["src/renderer/**"],
+      "files": ["**/*.mjs"],
       "rules": {
-        "no-restricted-imports": [
-          "error",
-          {
-            "paths": [
-              {
-                "name": "electron",
-                "message": "Renderer reaches main only through window.desktop (preload)."
-              }
-            ],
-            "patterns": [
-              {
-                "group": ["node:*"],
-                "message": "Renderer is a sandboxed web page; no Node APIs."
-              },
-              {
-                "group": ["**/main/**", "**/preload/**"],
-                "message": "Import contracts from src/shared instead."
-              }
-            ]
-          }
-        ]
-      }
-    },
-    {
-      "files": ["src/shared/**"],
-      "rules": {
-        "no-restricted-imports": [
-          "error",
-          {
-            "paths": [
-              {
-                "name": "electron",
-                "message": "src/shared must run in every process."
-              }
-            ],
-            "patterns": [
-              {
-                "group": ["node:*"],
-                "message": "src/shared must run in every process."
-              },
-              {
-                "group": ["react", "react-dom"],
-                "message": "src/shared must run in every process."
-              }
-            ]
-          }
-        ]
+        "typescript/no-unsafe-assignment": "off",
+        "typescript/no-unsafe-call": "off",
+        "typescript/no-unsafe-member-access": "off",
+        "typescript/no-unsafe-return": "off",
+        "typescript/no-unsafe-argument": "off"
       }
     },
     {
@@ -120,14 +88,29 @@
     {
       "files": ["src/main/**"],
       "rules": {
+        "hatfield/no-raw-ipc-registration": "error",
         "no-restricted-imports": [
           "error",
           {
             "paths": [
               {
                 "name": "electron",
-                "importNames": ["ipcMain"],
-                "message": "Register IPC handlers with handleTrusted from src/main/ipc/trusted-ipc.ts."
+                "importNames": ["default"],
+                "message": "Use named imports from 'electron' so IPC access stays visible to lint."
+              }
+            ],
+            "patterns": [
+              {
+                "group": ["electron/*"],
+                "message": "Import from 'electron' directly."
+              },
+              {
+                "group": ["**/preload/**"],
+                "message": "Main shares code with other processes only through src/shared."
+              },
+              {
+                "group": ["**/renderer/**", "@/**"],
+                "message": "Main shares code with other processes only through src/shared."
               }
             ]
           }
@@ -137,9 +120,108 @@
     {
       "files": ["src/main/ipc/trusted-ipc.ts"],
       "rules": {
-        "no-restricted-imports": "off"
+        "hatfield/no-raw-ipc-registration": "off"
+      }
+    },
+    {
+      "files": ["src/preload/**"],
+      "rules": {
+        "import/no-nodejs-modules": "error",
+        "no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "electron",
+                "allowImportNames": ["contextBridge", "ipcRenderer"],
+                "message": "Preload is a thin bridge: contextBridge and ipcRenderer only."
+              }
+            ],
+            "patterns": [
+              {
+                "group": ["electron/*"],
+                "message": "Import from 'electron' directly."
+              },
+              {
+                "group": ["**/main/**"],
+                "message": "Preload depends only on src/shared contracts."
+              },
+              {
+                "group": ["**/renderer/**", "@/**"],
+                "message": "Preload depends only on src/shared contracts."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["src/renderer/**"],
+      "rules": {
+        "import/no-nodejs-modules": "error",
+        "no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "electron",
+                "message": "Renderer reaches main only through window.desktop (preload)."
+              }
+            ],
+            "patterns": [
+              {
+                "group": ["electron/*"],
+                "message": "Renderer reaches main only through window.desktop (preload)."
+              },
+              {
+                "group": ["**/main/**"],
+                "message": "Import contracts from src/shared instead."
+              },
+              {
+                "group": ["**/preload/**"],
+                "message": "Import contracts from src/shared instead."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["src/shared/**"],
+      "rules": {
+        "import/no-nodejs-modules": "error",
+        "no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "electron",
+                "message": "src/shared must run in every process."
+              }
+            ],
+            "patterns": [
+              {
+                "group": ["electron/*", "react", "react/*", "react-dom", "react-dom/*"],
+                "message": "src/shared must run in every process."
+              },
+              {
+                "group": ["**/main/**"],
+                "message": "src/shared must not depend on a process layer."
+              },
+              {
+                "group": ["**/preload/**"],
+                "message": "src/shared must not depend on a process layer."
+              },
+              {
+                "group": ["**/renderer/**", "@/**"],
+                "message": "src/shared must not depend on a process layer."
+              }
+            ]
+          }
+        ]
       }
     }
   ],
-  "ignorePatterns": ["out/**", ".claude/skills/**"]
+  "ignorePatterns": ["out/**", "release/**", ".claude/skills/**"],
+  "jsPlugins": ["./config/oxlint/ipc-boundary-plugin.mjs"]
 }
