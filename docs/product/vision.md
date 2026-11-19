@@ -55,6 +55,16 @@ Two columns, JetBrains-style, not Orca's three columns (no right-hand file/proje
   - Commit message box, Amend toggle, Commit and Commit and Push buttons.
 - **Main area:** diff viewer for the selected change.
 
+## Look and themes
+
+- Default look is JetBrains **Islands Dark**: rounded "island" panels on a slightly lighter frame, activity bar and status bar on the frame. The PhpStorm editor scheme export is `resources/themes/islands-dark.icls` (source for editor and console colours).
+- Three independent theme choices, each a separate setting:
+  - **App theme**: CSS colour roles (`src/renderer/src/assets/themes/<id>.css`, selected by `data-theme` on `<html>`).
+  - **Editor theme**: syntax and editor colours for the editor and diff viewer (#6, #7); default derived from the Islands Dark `.icls`.
+  - **Terminal theme**: xterm colours and ANSI palette (#4); default derived from Islands Dark console colours.
+- File and folder icons: Catppuccin icon set (catppuccin/vscode-icons, MIT) in the file tree, tabs and changes list.
+- A theme picker (settings) comes after the first views exist; until then Islands Dark is fixed.
+
 ## Later (not in the first implementation)
 
 Rough priority order; each becomes its own issue when it's next.

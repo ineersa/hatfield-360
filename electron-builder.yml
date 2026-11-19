@@ -6,9 +6,15 @@ directories:
 files:
   - out/**
   - package.json
+  # The main process loads it as the Linux window icon.
+  - resources/icon.png
+# One 1024 px PNG; electron-builder derives the .icns / .ico from it.
+icon: resources/icon.png
 linux:
   target: AppImage
   executableName: hatfield-360
+  # Docks match the running window (WM_CLASS / app_id) to the .desktop entry and its icon.
+  syncDesktopName: true
   category: Development
 mac:
   target: [dmg, zip]

@@ -102,19 +102,21 @@ test('each view keeps its own side panel width and collapsed state', async () =>
   })
 })
 
-test('shell follows the system light and dark theme', async () => {
+test('shell uses the Islands Dark app theme: islands on a darker-edged frame', async () => {
   await withApp(async (_app, page) => {
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'islands-dark')
+    await expect(page.locator('body')).toHaveCSS('background-color', 'rgb(38, 40, 44)')
+    await expect(viewButton(page, 'Agents')).toHaveCSS('background-color', 'rgb(56, 113, 225)')
+
     for (const view of ['Agents', 'Files', 'Git']) {
       // Agents is already active; clicking it again would collapse its panel.
       if (view !== 'Agents') await viewButton(page, view).click()
-      for (const colorScheme of ['light', 'dark'] as const) {
-        await page.emulateMedia({ colorScheme })
-        await expect(sidePanel(page, view)).toHaveCSS(
-          'background-color',
-          colorScheme === 'light' ? 'oklch(0.975 0 0)' : 'oklch(0.19 0 0)'
-        )
-        await saveScreenshot(page, `shell-${view.toLowerCase()}-${colorScheme}`)
-      }
+      await expect(sidePanel(page, view)).toHaveCSS('background-color', 'rgb(25, 26, 28)')
+      await expect(page.getByRole('main', { name: view })).toHaveCSS(
+        'background-color',
+        'rgb(25, 26, 28)'
+      )
+      await saveScreenshot(page, `shell-${view.toLowerCase()}`)
     }
   })
 })

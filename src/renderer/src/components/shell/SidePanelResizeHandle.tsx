@@ -63,9 +63,9 @@ export function SidePanelResizeHandle({
       onPointerUp={endDrag}
       onPointerCancel={endDrag}
       onKeyDown={onKeyDown}
-      className="group relative z-10 -mx-1 w-2 shrink-0 cursor-col-resize touch-none focus-visible:outline-none"
+      className="group relative w-1.5 shrink-0 cursor-col-resize touch-none focus-visible:outline-none"
     >
-      <div className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-border transition-colors group-hover:bg-highlight group-focus-visible:bg-highlight group-active:bg-highlight" />
+      <div className="absolute inset-y-3 left-1/2 w-0.5 -translate-x-1/2 rounded-full transition-colors group-hover:bg-primary group-focus-visible:bg-primary group-active:bg-primary" />
     </div>
   )
 }

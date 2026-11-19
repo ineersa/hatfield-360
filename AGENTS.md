@@ -70,7 +70,7 @@ Process boundary rules, enforced by lint (`.oxlintrc.json` overrides plus `confi
 - **Comments.** Only when code can't say it. One line, explaining why, not how.
 - TypeScript is strict (`noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`). No `any`, no non-null `!`, no `@ts-ignore`. Use `type`, not `interface`.
 - Named exports only (configs excepted).
-- UI: Tailwind utilities with the color tokens in `src/renderer/src/assets/main.css`; shadcn primitives live in `src/renderer/src/components/ui/` (add more with `pnpm dlx shadcn@latest add <name>`, then change its `import { cn } from "cn"` to `@/lib/class-names` and `pnpm remove cn` (an upstream registry quirk: it imports and installs an unrelated `cn` package; `pnpm knip` flags it), and run `pnpm format`). Don't invent ad-hoc colors.
+- UI: Tailwind utilities with the colour roles listed in `src/renderer/src/assets/main.css` (`bg-background`, `bg-island`, `text-muted-foreground`, `bg-primary`, ...); their values come from the active app theme in `src/renderer/src/assets/themes/` (default Islands Dark). Never use raw colours or Tailwind palette colours (`blue-500`) in components; add a role to every theme instead. shadcn primitives live in `src/renderer/src/components/ui/` (add more with `pnpm dlx shadcn@latest add <name>`, then change its `import { cn } from "cn"` to `@/lib/class-names` and `pnpm remove cn` (an upstream registry quirk: it imports and installs an unrelated `cn` package; `pnpm knip` flags it), and run `pnpm format`). Don't invent ad-hoc colors.
 
 # First-Class Concerns
 

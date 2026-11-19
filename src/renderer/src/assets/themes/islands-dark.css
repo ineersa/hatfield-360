@@ -1,0 +1,20 @@
+/*
+ * App theme: Islands Dark (JetBrains). UI colours sampled from PhpStorm 2026.3;
+ * its editor scheme export (syntax, console, diff colours) is resources/themes/islands-dark.icls.
+ * A theme is one file defining every role below under its own data-theme value.
+ */
+:root[data-theme='islands-dark'] {
+  color-scheme: dark;
+  --background: #26282c;
+  --island: #191a1c;
+  --foreground: #dfe1e5;
+  --muted-foreground: #868a91;
+  --border: #393b40;
+  --accent: #2b2d30;
+  --accent-foreground: #dfe1e5;
+  --selection: #2a4371;
+  --primary: #3871e1;
+  --primary-foreground: #ffffff;
+  --destructive: #f75464;
+  --ring: #3871e1;
+}

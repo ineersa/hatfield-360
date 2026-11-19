@@ -11,6 +11,6 @@
   "compilerOptions": {
     "composite": true,
     "lib": ["es2023"],
-    "types": ["node"]
+    "types": ["node", "electron-vite/node"]
   }
 }
