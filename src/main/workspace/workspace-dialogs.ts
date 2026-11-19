@@ -1,12 +1,12 @@
 import {
-  app,
   type BrowserWindow,
   dialog,
   type MessageBoxOptions,
   type OpenDialogOptions,
   type SaveDialogOptions
 } from 'electron'
-import { dirname, join } from 'node:path'
+import { mkdir } from 'node:fs/promises'
+import { join } from 'node:path'
 import type { RecentTarget } from '../../shared/workspace-api'
 import { WORKSPACE_FILE_EXTENSION } from './workspace-file'
 import { workspaceStore } from './workspace-store'
@@ -42,6 +42,7 @@ export async function pickAndAddWorkspaceFolder(parent: BrowserWindow | null): P
 export async function pickAndOpenWorkspaceFile(parent: BrowserWindow | null): Promise<void> {
   const result = await showOpenDialog(parent, {
     title: 'Open Workspace from File',
+    defaultPath: workspaceStore.workspacesFolder(),
     properties: ['openFile'],
     filters: WORKSPACE_FILE_FILTERS
   })
@@ -56,7 +57,9 @@ export async function pickAndSaveWorkspaceAs(
   mode: 'save-as' | 'duplicate'
 ): Promise<void> {
   const view = await workspaceStore.view()
-  const directory = view.file ? dirname(view.file) : app.getPath('documents')
+  // Suggest Hatfield's own folder, where saved workspaces are listed without being in Recent.
+  const directory = workspaceStore.workspacesFolder()
+  await mkdir(directory, { recursive: true })
   const name =
     mode === 'duplicate' ? `${view.name} copy` : view.file ? view.name : 'Untitled Workspace'
   const result = await showSaveDialog(parent, {

@@ -20,7 +20,12 @@ function RecentRow({ entry }: { entry: RecentEntry }): React.JSX.Element {
   const removeRecent = useWorkspaceStore((state) => state.removeRecent)
   const name = entry.missing ? `${entry.name} (missing)` : entry.name
   return (
-    <li className="group flex items-center gap-1 rounded-lg hover:bg-accent focus-within:bg-accent">
+    <li
+      className={cn(
+        'group flex items-center gap-1 rounded-lg',
+        !entry.current && 'hover:bg-accent focus-within:bg-accent'
+      )}
+    >
       <button
         type="button"
         aria-label={name}
@@ -38,12 +43,12 @@ function RecentRow({ entry }: { entry: RecentEntry }): React.JSX.Element {
           {entry.name}
         </span>
         <span className="min-w-0 truncate text-muted-foreground">
-          {entry.kind === 'default' ? 'Kept by the app' : entry.path}
+          {entry.stored ? 'Saved in Hatfield' : entry.path}
         </span>
       </button>
       {entry.current ? <span className="shrink-0 pr-3 text-muted-foreground">current</span> : null}
       {entry.missing ? <span className="shrink-0 pr-1 text-destructive">missing</span> : null}
-      {entry.kind === 'default' ? null : (
+      {entry.stored ? null : (
         <button
           type="button"
           aria-label={`Remove ${entry.name} from Recent`}

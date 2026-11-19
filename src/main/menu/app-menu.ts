@@ -30,9 +30,11 @@ function recentLabel(entry: RecentEntry): string {
   const label =
     entry.kind === 'default'
       ? entry.name
-      : entry.kind === 'workspace'
-        ? `${displayPath(entry.path.slice(0, -WORKSPACE_FILE_EXTENSION.length))} (Workspace)`
-        : displayPath(entry.path)
+      : entry.stored
+        ? `${entry.name} (Workspace)`
+        : entry.kind === 'workspace'
+          ? `${displayPath(entry.path.slice(0, -WORKSPACE_FILE_EXTENSION.length))} (Workspace)`
+          : displayPath(entry.path)
   // `&` marks a mnemonic in menu labels on Linux and Windows.
   return `${label}${entry.missing ? ' (missing)' : ''}`.replaceAll('&', '&&')
 }

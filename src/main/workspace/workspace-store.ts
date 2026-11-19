@@ -1,6 +1,6 @@
 import { app } from 'electron'
-import { rename, stat } from 'node:fs/promises'
-import { basename, join, resolve } from 'node:path'
+import { readdir, rename, stat } from 'node:fs/promises'
+import { basename, dirname, join, resolve } from 'node:path'
 import type {
   RecentEntry,
   RecentTarget,
@@ -112,8 +112,13 @@ class WorkspaceStore {
         missing: !(await isDirectory(path))
       }))
     )
+    const recentWorkspaces = state.recent.filter((item) => item.kind === 'workspace')
+    const unlisted = (await this.storedWorkspaceFiles())
+      .filter((path) => !recentWorkspaces.some((item) => item.path === path))
+      .map((path): RecentItem => ({ kind: 'workspace', path }))
     const ordered = [
-      ...state.recent.filter((item) => item.kind === 'workspace'),
+      ...recentWorkspaces,
+      ...unlisted,
       ...state.recent.filter((item) => item.kind === 'folder')
     ]
     const recent: RecentEntry[] = [
@@ -122,7 +127,8 @@ class WorkspaceStore {
         path: this.defaultFile(),
         name: DEFAULT_WORKSPACE_NAME,
         missing: false,
-        current: workspace.isDefault
+        current: workspace.isDefault,
+        stored: true
       },
       ...(await Promise.all(
         ordered.map(async (item) =>
@@ -131,13 +137,15 @@ class WorkspaceStore {
                 ...item,
                 name: workspaceFileName(item.path),
                 missing: !(await isFile(item.path)),
-                current: !workspace.isDefault && item.path === workspace.file
+                current: !workspace.isDefault && item.path === workspace.file,
+                stored: this.isStored(item.path)
               }
             : {
                 ...item,
                 name: folderName(item.path),
                 missing: !(await isDirectory(item.path)),
-                current: false
+                current: false,
+                stored: false
               }
         )
       ))
@@ -207,7 +215,10 @@ class WorkspaceStore {
         await this.openDefault(session)
         return 'opened'
       }
-      if (!session.state.recent.some((item) => isSameItem(item, target))) {
+      const listed =
+        session.state.recent.some((item) => isSameItem(item, target)) ||
+        (target.kind === 'workspace' && this.isStored(target.path))
+      if (!listed) {
         throw new Error(`Not in Recent: ${target.path}`)
       }
       if (target.kind === 'folder') {
@@ -245,8 +256,35 @@ class WorkspaceStore {
     })
   }
 
+  /** Hatfield's own workspaces folder: the default workspace and where Save As suggests saving. */
+  workspacesFolder(): string {
+    return join(this.dataDir(), 'workspaces')
+  }
+
   private defaultFile(): string {
-    return join(this.dataDir(), 'workspaces', `default${WORKSPACE_FILE_EXTENSION}`)
+    return join(this.workspacesFolder(), `default${WORKSPACE_FILE_EXTENSION}`)
+  }
+
+  private isStored(path: string): boolean {
+    return (
+      dirname(path) === this.workspacesFolder() &&
+      path.endsWith(WORKSPACE_FILE_EXTENSION) &&
+      path !== this.defaultFile()
+    )
+  }
+
+  /** Workspace files saved in Hatfield's workspaces folder, by name. */
+  private async storedWorkspaceFiles(): Promise<string[]> {
+    let names: string[]
+    try {
+      names = await readdir(this.workspacesFolder())
+    } catch {
+      return []
+    }
+    return names
+      .map((name) => join(this.workspacesFolder(), name))
+      .filter((path) => this.isStored(path))
+      .toSorted((a, b) => a.localeCompare(b))
   }
 
   private stateFile(): string {

@@ -17,6 +17,8 @@ export type RecentEntry = RecentTarget & {
   missing: boolean
   /** The workspace open in this window. */
   current: boolean
+  /** Kept in Hatfield's own workspaces folder: always listed, so it can't be removed from Recent. */
+  stored: boolean
 }
 
 export type WorkspaceView = {
@@ -29,7 +31,7 @@ export type WorkspaceView = {
   problem: string | null
   /** Why the last workspace action started outside the window failed (File menu, reopening at launch). */
   notice: string | null
-  /** The default workspace first, then recent workspace files, then recent folders. */
+  /** The default workspace first, then workspace files (recent, then the rest of Hatfield's workspaces folder), then recent folders. */
   recent: RecentEntry[]
 }
 

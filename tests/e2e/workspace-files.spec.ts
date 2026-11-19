@@ -33,6 +33,12 @@ test('recent workspaces open from the welcome screen, reopen at launch and close
     team,
     JSON.stringify({ version: 1, folders: [{ path: 'api' }, { path: outside }] })
   )
+  // Saved in Hatfield's own workspaces folder but not in Recent.
+  await mkdir(join(userData, 'workspaces'))
+  await writeFile(
+    join(userData, 'workspaces', 'side.hatfield-workspace'),
+    JSON.stringify({ version: 1, folders: [{ path: outside }] })
+  )
   await writeAppState(userData, {
     current: null,
     recent: [
@@ -49,6 +55,7 @@ test('recent workspaces open from the welcome screen, reopen at launch and close
           /^Default Workspace/,
           /^team/,
           /^gone/,
+          /^side/,
           /^outside/
         ])
         await expect(
@@ -86,6 +93,7 @@ test('recent workspaces open from the welcome screen, reopen at launch and close
             'Default Workspace',
             `${join(repo, 'team')} (Workspace)`,
             `${join(projects, 'gone')} (Workspace) (missing)`,
+            'side (Workspace)',
             outside,
             'Clear Recently Opened'
           ])
@@ -103,9 +111,18 @@ test('recent workspaces open from the welcome screen, reopen at launch and close
           ]
         })
 
+        // Workspaces in Hatfield's folder stay listed: they can't be removed from Recent, only opened.
         await clickMenuItem(app, 'clear-recent')
-        await expect(recentList(page).getByRole('listitem')).toHaveCount(1)
-        await expect(recentList(page).getByRole('listitem')).toContainText('Default Workspace')
+        await expect(recentList(page).getByRole('button', { name: /^(?!Remove)/ })).toHaveText([
+          /^Default Workspace/,
+          /^side/
+        ])
+        await expect(
+          recentList(page).getByRole('button', { name: 'Remove side from Recent' })
+        ).toHaveCount(0)
+        await recentList(page).getByRole('button', { name: 'side', exact: true }).click()
+        await expect(folderList(page).getByRole('listitem')).toHaveText(['outside'])
+        await expect(page).toHaveTitle('side — Hatfield 360')
       },
       { userDataDir: userData }
     )
