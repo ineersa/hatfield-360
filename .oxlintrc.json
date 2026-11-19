@@ -105,11 +105,11 @@
                 "message": "Import from 'electron' directly."
               },
               {
-                "group": ["**/preload/**"],
+                "group": ["**/preload", "**/preload/**"],
                 "message": "Main shares code with other processes only through src/shared."
               },
               {
-                "group": ["**/renderer/**", "@/**"],
+                "group": ["**/renderer", "**/renderer/**", "@/**"],
                 "message": "Main shares code with other processes only through src/shared."
               }
             ]
@@ -143,11 +143,11 @@
                 "message": "Import from 'electron' directly."
               },
               {
-                "group": ["**/main/**"],
+                "group": ["**/main", "**/main/**"],
                 "message": "Preload depends only on src/shared contracts."
               },
               {
-                "group": ["**/renderer/**", "@/**"],
+                "group": ["**/renderer", "**/renderer/**", "@/**"],
                 "message": "Preload depends only on src/shared contracts."
               }
             ]
@@ -174,11 +174,11 @@
                 "message": "Renderer reaches main only through window.desktop (preload)."
               },
               {
-                "group": ["**/main/**"],
+                "group": ["**/main", "**/main/**"],
                 "message": "Import contracts from src/shared instead."
               },
               {
-                "group": ["**/preload/**"],
+                "group": ["**/preload", "**/preload/**"],
                 "message": "Import contracts from src/shared instead."
               }
             ]
@@ -205,15 +205,15 @@
                 "message": "src/shared must run in every process."
               },
               {
-                "group": ["**/main/**"],
+                "group": ["**/main", "**/main/**"],
                 "message": "src/shared must not depend on a process layer."
               },
               {
-                "group": ["**/preload/**"],
+                "group": ["**/preload", "**/preload/**"],
                 "message": "src/shared must not depend on a process layer."
               },
               {
-                "group": ["**/renderer/**", "@/**"],
+                "group": ["**/renderer", "**/renderer/**", "@/**"],
                 "message": "src/shared must not depend on a process layer."
               }
             ]

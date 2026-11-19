@@ -1,5 +1,5 @@
 // Flags raw Electron IPC registration that import restrictions can't see (`webContents.ipc`, `electron.ipcMain`,
-// destructuring), so every main-process handler goes through handleTrusted's sender check.
+// destructuring, re-exports), so every main-process handler goes through handleTrusted's sender check.
 const RAW_IPC_NAMES = new Set(['ipcMain', 'ipc'])
 
 function staticName(node, computed) {
@@ -30,6 +30,10 @@ const noRawIpcRegistration = {
       },
       ImportSpecifier(node) {
         reportIfRaw(node.imported, staticName(node.imported, false))
+      },
+      // `export { ipcMain as rawIpc } from 'electron'` would hand raw IPC to modules under another name.
+      ExportSpecifier(node) {
+        reportIfRaw(node.local, staticName(node.local, false))
       }
     }
   }
