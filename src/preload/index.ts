@@ -7,6 +7,9 @@ const desktopApi: DesktopApi = {
   getWorkspace: () => ipcRenderer.invoke(WORKSPACE_CHANNELS.get),
   addWorkspaceFolder: () => ipcRenderer.invoke(WORKSPACE_CHANNELS.addFolder),
   removeWorkspaceFolder: (path) => ipcRenderer.invoke(WORKSPACE_CHANNELS.removeFolder, path),
+  openWorkspaceFile: () => ipcRenderer.invoke(WORKSPACE_CHANNELS.openFile),
+  openRecent: (target) => ipcRenderer.invoke(WORKSPACE_CHANNELS.openRecent, target),
+  removeRecent: (target) => ipcRenderer.invoke(WORKSPACE_CHANNELS.removeRecent, target),
   subscribeWorkspace: (callback) => {
     const listener = (_event: unknown, workspace: WorkspaceView): void => callback(workspace)
     ipcRenderer.on(WORKSPACE_CHANNELS.changed, listener)

@@ -1,5 +1,4 @@
 import { CircleAlert, FolderPlus, FolderX } from 'lucide-react'
-import { useEffect } from 'react'
 import { CatppuccinRootFolderIcon } from '@/components/icons/CatppuccinIcons'
 import {
   ContextMenu,
@@ -60,14 +59,11 @@ function ProjectRow({ folder }: { folder: WorkspaceFolder }): React.JSX.Element 
 /** Agents side panel: the open workspace's project folders. */
 export function WorkspacePanel(): React.JSX.Element {
   const workspace = useWorkspaceStore((state) => state.workspace)
-  const error = useWorkspaceStore((state) => state.error)
-  const connect = useWorkspaceStore((state) => state.connect)
   const addFolder = useWorkspaceStore((state) => state.addFolder)
 
-  useEffect(() => connect(), [connect])
-
-  const problem = error ?? workspace?.problem ?? null
   const folders = workspace?.folders ?? []
+  // Action errors and notices show in the shell's workspace message; the panel shows why the workspace is read-only.
+  const problem = workspace?.problem ?? null
 
   return (
     <>

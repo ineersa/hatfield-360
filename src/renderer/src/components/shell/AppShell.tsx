@@ -1,6 +1,9 @@
-import { useRef } from 'react'
+import { useEffect, useRef } from 'react'
 import { TooltipProvider } from '@/components/ui/tooltip'
+import { WelcomeScreen } from '@/components/workspace/WelcomeScreen'
+import { WorkspaceMessage } from '@/components/workspace/WorkspaceMessage'
 import { SIDE_PANEL_MIN_WIDTH, useShellLayoutStore } from '@/state/shell-layout-store'
+import { useWorkspaceStore } from '@/state/workspace-store'
 import { ActivityBar } from './ActivityBar'
 import { SHELL_VIEWS } from './shell-views'
 import { SIDE_PANEL_HANDLE_WIDTH, SidePanelResizeHandle } from './SidePanelResizeHandle'
@@ -14,6 +17,14 @@ export function AppShell(): React.JSX.Element {
   const panel = useShellLayoutStore((state) => state.panels[state.activeView])
   const setPanelWidth = useShellLayoutStore((state) => state.setPanelWidth)
   const aside = useRef<HTMLElement>(null)
+  const connectWorkspace = useWorkspaceStore((state) => state.connect)
+  const workspaceName = useWorkspaceStore((state) => state.workspace?.name)
+  const workspaceEmpty = useWorkspaceStore((state) => state.workspace?.folders.length === 0)
+
+  useEffect(() => connectWorkspace(), [connectWorkspace])
+  useEffect(() => {
+    document.title = workspaceName ? `${workspaceName} — Hatfield 360` : 'Hatfield 360'
+  }, [workspaceName])
   // Measured when the user resizes, so it always matches the current window.
   const maxWidth = (): number => {
     const container = aside.current?.parentElement?.clientWidth ?? 0
@@ -25,6 +36,7 @@ export function AppShell(): React.JSX.Element {
   return (
     <TooltipProvider>
       <div className="flex h-screen flex-col bg-background text-foreground">
+        <WorkspaceMessage />
         <div className="flex min-h-0 flex-1 pt-1.5 pr-1.5">
           <ActivityBar />
           <div className="flex min-w-0 flex-1">
@@ -62,12 +74,19 @@ export function AppShell(): React.JSX.Element {
                 />
               </>
             )}
-            <main
-              aria-label={view.label}
-              className="flex min-w-0 flex-1 flex-col items-center justify-center gap-3 rounded-xl bg-island p-8 text-center"
-            >
-              <view.Icon className="size-10 text-muted-foreground" strokeWidth={1.5} aria-hidden />
-              <p className="max-w-sm text-muted-foreground">{view.mainPlaceholder}</p>
+            <main aria-label={view.label} className="flex min-w-0 flex-1 rounded-xl bg-island">
+              {workspaceEmpty ? (
+                <WelcomeScreen />
+              ) : (
+                <div className="flex flex-1 flex-col items-center justify-center gap-3 p-8 text-center">
+                  <view.Icon
+                    className="size-10 text-muted-foreground"
+                    strokeWidth={1.5}
+                    aria-hidden
+                  />
+                  <p className="max-w-sm text-muted-foreground">{view.mainPlaceholder}</p>
+                </div>
+              )}
             </main>
           </div>
         </div>

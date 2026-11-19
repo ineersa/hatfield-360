@@ -6,16 +6,45 @@ export type WorkspaceFolder = {
   missing: boolean
 }
 
+/** What a Recent entry opens: the default workspace, a saved workspace file, or a folder to add. */
+type RecentKind = 'default' | 'workspace' | 'folder'
+
+export type RecentTarget = { kind: RecentKind; path: string }
+
+export type RecentEntry = RecentTarget & {
+  name: string
+  /** The file or folder no longer exists; opening it offers to remove it from Recent. */
+  missing: boolean
+  /** The workspace open in this window. */
+  current: boolean
+  /** Kept in Hatfield's own workspaces folder: always listed, so it can't be removed from Recent. */
+  stored: boolean
+}
+
+/** A message from main; each occurrence has its own id, so dismissing one doesn't hide the next. */
+export type WorkspaceNotice = { id: number; message: string }
+
 export type WorkspaceView = {
+  /** "Default Workspace" or the workspace file's name. */
+  name: string
+  /** The open workspace file, or null for the default workspace. */
+  file: string | null
   folders: WorkspaceFolder[]
   /** Set when the workspace file can't be used (e.g. written by a newer app version); changes are refused. */
   problem: string | null
+  /** Why the last workspace action started outside the window failed (File menu, reopening at launch). */
+  notice: WorkspaceNotice | null
+  /** The default workspace first, then workspace files (recent, then the rest of Hatfield's workspaces folder), then recent folders. */
+  recent: RecentEntry[]
 }
 
 export const WORKSPACE_CHANNELS = {
   get: 'workspace:get',
   addFolder: 'workspace:add-folder',
   removeFolder: 'workspace:remove-folder',
+  openFile: 'workspace:open-file',
+  openRecent: 'workspace:open-recent',
+  removeRecent: 'workspace:remove-recent',
   changed: 'workspace:changed'
 } as const
 
@@ -24,5 +53,10 @@ export type WorkspaceApi = {
   /** Opens the native folder picker in main and adds the chosen folder. */
   addWorkspaceFolder: () => Promise<void>
   removeWorkspaceFolder: (path: string) => Promise<void>
+  /** Opens the native file picker in main and switches to the chosen workspace file. */
+  openWorkspaceFile: () => Promise<void>
+  /** Opens a Recent entry; main accepts only entries in its own Recent list. */
+  openRecent: (target: RecentTarget) => Promise<void>
+  removeRecent: (target: RecentTarget) => Promise<void>
   subscribeWorkspace: (callback: (workspace: WorkspaceView) => void) => () => void
 }
