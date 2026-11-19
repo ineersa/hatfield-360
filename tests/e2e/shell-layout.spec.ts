@@ -85,7 +85,7 @@ test('a narrow window shrinks the side panel so the main area stays on screen', 
       app.evaluate(({ BrowserWindow }, newWidth) => {
         const window = BrowserWindow.getAllWindows()[0]
         if (!window) throw new Error('no window')
-        window.setSize(newWidth, 800)
+        window.setContentSize(newWidth, 800)
       }, width)
 
     await resizeHandle(page, 'Agents').focus()
@@ -93,15 +93,17 @@ test('a narrow window shrinks the side panel so the main area stays on screen', 
     expect(await panelWidth(page, 'Agents')).toBe(640)
 
     await setWindowWidth(600)
-    await expect.poll(() => page.evaluate('window.innerWidth')).toBe(600)
+    // Window managers may adjust the requested size by a few pixels; check against what was applied.
+    await expect.poll(() => page.evaluate('window.innerWidth')).toBeLessThan(620)
     await expect.poll(() => panelWidth(page, 'Agents')).toBeLessThan(640)
+    const viewportWidth = Number(await page.evaluate('window.innerWidth'))
     const main = await page.getByRole('main', { name: 'Agents' }).boundingBox()
     const handle = await resizeHandle(page, 'Agents').boundingBox()
     if (!main || !handle) throw new Error('layout is not rendered')
-    expect(main.x + main.width).toBeLessThanOrEqual(600)
+    expect(main.x + main.width).toBeLessThanOrEqual(viewportWidth)
     expect(main.width).toBeGreaterThanOrEqual(320)
     expect(handle.x + handle.width).toBeLessThan(main.x + 1)
-    expect(await page.evaluate('document.documentElement.scrollWidth')).toBe(600)
+    expect(await page.evaluate('document.documentElement.scrollWidth')).toBe(viewportWidth)
 
     // The chosen width is kept and comes back when there is room again.
     await setWindowWidth(1200)
