@@ -17,4 +17,6 @@
   --primary-foreground: #ffffff;
   --destructive: #f75464;
   --ring: #3871e1;
+  /* Catppuccin Mocha, for the Catppuccin file and folder icons. */
+  --icon-text: #cdd6f4;
 }

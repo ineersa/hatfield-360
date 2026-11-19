@@ -23,11 +23,13 @@
   --color-primary-foreground: var(--primary-foreground);
   --color-destructive: var(--destructive);
   --color-ring: var(--ring);
+  /* File and folder icon colours (Catppuccin icon palette), defined per theme. */
+  --color-icon-text: var(--icon-text);
 }
 
 body {
   background-color: var(--background);
   color: var(--foreground);
   font-family: var(--font-sans);
-  font-size: 13px;
+  font-size: 14px;
 }

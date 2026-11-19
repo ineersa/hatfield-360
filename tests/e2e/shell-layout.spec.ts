@@ -17,7 +17,7 @@ async function panelWidth(page: Page, view: string): Promise<number> {
 test('activity bar switches between the Agents, Files and Git views', async () => {
   await withApp(async (_app, page) => {
     await expect(viewButton(page, 'Agents')).toHaveAttribute('aria-pressed', 'true')
-    await expect(sidePanel(page, 'Agents').getByRole('heading')).toHaveText('Agent Sessions')
+    await expect(sidePanel(page, 'Agents').getByRole('heading')).toHaveText('Projects')
     await expect(page.getByRole('main', { name: 'Agents' })).toContainText('Terminals')
 
     await viewButton(page, 'Files').click()

@@ -1,5 +1,6 @@
-import { CircleAlert, Folder, FolderPlus, FolderX } from 'lucide-react'
+import { CircleAlert, FolderPlus, FolderX } from 'lucide-react'
 import { useEffect } from 'react'
+import { CatppuccinRootFolderIcon } from '@/components/icons/CatppuccinIcons'
 import {
   ContextMenu,
   ContextMenuContent,
@@ -21,15 +22,18 @@ function ProjectRow({ folder }: { folder: WorkspaceFolder }): React.JSX.Element 
             <li
               tabIndex={0}
               aria-label={folder.missing ? `${folder.name} (missing)` : folder.name}
-              className="flex h-7 cursor-default items-center gap-2 rounded-md px-2 outline-none select-none hover:bg-accent focus-visible:bg-accent"
+              className="flex h-9 cursor-default items-center gap-2.5 rounded-lg px-2.5 outline-none select-none hover:bg-accent focus-visible:bg-accent data-[state=open]:bg-accent"
             >
               {folder.missing ? (
-                <FolderX className="size-4 shrink-0 text-destructive" aria-hidden />
+                <FolderX className="size-[18px] shrink-0 text-destructive" aria-hidden />
               ) : (
-                <Folder className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+                <CatppuccinRootFolderIcon className="size-[18px] shrink-0" />
               )}
               <span
-                className={cn('truncate', folder.missing && 'text-muted-foreground line-through')}
+                className={cn(
+                  'truncate text-[15px] font-semibold',
+                  folder.missing && 'font-medium text-muted-foreground line-through'
+                )}
               >
                 {folder.name}
               </span>
@@ -67,17 +71,17 @@ export function WorkspacePanel(): React.JSX.Element {
 
   return (
     <>
-      <div className="flex h-10 shrink-0 items-center gap-1 pr-2 pl-4">
-        <h2 className="flex-1 truncate font-semibold">Agent Sessions</h2>
+      <div className="flex h-11 shrink-0 items-center gap-1 pt-1 pr-2 pl-4">
+        <h2 className="flex-1 truncate font-medium text-muted-foreground">Projects</h2>
         <Tooltip>
           <TooltipTrigger asChild>
             <button
               type="button"
               aria-label="Add Folder to Workspace"
               onClick={() => void addFolder()}
-              className="flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+              className="flex size-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
             >
-              <FolderPlus className="size-4" aria-hidden />
+              <FolderPlus className="size-[18px]" strokeWidth={1.75} aria-hidden />
             </button>
           </TooltipTrigger>
           <TooltipContent side="bottom">Add Folder to Workspace</TooltipContent>
@@ -90,19 +94,22 @@ export function WorkspacePanel(): React.JSX.Element {
         </p>
       ) : null}
       {workspace && folders.length === 0 && !workspace.problem ? (
-        <div className="flex flex-col items-start gap-3 px-4 pt-2">
+        <div className="flex flex-col items-start gap-3 px-4 pt-1">
           <p className="text-muted-foreground">No folders in this workspace yet.</p>
           <button
             type="button"
             onClick={() => void addFolder()}
-            className="flex h-8 items-center gap-2 rounded-md bg-primary px-3 font-medium text-primary-foreground hover:bg-primary/90 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+            className="flex h-9 items-center gap-2 rounded-lg bg-primary px-3.5 font-medium text-primary-foreground hover:bg-primary/90 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
           >
             <FolderPlus className="size-4" aria-hidden />
             Open Folder
           </button>
         </div>
       ) : (
-        <ul aria-label="Workspace folders" className="flex min-h-0 flex-col overflow-y-auto px-2">
+        <ul
+          aria-label="Workspace folders"
+          className="flex min-h-0 flex-col gap-0.5 overflow-y-auto px-2"
+        >
           {folders.map((folder) => (
             <ProjectRow key={folder.path} folder={folder} />
           ))}
