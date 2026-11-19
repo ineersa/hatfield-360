@@ -18,7 +18,10 @@ test('shell renders app info fetched over IPC without showing a window', async (
     )
     expect(visible).toBe(false)
 
-    await page.screenshot({ path: resolve(root, 'test-results/app-launch.png') })
+    // A hidden window may not have composited its first frame yet (notably under xvfb).
+    await expect(async () => {
+      await page.screenshot({ path: resolve(root, 'test-results/app-launch.png') })
+    }).toPass({ timeout: 10_000 })
   } finally {
     await app.close()
   }

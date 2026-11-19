@@ -14,6 +14,18 @@ const { values } = parseArgs({
   }
 })
 
+// A hidden window may not have composited its first frame yet (notably under xvfb).
+async function screenshotWhenPainted(page, path) {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await page.screenshot({ path })
+    } catch (error) {
+      if (attempt >= 20) throw error
+      await new Promise((done) => setTimeout(done, 250))
+    }
+  }
+}
+
 const app = await electron.launch({
   args: [root],
   env: { ...process.env, APP_BACKGROUND_LAUNCH: '1' }
@@ -31,7 +43,7 @@ try {
   }
   await page.waitForTimeout(250)
   mkdirSync(dirname(values.out), { recursive: true })
-  await page.screenshot({ path: values.out })
+  await screenshotWhenPainted(page, values.out)
   console.log('## Accessibility tree\n' + (await page.locator('body').ariaSnapshot()))
   console.log('\n## Logs\n' + (logs.join('\n') || '(none)'))
   console.log(`\n## Screenshot\n${values.out}`)
