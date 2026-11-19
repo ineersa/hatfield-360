@@ -1,6 +1,7 @@
 import { expect, test, type ElectronApplication, type Page } from '@playwright/test'
 import { mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
+import { clickMenuItem } from './app-menu'
 import { makeTempDir, saveScreenshot, withApp } from './launch-app'
 
 const workspaceFile = (userDataDir: string) =>
@@ -19,15 +20,6 @@ async function answerFolderPicker(app: ElectronApplication, folder: string | nul
   }, folder)
 }
 
-async function clickFileMenu(app: ElectronApplication, id: string): Promise<void> {
-  await app.evaluate(({ Menu }, itemId) => {
-    const item = Menu.getApplicationMenu()?.getMenuItemById(itemId)
-    if (!item) throw new Error(`no menu item ${itemId}`)
-    // MenuItem.click is typed as a bare Function; it runs the item's handler like a real click.
-    Reflect.apply(item.click, item, [])
-  }, id)
-}
-
 const folderList = (page: Page) => page.getByRole('list', { name: 'Workspace folders' })
 
 test('File menu has the workspace actions', async () => {
@@ -38,7 +30,15 @@ test('File menu has the workspace actions', async () => {
         ?.submenu?.items.filter((item) => item.type !== 'separator')
         .map((item) => item.label)
     )
-    expect(labels?.slice(0, 2)).toEqual(['Open Folder…', 'Add Folder to Workspace…'])
+    expect(labels?.slice(0, -1)).toEqual([
+      'Open Folder…',
+      'Open Workspace from File…',
+      'Open Recent',
+      'Add Folder to Workspace…',
+      'Save Workspace As…',
+      'Duplicate Workspace…',
+      'Close Workspace'
+    ])
   })
 })
 
@@ -60,12 +60,12 @@ test('folders added from the empty state and the File menu are listed and saved 
         await expect(folderList(page).getByRole('listitem', { name: 'api' })).toBeVisible()
 
         await answerFolderPicker(app, web)
-        await clickFileMenu(app, 'add-folder-to-workspace')
+        await clickMenuItem(app, 'add-folder-to-workspace')
         await expect(folderList(page).getByRole('listitem')).toHaveText(['api', 'web'])
 
         // Adding a folder already in the workspace and cancelling the picker change nothing.
         await answerFolderPicker(app, api)
-        await clickFileMenu(app, 'open-folder')
+        await clickMenuItem(app, 'open-folder')
         await answerFolderPicker(app, null)
         await page.getByRole('button', { name: 'Add Folder to Workspace' }).click()
         await expect(folderList(page).getByRole('listitem')).toHaveText(['api', 'web'])
@@ -158,10 +158,16 @@ test('a workspace file from a newer app version is reported and left untouched',
   try {
     await withApp(
       async (app, page) => {
-        await expect(page.getByRole('alert')).toContainText('newer version of Hatfield 360')
+        const panelAlert = page
+          .getByRole('complementary', { name: 'Agents panel' })
+          .getByRole('alert')
+        await expect(panelAlert).toContainText('newer version of Hatfield 360')
         await answerFolderPicker(app, userData)
         await page.getByRole('button', { name: 'Add Folder to Workspace' }).click()
-        await expect(page.getByRole('alert')).toContainText('newer version of Hatfield 360')
+        await expect(page.getByRole('main').getByRole('alert')).toContainText(
+          'newer version of Hatfield 360'
+        )
+        await expect(panelAlert).toContainText('newer version of Hatfield 360')
         expect(await readFile(workspaceFile(userData), 'utf8')).toBe(newer)
       },
       { userDataDir: userData }

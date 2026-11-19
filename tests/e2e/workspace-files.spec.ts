@@ -1,0 +1,172 @@
+import { expect, test, type Page } from '@playwright/test'
+import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
+import { join } from 'node:path'
+import { clickMenuItem, submenuLabels } from './app-menu'
+import { makeTempDir, saveScreenshot, withApp } from './launch-app'
+
+type RecentItem = { kind: 'workspace' | 'folder'; path: string }
+
+async function writeAppState(
+  userDataDir: string,
+  state: { current: string | null; recent: RecentItem[] }
+): Promise<void> {
+  await writeFile(join(userDataDir, 'state.json'), JSON.stringify({ version: 1, ...state }))
+}
+
+async function readJson(path: string): Promise<unknown> {
+  return JSON.parse(await readFile(path, 'utf8'))
+}
+
+const folderList = (page: Page) => page.getByRole('list', { name: 'Workspace folders' })
+const recentList = (page: Page) => page.getByRole('list', { name: 'Recent' })
+
+test('recent workspaces open from the welcome screen, reopen at launch and close back to the default', async () => {
+  const [userData, cleanUserData] = await makeTempDir('user-data')
+  const [projects, cleanProjects] = await makeTempDir('projects')
+  const repo = join(projects, 'repo')
+  const outside = join(projects, 'outside')
+  const team = join(repo, 'team.hatfield-workspace')
+  const gone = join(projects, 'gone.hatfield-workspace')
+  await mkdir(join(repo, 'api'), { recursive: true })
+  await mkdir(outside)
+  await writeFile(
+    team,
+    JSON.stringify({ version: 1, folders: [{ path: 'api' }, { path: outside }] })
+  )
+  await writeAppState(userData, {
+    current: null,
+    recent: [
+      { kind: 'workspace', path: team },
+      { kind: 'workspace', path: gone },
+      { kind: 'folder', path: outside }
+    ]
+  })
+  try {
+    await withApp(
+      async (_app, page) => {
+        await expect(page).toHaveTitle('Default Workspace — Hatfield 360')
+        await expect(recentList(page).getByRole('button', { name: /^(?!Remove)/ })).toHaveText([
+          /^Default Workspace/,
+          /^team/,
+          /^gone/,
+          /^outside/
+        ])
+        await expect(
+          recentList(page).getByRole('button', { name: 'Default Workspace' })
+        ).toBeDisabled()
+        await expect(
+          recentList(page).getByRole('button', { name: 'gone (missing)' })
+        ).toBeDisabled()
+        await saveScreenshot(page, 'welcome')
+
+        await recentList(page).getByRole('button', { name: 'team', exact: true }).click()
+        await expect(folderList(page).getByRole('listitem')).toHaveText(['api', 'outside'])
+        await expect(page).toHaveTitle('team — Hatfield 360')
+
+        // Rewriting the file keeps the folder inside the workspace's directory relative.
+        await folderList(page).getByRole('listitem', { name: 'outside' }).click({ button: 'right' })
+        await page.getByRole('menuitem', { name: 'Remove from Workspace' }).click()
+        await expect(folderList(page).getByRole('listitem')).toHaveText(['api'])
+        expect(await readJson(team)).toEqual({ version: 1, folders: [{ path: 'api' }] })
+      },
+      { userDataDir: userData }
+    )
+
+    await withApp(
+      async (app, page) => {
+        await expect(folderList(page).getByRole('listitem')).toHaveText(['api'])
+        await expect(page).toHaveTitle('team — Hatfield 360')
+
+        await clickMenuItem(app, 'close-workspace')
+        await expect(page).toHaveTitle('Default Workspace — Hatfield 360')
+        await expect(page.getByText('Default Workspace has no folders yet.')).toBeVisible()
+        await expect
+          .poll(() => submenuLabels(app, 'open-recent'))
+          .toEqual([
+            'Default Workspace',
+            `${join(repo, 'team')} (Workspace)`,
+            `${join(projects, 'gone')} (Workspace) (missing)`,
+            outside,
+            'Clear Recently Opened'
+          ])
+
+        await recentList(page).getByRole('button', { name: 'Remove gone from Recent' }).click()
+        await expect(recentList(page).getByRole('button', { name: 'gone (missing)' })).toHaveCount(
+          0
+        )
+        expect(await readJson(join(userData, 'state.json'))).toEqual({
+          version: 1,
+          current: null,
+          recent: [
+            { kind: 'workspace', path: team },
+            { kind: 'folder', path: outside }
+          ]
+        })
+
+        await clickMenuItem(app, 'clear-recent')
+        await expect(recentList(page).getByRole('listitem')).toHaveCount(1)
+        await expect(recentList(page).getByRole('listitem')).toContainText('Default Workspace')
+      },
+      { userDataDir: userData }
+    )
+  } finally {
+    await cleanUserData()
+    await cleanProjects()
+  }
+})
+
+test('a workspace file kept next to its folders still works after both move', async () => {
+  const [userData, cleanUserData] = await makeTempDir('user-data')
+  const [projects, cleanProjects] = await makeTempDir('projects')
+  await mkdir(join(projects, 'repo', 'api'), { recursive: true })
+  await writeFile(
+    join(projects, 'repo', 'team.hatfield-workspace'),
+    JSON.stringify({ version: 1, folders: [{ path: 'api' }] })
+  )
+  await rename(join(projects, 'repo'), join(projects, 'moved'))
+  const moved = join(projects, 'moved', 'team.hatfield-workspace')
+  await writeAppState(userData, { current: moved, recent: [{ kind: 'workspace', path: moved }] })
+  try {
+    await withApp(
+      async (_app, page) => {
+        await expect(folderList(page).getByRole('listitem', { name: 'api' })).toBeVisible()
+        await folderList(page).getByRole('listitem', { name: 'api' }).hover()
+        await expect(page.getByRole('tooltip')).toHaveText(join(projects, 'moved', 'api'))
+      },
+      { userDataDir: userData }
+    )
+  } finally {
+    await cleanUserData()
+    await cleanProjects()
+  }
+})
+
+test('a broken workspace file is reported, left untouched, and the default workspace stays open', async () => {
+  const [userData, cleanUserData] = await makeTempDir('user-data')
+  const [projects, cleanProjects] = await makeTempDir('projects')
+  const broken = join(projects, 'broken.hatfield-workspace')
+  const contents = '{"version":1,"folders":[{"pa'
+  await writeFile(broken, contents)
+  await writeAppState(userData, { current: broken, recent: [{ kind: 'workspace', path: broken }] })
+  try {
+    await withApp(
+      async (_app, page) => {
+        await expect(page.getByRole('alert')).toHaveText(
+          `Can't open workspace "broken": the file is broken (not valid JSON). Opened the default workspace instead.`
+        )
+        await expect(page).toHaveTitle('Default Workspace — Hatfield 360')
+
+        await recentList(page).getByRole('button', { name: 'broken', exact: true }).click()
+        await expect(page.getByRole('alert')).toHaveText(
+          `Can't open workspace "broken": the file is broken (not valid JSON).`
+        )
+        await expect(page).toHaveTitle('Default Workspace — Hatfield 360')
+        expect(await readFile(broken, 'utf8')).toBe(contents)
+      },
+      { userDataDir: userData }
+    )
+  } finally {
+    await cleanUserData()
+    await cleanProjects()
+  }
+})

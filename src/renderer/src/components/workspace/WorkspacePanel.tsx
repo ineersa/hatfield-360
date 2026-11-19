@@ -1,5 +1,4 @@
 import { CircleAlert, FolderPlus, FolderX } from 'lucide-react'
-import { useEffect } from 'react'
 import { CatppuccinRootFolderIcon } from '@/components/icons/CatppuccinIcons'
 import {
   ContextMenu,
@@ -61,13 +60,12 @@ function ProjectRow({ folder }: { folder: WorkspaceFolder }): React.JSX.Element 
 export function WorkspacePanel(): React.JSX.Element {
   const workspace = useWorkspaceStore((state) => state.workspace)
   const error = useWorkspaceStore((state) => state.error)
-  const connect = useWorkspaceStore((state) => state.connect)
   const addFolder = useWorkspaceStore((state) => state.addFolder)
 
-  useEffect(() => connect(), [connect])
-
-  const problem = error ?? workspace?.problem ?? null
   const folders = workspace?.folders ?? []
+  // With no folders the welcome screen shows errors and notices; the panel keeps the workspace's own problem.
+  const problem =
+    (folders.length > 0 ? (error ?? workspace?.notice) : null) ?? workspace?.problem ?? null
 
   return (
     <>

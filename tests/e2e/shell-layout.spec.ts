@@ -18,18 +18,19 @@ test('activity bar switches between the Agents, Files and Git views', async () =
   await withApp(async (_app, page) => {
     await expect(viewButton(page, 'Agents')).toHaveAttribute('aria-pressed', 'true')
     await expect(sidePanel(page, 'Agents').getByRole('heading')).toHaveText('Projects')
-    await expect(page.getByRole('main', { name: 'Agents' })).toContainText('Terminals')
+    // An empty workspace shows the welcome screen in every view's main area.
+    await expect(page.getByRole('main', { name: 'Agents' })).toContainText('has no folders yet')
 
     await viewButton(page, 'Files').click()
     await expect(viewButton(page, 'Files')).toHaveAttribute('aria-pressed', 'true')
     await expect(viewButton(page, 'Agents')).toHaveAttribute('aria-pressed', 'false')
     await expect(sidePanel(page, 'Agents')).toHaveCount(0)
     await expect(sidePanel(page, 'Files').getByRole('heading')).toHaveText('Project')
-    await expect(page.getByRole('main', { name: 'Files' })).toContainText('editor tabs')
+    await expect(page.getByRole('main', { name: 'Files' })).toContainText('has no folders yet')
 
     await viewButton(page, 'Git').click()
     await expect(sidePanel(page, 'Git').getByRole('heading')).toHaveText('Commit')
-    await expect(page.getByRole('main', { name: 'Git' })).toContainText('diff')
+    await expect(page.getByRole('main', { name: 'Git' })).toContainText('has no folders yet')
 
     await viewButton(page, 'Agents').hover()
     await expect(page.getByRole('tooltip')).toContainText('Workspace, worktrees and agent sessions')

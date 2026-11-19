@@ -1,3 +1,5 @@
+import { isPlainObject } from '../../shared/plain-object'
+
 /** On-disk format of a `.hatfield-workspace` file. Bump the version when the shape changes. */
 const WORKSPACE_DOCUMENT_VERSION = 1
 
@@ -16,10 +18,6 @@ export const EMPTY_WORKSPACE_DOCUMENT: WorkspaceDocument = {
   folders: []
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
-
 /** Parses workspace file contents; workspace files are user-editable, so nothing is trusted. */
 export function parseWorkspaceDocument(text: string): ParsedWorkspaceDocument {
   let data: unknown
@@ -28,7 +26,7 @@ export function parseWorkspaceDocument(text: string): ParsedWorkspaceDocument {
   } catch {
     return { status: 'corrupt', reason: 'not valid JSON' }
   }
-  if (!isRecord(data)) return { status: 'corrupt', reason: 'not a JSON object' }
+  if (!isPlainObject(data)) return { status: 'corrupt', reason: 'not a JSON object' }
   const { version, folders } = data
   if (typeof version !== 'number' || !Number.isInteger(version) || version < 1) {
     return { status: 'corrupt', reason: 'missing or invalid version' }
@@ -37,7 +35,7 @@ export function parseWorkspaceDocument(text: string): ParsedWorkspaceDocument {
   if (!Array.isArray(folders)) return { status: 'corrupt', reason: 'folders is not a list' }
   const paths: string[] = []
   for (const folder of folders) {
-    if (!isRecord(folder) || typeof folder.path !== 'string' || folder.path === '') {
+    if (!isPlainObject(folder) || typeof folder.path !== 'string' || folder.path === '') {
       return { status: 'corrupt', reason: 'a folder entry has no path' }
     }
     paths.push(folder.path)

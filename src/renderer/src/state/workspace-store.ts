@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { WorkspaceView } from '../../../shared/workspace-api'
+import type { RecentTarget, WorkspaceView } from '../../../shared/workspace-api'
 
 type WorkspaceState = {
   workspace: WorkspaceView | null
@@ -8,9 +8,16 @@ type WorkspaceState = {
   connect: () => () => void
   addFolder: () => Promise<void>
   removeFolder: (path: string) => Promise<void>
+  openWorkspaceFile: () => Promise<void>
+  openRecent: (target: RecentTarget) => Promise<void>
+  removeRecent: (target: RecentTarget) => Promise<void>
 }
 
 const message = (error: unknown): string => (error instanceof Error ? error.message : String(error))
+
+/** Electron prefixes errors thrown in main with "Error invoking remote method '<channel>': Error: ". */
+const mainErrorMessage = (error: unknown): string =>
+  message(error).replace(/^Error invoking remote method '[^']*': (?:Error: )?/, '')
 
 export const useWorkspaceStore = create<WorkspaceState>((set) => {
   const run = async (action: () => Promise<void>): Promise<void> => {
@@ -18,7 +25,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => {
       await action()
       set({ error: null })
     } catch (error) {
-      set({ error: message(error) })
+      set({ error: mainErrorMessage(error) })
     }
   }
 
@@ -31,6 +38,9 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => {
       return unsubscribe
     },
     addFolder: () => run(() => window.desktop.addWorkspaceFolder()),
-    removeFolder: (path) => run(() => window.desktop.removeWorkspaceFolder(path))
+    removeFolder: (path) => run(() => window.desktop.removeWorkspaceFolder(path)),
+    openWorkspaceFile: () => run(() => window.desktop.openWorkspaceFile()),
+    openRecent: ({ kind, path }) => run(() => window.desktop.openRecent({ kind, path })),
+    removeRecent: ({ kind, path }) => run(() => window.desktop.removeRecent({ kind, path }))
   }
 })
