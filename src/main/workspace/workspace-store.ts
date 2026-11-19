@@ -3,6 +3,7 @@ import { readdir, rename, stat } from 'node:fs/promises'
 import { basename, dirname, join, resolve } from 'node:path'
 import type {
   RecentEntry,
+  WorkspaceNotice,
   RecentTarget,
   WorkspaceFolder,
   WorkspaceView
@@ -97,7 +98,8 @@ async function loadWorkspaceFile(file: string): Promise<OpenWorkspace> {
 /** The workspace open in the window, the Recent list, and change notifications. */
 class WorkspaceStore {
   private session: Promise<Session> | null = null
-  private notice: string | null = null
+  private notice: WorkspaceNotice | null = null
+  private noticeCount = 0
   /** Serializes changes so concurrent actions can't interleave their writes. */
   private queue: Promise<unknown> = Promise.resolve()
   private readonly listeners = new Set<ChangeListener>()
@@ -250,7 +252,7 @@ class WorkspaceStore {
   /** Shows a failure of an action started outside the window (e.g. the File menu). */
   report(error: unknown): Promise<void> {
     return this.change(() => {
-      this.notice = message(error)
+      this.setNotice(message(error))
       return Promise.resolve()
     })
   }
@@ -310,19 +312,28 @@ class WorkspaceStore {
     session.workspace = workspace
   }
 
+  private setNotice(text: string): void {
+    this.noticeCount += 1
+    this.notice = { id: this.noticeCount, message: text }
+  }
+
+  private async publish(): Promise<void> {
+    const view = await this.view()
+    for (const listener of this.listeners) listener(view)
+  }
+
   private async addFolderTo(session: Session, folder: string): Promise<boolean> {
     const { workspace } = session
     if (workspace.problem) throw new Error(workspace.problem)
     if (!(await isDirectory(folder))) throw new Error(`Not a folder: ${folder}`)
-    const added = !workspace.folders.includes(folder)
-    if (added) {
-      const folders = [...workspace.folders, folder]
-      await writeWorkspaceFile(workspace.file, folders)
-      workspace.folders = folders
-    }
+    // Recent first: if it can't be saved, the folder isn't added either.
     const recent = withRecent(session.state.recent, { kind: 'folder', path: folder })
     await this.saveState(session, { ...session.state, recent })
-    return added
+    if (workspace.folders.includes(folder)) return false
+    const folders = [...workspace.folders, folder]
+    await writeWorkspaceFile(workspace.file, folders)
+    workspace.folders = folders
+    return true
   }
 
   private ready(): Promise<Session> {
@@ -337,7 +348,7 @@ class WorkspaceStore {
       try {
         return { workspace: await loadWorkspaceFile(state.current), state }
       } catch (error) {
-        this.notice = `${message(error)} Opened the default workspace instead.`
+        this.setNotice(`${message(error)} Opened the default workspace instead.`)
       }
     }
     return {
@@ -356,10 +367,11 @@ class WorkspaceStore {
         result = await apply(session)
       } catch (error) {
         this.notice = notice
+        // Part of a failed change may already be saved; the window must still show what main has.
+        await this.publish().catch((publishError: unknown) => console.error(publishError))
         throw error
       }
-      const view = await this.view()
-      for (const listener of this.listeners) listener(view)
+      await this.publish()
       return result
     })
     this.queue = run.catch(() => undefined)

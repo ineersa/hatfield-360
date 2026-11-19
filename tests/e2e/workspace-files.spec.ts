@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { clickMenuItem, clickSubmenuItem, submenuLabels } from './app-menu'
 import { makeTempDir, saveScreenshot, withApp } from './launch-app'
@@ -198,6 +198,14 @@ test('a broken workspace file is reported in every view, left untouched, and the
           `Can't open workspace "broken": the file is broken (not valid JSON).`
         )
         await expect(page).toHaveTitle('Default Workspace — Hatfield 360')
+
+        // Dismissing hides this occurrence only: trying again shows the same error again.
+        await message(page).getByRole('button', { name: 'Dismiss' }).click()
+        await expect(message(page)).toHaveCount(0)
+        await clickSubmenuItem(app, 'open-recent', `${join(projects, 'broken')} (Workspace)`)
+        await expect(message(page)).toHaveText(
+          `Can't open workspace "broken": the file is broken (not valid JSON).`
+        )
         expect(await readFile(broken, 'utf8')).toBe(contents)
       },
       { userDataDir: userData }
@@ -208,26 +216,42 @@ test('a broken workspace file is reported in every view, left untouched, and the
   }
 })
 
-test('a switch whose app state cannot be saved leaves the open workspace unchanged', async () => {
+test('changes whose app state cannot be saved leave main and the window in agreement', async () => {
   const [userData, cleanUserData] = await makeTempDir('user-data')
   const [projects, cleanProjects] = await makeTempDir('projects')
+  const api = join(projects, 'api')
+  await mkdir(api)
   await mkdir(join(userData, 'workspaces'))
   await writeFile(
     join(userData, 'workspaces', 'side.hatfield-workspace'),
     JSON.stringify({ version: 1, folders: [{ path: projects }] })
   )
-  // A non-empty directory where state.json belongs: reading it gives defaults, replacing it fails.
-  await mkdir(join(userData, 'state.json', 'blocker'), { recursive: true })
+  await writeAppState(userData, { current: null, recent: [{ kind: 'folder', path: api }] })
   try {
     await withApp(
       async (_app, page) => {
+        await expect(
+          recentList(page).getByRole('button', { name: 'api', exact: true })
+        ).toBeVisible()
+        // A non-empty directory where state.json belongs: replacing it fails on every platform.
+        await rm(join(userData, 'state.json'))
+        await mkdir(join(userData, 'state.json', 'blocker'), { recursive: true })
+
         await recentList(page).getByRole('button', { name: 'side', exact: true }).click()
         await expect(message(page)).toBeVisible()
         await expect(page).toHaveTitle('Default Workspace — Hatfield 360')
+
+        await recentList(page).getByRole('button', { name: 'api', exact: true }).click()
+        await expect(message(page)).toBeVisible()
+        await expect(page.getByText('Default Workspace has no folders yet.')).toBeVisible()
+
         // A reloaded window asks main afresh, so it shows what main really has open.
         await page.reload()
         await expect(page).toHaveTitle('Default Workspace — Hatfield 360')
         await expect(page.getByText('Default Workspace has no folders yet.')).toBeVisible()
+        await expect(
+          readFile(join(userData, 'workspaces', 'default.hatfield-workspace'))
+        ).rejects.toThrow()
       },
       { userDataDir: userData }
     )

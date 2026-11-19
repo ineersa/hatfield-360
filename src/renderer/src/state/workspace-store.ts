@@ -4,8 +4,8 @@ import type { RecentTarget, WorkspaceView } from '../../../shared/workspace-api'
 type WorkspaceState = {
   workspace: WorkspaceView | null
   error: string | null
-  /** A notice from main the user closed; a different notice shows again. */
-  dismissedNotice: string | null
+  /** The id of the notice from main the user closed; the next notice shows again. */
+  dismissedNoticeId: number | null
   dismissMessage: () => void
   /** Loads the workspace and follows changes made in main (File menu, other windows); returns the unsubscribe. */
   connect: () => () => void
@@ -35,8 +35,9 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => {
   return {
     workspace: null,
     error: null,
-    dismissedNotice: null,
-    dismissMessage: () => set({ error: null, dismissedNotice: get().workspace?.notice ?? null }),
+    dismissedNoticeId: null,
+    dismissMessage: () =>
+      set({ error: null, dismissedNoticeId: get().workspace?.notice?.id ?? null }),
     connect: () => {
       const unsubscribe = window.desktop.subscribeWorkspace((workspace) => set({ workspace }))
       void run(async () => set({ workspace: await window.desktop.getWorkspace() }))
