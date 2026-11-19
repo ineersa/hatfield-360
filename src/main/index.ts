@@ -1,5 +1,6 @@
 import { app, BrowserWindow } from 'electron'
 import { registerAppInfoIpc } from './ipc/app-info-ipc'
+import { registerSettingsIpc } from './ipc/settings-ipc'
 import { registerWorkspaceIpc } from './ipc/workspace-ipc'
 import { installAppMenu } from './menu/app-menu'
 import { createMainWindow } from './window/main-window'
@@ -9,6 +10,7 @@ app.enableSandbox()
 void app.whenReady().then(() => {
   registerAppInfoIpc()
   registerWorkspaceIpc()
+  registerSettingsIpc()
   installAppMenu()
   createMainWindow()
 

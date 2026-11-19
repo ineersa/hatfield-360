@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
-import { writeFileAtomic } from './atomic-write'
+import { writeFileAtomic } from '../files/atomic-write'
 import {
   EMPTY_WORKSPACE_DOCUMENT,
   parseWorkspaceDocument,

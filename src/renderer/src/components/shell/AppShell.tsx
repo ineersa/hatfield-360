@@ -1,7 +1,10 @@
 import { useEffect, useRef } from 'react'
+import { SettingsMessage } from '@/components/settings/SettingsMessage'
+import { useAppFont } from '@/components/settings/use-app-font'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { WelcomeScreen } from '@/components/workspace/WelcomeScreen'
 import { WorkspaceMessage } from '@/components/workspace/WorkspaceMessage'
+import { useSettingsStore } from '@/state/settings-store'
 import { SIDE_PANEL_MIN_WIDTH, useShellLayoutStore } from '@/state/shell-layout-store'
 import { useWorkspaceStore } from '@/state/workspace-store'
 import { ActivityBar } from './ActivityBar'
@@ -21,7 +24,11 @@ export function AppShell(): React.JSX.Element {
   const workspaceName = useWorkspaceStore((state) => state.workspace?.name)
   const workspaceEmpty = useWorkspaceStore((state) => state.workspace?.folders.length === 0)
 
+  const connectSettings = useSettingsStore((state) => state.connect)
+
   useEffect(() => connectWorkspace(), [connectWorkspace])
+  useEffect(() => connectSettings(), [connectSettings])
+  useAppFont()
   useEffect(() => {
     document.title = workspaceName ? `${workspaceName} — Hatfield 360` : 'Hatfield 360'
   }, [workspaceName])
@@ -37,6 +44,7 @@ export function AppShell(): React.JSX.Element {
     <TooltipProvider>
       <div className="flex h-screen flex-col bg-background text-foreground">
         <WorkspaceMessage />
+        <SettingsMessage />
         <div className="flex min-h-0 flex-1 pt-1.5 pr-1.5">
           <ActivityBar />
           <div className="flex min-w-0 flex-1">

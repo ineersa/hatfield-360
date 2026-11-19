@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises'
 import { isPlainObject } from '../../shared/plain-object'
-import { writeFileAtomic } from './atomic-write'
+import { writeFileAtomic } from '../files/atomic-write'
 
 export type RecentItem = { kind: 'workspace' | 'folder'; path: string }
 

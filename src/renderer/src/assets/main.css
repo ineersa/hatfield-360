@@ -9,8 +9,17 @@
  *   island      rounded panels: side panel, main area
  *   accent      hover / subtle fill; selection: selected row; primary: active control, focus ring
  */
+/* App font settings (app.fontFamily, app.fontSize); the renderer overrides these from settings.json. */
+:root {
+  --app-font-family: 'Inter Variable', system-ui, sans-serif;
+  --app-font-size: 14px;
+}
+
 @theme inline {
-  --font-sans: 'Inter Variable', system-ui, sans-serif;
+  --font-sans: var(--app-font-family);
+  /* Text sizes relative to the app font size, so the whole UI follows app.fontSize. */
+  --text-ui-sm: calc(var(--app-font-size) - 2px);
+  --text-ui-lg: calc(var(--app-font-size) + 1px);
   --color-background: var(--background);
   --color-island: var(--island);
   --color-foreground: var(--foreground);
@@ -31,5 +40,5 @@ body {
   background-color: var(--background);
   color: var(--foreground);
   font-family: var(--font-sans);
-  font-size: 14px;
+  font-size: var(--app-font-size);
 }

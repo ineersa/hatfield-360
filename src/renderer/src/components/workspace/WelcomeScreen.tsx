@@ -1,5 +1,5 @@
 import { FileX, FolderOpen, FolderX, House, Layers, X } from 'lucide-react'
-import { CatppuccinRootFolderIcon } from '@/components/icons/CatppuccinIcons'
+import { RootFolderIcon } from '@/components/icons/RootFolderIcon'
 import { cn } from '@/lib/class-names'
 import { useWorkspaceStore } from '@/state/workspace-store'
 import type { RecentEntry } from '../../../../shared/workspace-api'
@@ -10,7 +10,7 @@ function RecentIcon({ entry }: { entry: RecentEntry }): React.JSX.Element {
     const Missing = entry.kind === 'folder' ? FolderX : FileX
     return <Missing className={cn(className, 'text-destructive')} aria-hidden />
   }
-  if (entry.kind === 'folder') return <CatppuccinRootFolderIcon className={className} />
+  if (entry.kind === 'folder') return <RootFolderIcon className={className} />
   const Icon = entry.kind === 'default' ? House : Layers
   return <Icon className={cn(className, 'text-muted-foreground')} aria-hidden />
 }

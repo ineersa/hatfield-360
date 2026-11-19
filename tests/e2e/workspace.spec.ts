@@ -37,7 +37,8 @@ test('File menu has the workspace actions', async () => {
       'Add Folder to Workspace…',
       'Save Workspace As…',
       'Duplicate Workspace…',
-      'Close Workspace'
+      'Close Workspace',
+      'Preferences'
     ])
   })
 })
