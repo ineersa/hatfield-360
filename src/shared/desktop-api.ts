@@ -1,3 +1,5 @@
+import type { WorkspaceApi } from './workspace-api'
+
 export type AppInfo = {
   name: string
   version: string
@@ -10,6 +12,6 @@ export const IPC_CHANNELS = {
 } as const
 
 /** Everything the preload bridge exposes to the renderer as `window.desktop`. */
-export type DesktopApi = {
+export type DesktopApi = WorkspaceApi & {
   getAppInfo: () => Promise<AppInfo>
 }

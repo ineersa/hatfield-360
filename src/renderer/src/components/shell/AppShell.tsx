@@ -41,10 +41,16 @@ export function AppShell(): React.JSX.Element {
                   }}
                   className="flex shrink-0 flex-col overflow-hidden rounded-xl bg-island"
                 >
-                  <h2 className="flex h-10 shrink-0 items-center px-4 font-semibold">
-                    {view.panelTitle}
-                  </h2>
-                  <p className="px-4 text-muted-foreground">{view.panelPlaceholder}</p>
+                  {view.Panel ? (
+                    <view.Panel />
+                  ) : (
+                    <>
+                      <h2 className="flex h-10 shrink-0 items-center px-4 font-semibold">
+                        {view.panelTitle}
+                      </h2>
+                      <p className="px-4 text-muted-foreground">{view.panelPlaceholder}</p>
+                    </>
+                  )}
                 </aside>
                 <SidePanelResizeHandle
                   label={`Resize ${view.label} panel`}

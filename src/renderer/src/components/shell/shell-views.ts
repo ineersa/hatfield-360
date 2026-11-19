@@ -1,4 +1,6 @@
 import { FolderTree, GitCommitHorizontal, TerminalSquare, type LucideIcon } from 'lucide-react'
+import type { ComponentType } from 'react'
+import { WorkspacePanel } from '@/components/workspace/WorkspacePanel'
 
 export type ShellViewId = 'agents' | 'files' | 'git'
 
@@ -7,10 +9,11 @@ export type ShellView = {
   label: string
   description: string
   Icon: LucideIcon
-  panelTitle: string
-  panelPlaceholder: string
   mainPlaceholder: string
-}
+} & (
+  | { Panel: ComponentType; panelTitle?: never; panelPlaceholder?: never }
+  | { Panel?: never; panelTitle: string; panelPlaceholder: string }
+)
 
 export const SHELL_VIEWS: readonly ShellView[] = [
   {
@@ -18,8 +21,7 @@ export const SHELL_VIEWS: readonly ShellView[] = [
     label: 'Agents',
     description: 'Workspace, worktrees and agent sessions',
     Icon: TerminalSquare,
-    panelTitle: 'Agent Sessions',
-    panelPlaceholder: 'Projects, their worktrees and running agent sessions will be listed here.',
+    Panel: WorkspacePanel,
     mainPlaceholder: 'Terminals with tabs and split panes will open here.'
   },
   {

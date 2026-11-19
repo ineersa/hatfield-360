@@ -13,6 +13,7 @@ export function createMainWindow(): BrowserWindow {
     minWidth: 600,
     minHeight: 400,
     show: false,
+    // Menu bar hidden until Alt on Linux/Windows (user preference); macOS uses the top bar.
     autoHideMenuBar: true,
     // Islands Dark frame colour, so the window doesn't flash white before the renderer paints.
     backgroundColor: '#26282c',
