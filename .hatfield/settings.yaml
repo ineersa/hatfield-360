@@ -1,0 +1,16 @@
+extensions:
+    enabled:
+        - Ineersa\HatfieldExt\ObservationalMemory\ObservationalMemoryExtension
+        - Ineersa\HatfieldExt\TaskWorkflow\TaskWorkflowExtension
+    settings:
+        task_workflow:
+            repository: ineersa/hatfield-360
+            remote: origin
+            base_branch: main
+            worktree_root: ../hatfield-360-worktrees
+            workflow_field: Hatfield Status
+            merge_method: merge
+            hooks:
+                setup: { script: .hatfield/task-hooks/setup.sh, timeout_seconds: 900 }
+                validate: { script: .hatfield/task-hooks/validate.sh, timeout_seconds: 1800 }
+                cleanup: { script: .hatfield/task-hooks/cleanup.sh, timeout_seconds: 300 }

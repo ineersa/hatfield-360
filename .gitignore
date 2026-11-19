@@ -1,0 +1,12 @@
+/.idea/
+/.vscode/
+.env.local
+.env.*.local
+
+# Claude Code local overrides
+/.claude/settings.local.json
+
+# Hatfield runtime artifacts (runtime data itself is ignored by .hatfield/.gitignore)
+/.hatfield/extensions/vendor/
+/.hatfield/extensions/composer.lock
+/.hatfield/skills/task-workflow/
