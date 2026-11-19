@@ -54,7 +54,17 @@ export const useSettingsStore = create<SettingsState>((set, get) => {
       void run(async () => apply(await window.desktop.getSettings()))
       return unsubscribe
     },
-    update: (key, value) => run(() => window.desktop.updateSetting(key, value)),
+    update: async (key, value) => {
+      // Shown at once; main's answer (checked, clamped) replaces it, or a failure puts the old value back.
+      const previous = get().values
+      if (value !== null) set({ values: { ...previous, [key]: value } })
+      try {
+        await window.desktop.updateSetting(key, value)
+        set({ error: null })
+      } catch (error) {
+        set({ values: previous, error: mainErrorMessage(error) })
+      }
+    },
     openFile: () => run(() => window.desktop.openSettingsFile())
   }
 })

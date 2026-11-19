@@ -2,12 +2,12 @@ import { FileJson, FolderRoot, RotateCcw, X } from 'lucide-react'
 import { useEffect, useId } from 'react'
 import { CatppuccinRootFolderIcon } from '@/components/icons/CatppuccinIcons'
 import { cn } from '@/lib/class-names'
+import { cssFontFamily } from '@/lib/css-font-family'
 import { useSettingsStore } from '@/state/settings-store'
 import { useShellLayoutStore } from '@/state/shell-layout-store'
-import { FONT_SIZE_RANGE, type IconTheme, type SettingKey } from '../../../../shared/settings-api'
-
-const FIELD_CLASS =
-  'h-9 rounded-lg border border-border bg-background px-2.5 outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50'
+import { DEFAULT_SETTINGS, type IconTheme, type SettingKey } from '../../../../shared/settings-api'
+import { FONT_PICKER_ATTRIBUTE, FontPicker } from './FontPicker'
+import { FontSizeInput } from './FontSizeInput'
 
 const PREVIEW_TEXT = 'The quick brown fox jumps over the lazy dog · 0O 1lI {}'
 
@@ -15,7 +15,8 @@ function ResetButton({ settingKey, label }: { settingKey: SettingKey; label: str
   const customized = useSettingsStore((state) => state.customized.includes(settingKey))
   const editable = useSettingsStore((state) => state.editable)
   const update = useSettingsStore((state) => state.update)
-  if (!customized) return null
+  // Keeps its place when hidden, so the fields line up across sections.
+  if (!customized) return <span className="size-9 shrink-0" aria-hidden />
   return (
     <button
       type="button"
@@ -27,108 +28,6 @@ function ResetButton({ settingKey, label }: { settingKey: SettingKey; label: str
     >
       <RotateCcw className="size-4" aria-hidden />
     </button>
-  )
-}
-
-/**
- * A field that saves on Enter or when it loses focus; Escape puts the current value back. Keyed by the
- * value, so a change from settings.json replaces what is shown.
- */
-function SettingInput({
-  label,
-  value,
-  type,
-  className,
-  onCommit
-}: {
-  label: string
-  value: string
-  type: 'text' | 'number'
-  className?: string
-  onCommit: (text: string) => void
-}): React.JSX.Element {
-  const editable = useSettingsStore((state) => state.editable)
-  return (
-    <input
-      key={value}
-      aria-label={label}
-      type={type}
-      defaultValue={value}
-      disabled={!editable}
-      spellCheck={false}
-      {...(type === 'number'
-        ? { min: FONT_SIZE_RANGE.min, max: FONT_SIZE_RANGE.max, step: 1, inputMode: 'decimal' }
-        : {})}
-      className={cn(FIELD_CLASS, className)}
-      onBlur={(event) => {
-        if (event.currentTarget.value !== value) onCommit(event.currentTarget.value)
-      }}
-      onKeyDown={(event) => {
-        if (event.key === 'Enter') event.currentTarget.blur()
-        if (event.key === 'Escape') {
-          // Escape here only undoes the edit; it doesn't close the page.
-          event.stopPropagation()
-          event.currentTarget.value = value
-          event.currentTarget.blur()
-        }
-      }}
-    />
-  )
-}
-
-function FontSetting({
-  name,
-  description,
-  familyKey,
-  sizeKey
-}: {
-  name: string
-  description: string
-  familyKey: 'app.fontFamily' | 'terminal.fontFamily' | 'editor.fontFamily'
-  sizeKey: 'app.fontSize' | 'terminal.fontSize' | 'editor.fontSize'
-}): React.JSX.Element {
-  const family = useSettingsStore((state) => state.values[familyKey])
-  const size = useSettingsStore((state) => state.values[sizeKey])
-  const update = useSettingsStore((state) => state.update)
-  const headingId = useId()
-  return (
-    <section aria-labelledby={headingId} className="flex flex-col gap-2 py-4">
-      <div>
-        <h3 id={headingId} className="font-semibold">
-          {name} font
-        </h3>
-        <p className="text-muted-foreground">{description}</p>
-      </div>
-      <div className="flex items-center gap-2">
-        <SettingInput
-          label={`${name} font family`}
-          value={family}
-          type="text"
-          className="min-w-0 flex-1"
-          onCommit={(text) => void update(familyKey, text.trim() === '' ? null : text)}
-        />
-        <ResetButton settingKey={familyKey} label={`${name} font family`} />
-        <SettingInput
-          label={`${name} font size`}
-          value={String(size)}
-          type="number"
-          className="w-20"
-          onCommit={(text) => {
-            const parsed = Number(text)
-            if (text.trim() === '') void update(sizeKey, null)
-            else if (Number.isFinite(parsed)) void update(sizeKey, parsed)
-          }}
-        />
-        <ResetButton settingKey={sizeKey} label={`${name} font size`} />
-      </div>
-      <p
-        aria-label={`${name} font preview`}
-        className="truncate rounded-lg bg-background px-2.5 py-2"
-        style={{ fontFamily: family, fontSize: size }}
-      >
-        {PREVIEW_TEXT}
-      </p>
-    </section>
   )
 }
 
@@ -188,6 +87,61 @@ function IconThemeSetting(): React.JSX.Element {
   )
 }
 
+function FontSetting({
+  name,
+  description,
+  familyKey,
+  sizeKey
+}: {
+  name: string
+  description: string
+  familyKey: 'app.fontFamily' | 'terminal.fontFamily' | 'editor.fontFamily'
+  sizeKey: 'app.fontSize' | 'terminal.fontSize' | 'editor.fontSize'
+}): React.JSX.Element {
+  const family = useSettingsStore((state) => state.values[familyKey])
+  const size = useSettingsStore((state) => state.values[sizeKey])
+  const familyCustomized = useSettingsStore((state) => state.customized.includes(familyKey))
+  const editable = useSettingsStore((state) => state.editable)
+  const update = useSettingsStore((state) => state.update)
+  const headingId = useId()
+  return (
+    <section aria-labelledby={headingId} className="flex flex-col gap-2 py-4">
+      <div>
+        <h3 id={headingId} className="font-semibold">
+          {name} font
+        </h3>
+        <p className="text-muted-foreground">{description}</p>
+      </div>
+      <div className="flex items-center gap-2">
+        <FontPicker
+          label={`${name} font family`}
+          value={family}
+          defaultValue={DEFAULT_SETTINGS[familyKey]}
+          customized={familyCustomized}
+          monospaceFirst={familyKey !== 'app.fontFamily'}
+          disabled={!editable}
+          onChange={(next) => void update(familyKey, next)}
+        />
+        <ResetButton settingKey={familyKey} label={`${name} font family`} />
+        <FontSizeInput
+          label={`${name} font size`}
+          value={size}
+          disabled={!editable}
+          onChange={(next) => void update(sizeKey, next)}
+        />
+        <ResetButton settingKey={sizeKey} label={`${name} font size`} />
+      </div>
+      <p
+        aria-label={`${name} font preview`}
+        className="truncate rounded-lg bg-background px-2.5 py-2"
+        style={{ fontFamily: cssFontFamily(family), fontSize: size }}
+      >
+        {PREVIEW_TEXT}
+      </p>
+    </section>
+  )
+}
+
 const FONT_SETTINGS: {
   name: string
   description: string
@@ -222,7 +176,10 @@ export function SettingsPage(): React.JSX.Element {
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
-      if (event.key === 'Escape') close()
+      // Escape inside a font picker closes only the picker.
+      const inPicker =
+        event.target instanceof Element && event.target.closest(`[${FONT_PICKER_ATTRIBUTE}]`)
+      if (event.key === 'Escape' && !inPicker) close()
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)

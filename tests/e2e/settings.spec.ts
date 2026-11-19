@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test'
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
+import { parse } from 'jsonc-parser'
 import { clickMenuItem, submenuLabels } from './app-menu'
 import { makeTempDir, saveScreenshot, withApp } from './launch-app'
 
@@ -85,7 +86,7 @@ test('settings.json sets the app font and icon set at launch and applies every s
   }
 })
 
-test('the Settings page writes each change into settings.json and follows edits to the file', async () => {
+test('the Settings page applies each change as it is made and writes it into settings.json', async () => {
   const [userData, cleanUserData] = await makeTempDir('user-data')
   const [projects, cleanProjects] = await makeTempDir('projects')
   const settings = join(userData, 'settings.json')
@@ -99,46 +100,73 @@ test('the Settings page writes each change into settings.json and follows edits 
     '{\n  // my terminal\n  "terminal.fontSize": 15,\n  "app.fontFamily": "Noto Sans"\n}\n'
   )
   const folderName = projects.split(/[\\/]/).at(-1) ?? ''
+  const readSettings = async (): Promise<unknown> => parse(await readFile(settings, 'utf8'))
   try {
     await withApp(
       async (app, page) => {
         await clickMenuItem(app, 'open-settings')
         const settingsPage = settingsMain(page)
         await expect(settingsPage.getByRole('heading', { name: 'Settings' })).toBeVisible()
-        await expect(settingsPage.getByLabel('App font family', { exact: true })).toHaveValue(
+        await expect(settingsPage.getByLabel('App font family', { exact: true })).toHaveText(
           'Noto Sans'
         )
 
+        // Sizes apply while typing, without Enter or leaving the field.
         await settingsPage.getByLabel('App font size', { exact: true }).fill('16')
-        await settingsPage.getByLabel('App font size', { exact: true }).press('Enter')
         await expect(page.locator('body')).toHaveCSS('font-size', '16px')
+        await settingsPage.getByRole('button', { name: 'Increase Terminal font size' }).click()
+        await expect(settingsPage.getByLabel('Terminal font size', { exact: true })).toHaveValue(
+          '16'
+        )
         await expect
           .poll(() => readFile(settings, 'utf8'))
           .toBe(
-            '{\n  // my terminal\n  "terminal.fontSize": 15,\n  "app.fontFamily": "Noto Sans",\n  "app.fontSize": 16\n}\n'
+            '{\n  // my terminal\n  "terminal.fontSize": 16,\n  "app.fontFamily": "Noto Sans",\n  "app.fontSize": 16\n}\n'
           )
 
         await settingsPage.getByText('Lucide', { exact: true }).click()
         await expect(projectIcon(page, folderName)).toHaveAttribute('data-icon-theme', 'lucide')
-        await expect(settingsPage.getByRole('radio', { name: 'Lucide' })).toBeChecked()
 
-        // Sizes are clamped like in the file; resetting removes the setting.
-        await settingsPage.getByLabel('Editor font size', { exact: true }).fill('50')
-        await settingsPage.getByLabel('Editor font size', { exact: true }).press('Enter')
-        await expect(settingsPage.getByLabel('Editor font size', { exact: true })).toHaveValue('32')
-        await settingsPage.getByRole('button', { name: 'Reset App font family' }).click()
-        await expect(settingsPage.getByLabel('App font family', { exact: true })).toHaveValue(
-          /^'Inter Variable'/
+        // The picker lists the installed fonts; picking one applies it.
+        await settingsPage.getByRole('button', { name: 'App font family', exact: true }).click()
+        const fonts = page.getByRole('listbox', { name: 'Fonts' })
+        await expect(fonts.getByRole('option')).not.toHaveCount(1)
+        await saveScreenshot(page, 'settings-font-picker')
+        const installed = fonts.getByRole('option').nth(1)
+        const family = (await installed.locator('span').first().textContent()) ?? ''
+        await installed.click()
+        await expect(fonts).toHaveCount(0)
+        await expect(page.locator('body')).toHaveCSS(
+          'font-family',
+          `"${family}", "Inter Variable", system-ui, sans-serif`
         )
-        await expect(page.locator('body')).toHaveCSS('font-family', /^"Inter Variable"/)
-        await expect
-          .poll(() => readFile(settings, 'utf8'))
-          .toBe(
-            '{\n  // my terminal\n  "terminal.fontSize": 15,\n  "app.fontSize": 16,\n  "workbench.iconTheme": "lucide",\n  "editor.fontSize": 32\n}\n'
-          )
+        await expect.poll(readSettings).toMatchObject({ 'app.fontFamily': family })
         await saveScreenshot(page, 'settings-page')
 
-        // Edits to the file show up on the open page.
+        // Anything typed in the search can be used, e.g. a font stack; Escape there closes only the picker.
+        await settingsPage.getByRole('button', { name: 'Editor font family', exact: true }).click()
+        await page.getByRole('combobox', { name: 'Search fonts' }).fill('My Mono, monospace')
+        await page.getByRole('option', { name: 'Use “My Mono, monospace”' }).click()
+        await expect.poll(readSettings).toMatchObject({ 'editor.fontFamily': 'My Mono, monospace' })
+        await settingsPage
+          .getByRole('button', { name: 'Terminal font family', exact: true })
+          .click()
+        await expect(page.getByRole('combobox', { name: 'Search fonts' })).toBeFocused()
+        await page.keyboard.press('Escape')
+        await expect(fonts).toHaveCount(0)
+        await expect(settingsPage).toBeVisible()
+        await saveScreenshot(page, 'settings-page-custom')
+
+        await settingsPage.getByRole('button', { name: 'Reset App font family' }).click()
+        await expect(page.locator('body')).toHaveCSS('font-family', /^"Inter Variable"/)
+        await expect.poll(readSettings).toEqual({
+          'terminal.fontSize': 16,
+          'app.fontSize': 16,
+          'workbench.iconTheme': 'lucide',
+          'editor.fontFamily': 'My Mono, monospace'
+        })
+
+        // Edits to the file show up on the open page; a broken file locks it.
         await writeFile(settings, '{ "terminal.fontSize": 18 }')
         await expect(settingsPage.getByLabel('Terminal font size', { exact: true })).toHaveValue(
           '18'
@@ -147,6 +175,13 @@ test('the Settings page writes each change into settings.json and follows edits 
         await writeFile(settings, '{ "terminal.fontSize": ')
         await expect(settingsPage.getByRole('status')).toContainText('settings.json has errors')
         await expect(settingsPage.getByLabel('Terminal font size', { exact: true })).toBeDisabled()
+
+        // Only the font list permission is granted to the page.
+        expect(
+          await page.evaluate(
+            "Promise.all(['local-fonts', 'notifications', 'geolocation'].map((name) => navigator.permissions.query({ name }).then((status) => status.state)))"
+          )
+        ).toEqual(['granted', 'denied', 'denied'])
 
         await page.keyboard.press('Escape')
         await expect(settingsMain(page)).toHaveCount(0)

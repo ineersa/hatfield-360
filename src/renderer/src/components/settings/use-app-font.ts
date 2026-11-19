@@ -1,4 +1,5 @@
 import { useEffect } from 'react'
+import { cssFontFamily } from '@/lib/css-font-family'
 import { useSettingsStore } from '@/state/settings-store'
 import { DEFAULT_SETTINGS } from '../../../../shared/settings-api'
 
@@ -13,7 +14,7 @@ export function useAppFont(): void {
     // The bundled font follows the user's choice, so a font that isn't installed still renders well.
     root.setProperty(
       '--app-font-family',
-      family === DEFAULT_APP_FONT ? family : `${family}, ${DEFAULT_APP_FONT}`
+      family === DEFAULT_APP_FONT ? family : `${cssFontFamily(family)}, ${DEFAULT_APP_FONT}`
     )
     root.setProperty('--app-font-size', `${size}px`)
   }, [family, size])
