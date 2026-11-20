@@ -30,7 +30,8 @@ function StripCommand({
         </button>
       </TooltipTrigger>
       <TooltipContent side="bottom">
-        {label} <span className="ml-1 text-muted-foreground">{terminalShortcutLabel(command)}</span>
+        {label}{' '}
+        <span className="ml-1 text-tooltip-muted-foreground">{terminalShortcutLabel(command)}</span>
       </TooltipContent>
     </Tooltip>
   )

@@ -152,10 +152,9 @@ test('a workspace file kept next to its folders still works after both move', as
   try {
     await withApp(
       async (_app, page) => {
-        // Found at its new place: a folder that isn't there is labelled "api (missing)".
-        await expect(
-          folderList(page).getByRole('listitem', { name: 'api', exact: true })
-        ).toBeVisible()
+        await expect(folderList(page).getByRole('listitem', { name: 'api' })).toBeVisible()
+        await folderList(page).getByRole('listitem', { name: 'api' }).hover()
+        await expect(page.getByRole('tooltip')).toHaveText(join(projects, 'moved', 'api'))
       },
       { userDataDir: userData }
     )

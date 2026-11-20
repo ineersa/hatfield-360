@@ -64,7 +64,15 @@ test('projects list their git worktrees and follow git as worktrees come and go'
 
         git(repo, 'worktree', 'add', '-q', '-b', 'second', join(projects, 'app-second'))
         await expect(page.getByRole('listitem', { name: 'second worktree' })).toBeVisible()
+        // A row's path shows beside the tree, not over the rows below it.
+        await page.getByRole('listitem', { name: 'feature worktree' }).hover()
+        await expect(page.getByRole('tooltip')).toHaveText(feature)
+        const tree = await page.getByRole('list', { name: 'Workspace folders' }).boundingBox()
+        const tip = await page.locator('[data-slot="tooltip-content"]').boundingBox()
+        if (!tree || !tip) throw new Error('tree or tooltip not on screen')
+        expect(tip.x).toBeGreaterThanOrEqual(tree.x + tree.width)
         await saveScreenshot(page, 'worktrees-listed')
+        await page.mouse.move(0, 0)
         git(repo, 'worktree', 'remove', join(projects, 'app-second'))
         await expect(page.getByRole('listitem', { name: 'second worktree' })).toHaveCount(0)
 
