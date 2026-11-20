@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer } from 'electron'
 import { type DesktopApi, IPC_CHANNELS } from '../shared/desktop-api'
 import { SETTINGS_CHANNELS, type SettingsView } from '../shared/settings-api'
 import { SHELL_LAYOUT_CHANNELS } from '../shared/shell-layout-api'
+import { TERMINAL_CHANNELS, type TerminalCommand, type TerminalExit } from '../shared/terminal-api'
 import { type WorkspaceView, WORKSPACE_CHANNELS } from '../shared/workspace-api'
 
 const desktopApi: DesktopApi = {
@@ -27,6 +28,29 @@ const desktopApi: DesktopApi = {
   },
   getShellLayout: () => ipcRenderer.invoke(SHELL_LAYOUT_CHANNELS.get),
   saveShellLayout: (layout) => ipcRenderer.invoke(SHELL_LAYOUT_CHANNELS.save, layout),
+  spawnTerminal: (request) => ipcRenderer.invoke(TERMINAL_CHANNELS.spawn, request),
+  writeTerminal: (id, data) => ipcRenderer.invoke(TERMINAL_CHANNELS.write, id, data),
+  resizeTerminal: (id, cols, rows) => ipcRenderer.invoke(TERMINAL_CHANNELS.resize, id, cols, rows),
+  killTerminal: (id) => ipcRenderer.invoke(TERMINAL_CHANNELS.kill, id),
+  ackTerminalOutput: (id, bytes) => ipcRenderer.invoke(TERMINAL_CHANNELS.ack, id, bytes),
+  openTerminalLink: (url) => ipcRenderer.invoke(TERMINAL_CHANNELS.openLink, url),
+  readTerminalClipboard: () => ipcRenderer.invoke(TERMINAL_CHANNELS.readClipboard),
+  writeTerminalClipboard: (text) => ipcRenderer.invoke(TERMINAL_CHANNELS.writeClipboard, text),
+  subscribeTerminalData: (callback) => {
+    const listener = (_event: unknown, id: string, data: string): void => callback(id, data)
+    ipcRenderer.on(TERMINAL_CHANNELS.data, listener)
+    return () => ipcRenderer.removeListener(TERMINAL_CHANNELS.data, listener)
+  },
+  subscribeTerminalExit: (callback) => {
+    const listener = (_event: unknown, exit: TerminalExit): void => callback(exit)
+    ipcRenderer.on(TERMINAL_CHANNELS.exit, listener)
+    return () => ipcRenderer.removeListener(TERMINAL_CHANNELS.exit, listener)
+  },
+  subscribeTerminalCommand: (callback) => {
+    const listener = (_event: unknown, command: TerminalCommand): void => callback(command)
+    ipcRenderer.on(TERMINAL_CHANNELS.command, listener)
+    return () => ipcRenderer.removeListener(TERMINAL_CHANNELS.command, listener)
+  },
   subscribeShowSettings: (callback) => {
     const listener = (): void => callback()
     ipcRenderer.on(SETTINGS_CHANNELS.showPage, listener)

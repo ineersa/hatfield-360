@@ -56,11 +56,16 @@ function iconTheme(value: unknown): Checked<IconTheme> {
     : { problem: `must be one of ${ICON_THEMES.map((name) => `"${name}"`).join(', ')}` }
 }
 
+function flag(value: unknown): Checked<boolean> {
+  return typeof value === 'boolean' ? { value } : { problem: 'must be true or false' }
+}
+
 const CHECKS: { [K in SettingKey]: (value: unknown) => Checked<Settings[K]> } = {
   'app.fontFamily': fontFamily,
   'app.fontSize': fontSize,
   'terminal.fontFamily': fontFamily,
   'terminal.fontSize': fontSize,
+  'terminal.gpuAcceleration': flag,
   'editor.fontFamily': fontFamily,
   'editor.fontSize': fontSize,
   'workbench.iconTheme': iconTheme

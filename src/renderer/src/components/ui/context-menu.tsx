@@ -47,3 +47,29 @@ export function ContextMenuItem({
     />
   )
 }
+
+export function ContextMenuSeparator({
+  className,
+  ...props
+}: ComponentProps<typeof ContextMenuPrimitive.Separator>): React.JSX.Element {
+  return (
+    <ContextMenuPrimitive.Separator
+      data-slot="context-menu-separator"
+      className={cn('-mx-1 my-1 h-px bg-border', className)}
+      {...props}
+    />
+  )
+}
+
+export function ContextMenuShortcut({
+  className,
+  ...props
+}: ComponentProps<'span'>): React.JSX.Element {
+  return (
+    <span
+      data-slot="context-menu-shortcut"
+      className={cn('ml-auto pl-6 text-ui-sm text-muted-foreground', className)}
+      {...props}
+    />
+  )
+}

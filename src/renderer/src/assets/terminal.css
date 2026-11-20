@@ -1,0 +1,132 @@
+/* Terminal panes (lib/pane-manager), ported from Orca's terminal.css (MIT, see THIRD_PARTY_NOTICES.md). */
+@import '@xterm/xterm/css/xterm.css';
+
+.pane-manager-root {
+  position: relative;
+  overflow: hidden;
+  background: var(--terminal-background);
+}
+
+.pane-manager-root *,
+.pane-manager-root *::before,
+.pane-manager-root *::after {
+  box-sizing: border-box;
+}
+
+.pane-manager-root .xterm {
+  height: 100%;
+}
+
+/* xterm 6 draws its own scrollbar; the viewport's native one (classic on Linux/Windows) would show its arrow beneath. */
+.pane-manager-root .xterm-viewport {
+  scrollbar-width: none;
+}
+
+/* xterm.css paints a black viewport layer that shows as 1px lines at fractional positions. */
+.xterm:not(.allow-transparency) .xterm-viewport {
+  background-color: var(--terminal-background) !important;
+}
+
+.xterm .xterm-scrollable-element > .xterm-scrollbar > .xterm-slider {
+  border-radius: 9999px;
+}
+
+.pane-manager-root .xterm-container {
+  width: calc(100% - 2 * var(--pane-padding-x, 6px));
+  height: calc(100% - 2 * var(--pane-padding-y, 4px));
+  margin: var(--pane-padding-y, 4px) var(--pane-padding-x, 6px);
+  contain: paint;
+}
+
+.pane-divider::after {
+  content: '';
+  position: absolute;
+  pointer-events: none;
+  background: var(--border);
+}
+
+.pane-divider.is-vertical::after {
+  top: calc(-1 * var(--divider-extension, 4px));
+  bottom: calc(-1 * var(--divider-extension, 4px));
+  left: calc(50% - var(--divider-thickness, 1px) / 2);
+  width: var(--divider-thickness, 1px);
+}
+
+.pane-divider.is-horizontal::after {
+  left: calc(-1 * var(--divider-extension, 4px));
+  right: calc(-1 * var(--divider-extension, 4px));
+  top: calc(50% - var(--divider-thickness, 1px) / 2);
+  height: var(--divider-thickness, 1px);
+}
+
+.pane-divider:hover::after,
+.pane-divider.is-dragging::after {
+  background: var(--primary);
+}
+
+/* With splits, panes without focus dim slightly, so the one taking keys stands out. */
+.has-multiple-panes .pane:not(.is-active) .xterm-container {
+  opacity: 0.7;
+}
+
+/* Shown in a pane whose shell ended; the pane stays until closed, so its output can still be read. */
+.pane-close {
+  position: absolute;
+  top: 6px;
+  right: 10px;
+  z-index: 20;
+  display: none;
+  width: 22px;
+  height: 22px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  background: var(--accent);
+  color: var(--muted-foreground);
+  opacity: 0;
+  transition: opacity 100ms linear;
+}
+
+.pane-close svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
+/* A lone pane closes with its tab, so only split panes get their own close button. */
+.has-multiple-panes .pane-close {
+  display: flex;
+}
+
+.pane:hover .pane-close,
+.pane-close:focus-visible {
+  opacity: 1;
+}
+
+.pane-close:hover {
+  color: var(--foreground);
+}
+
+.pane-close:focus-visible {
+  outline: 2px solid var(--ring);
+}
+
+.pane-exit-badge {
+  position: absolute;
+  top: 8px;
+  right: 16px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: var(--accent);
+  color: var(--muted-foreground);
+  font-family: var(--font-sans);
+  font-size: calc(var(--app-font-size) - 2px);
+  pointer-events: none;
+}
+
+.has-multiple-panes .pane-exit-badge {
+  right: 40px;
+}
