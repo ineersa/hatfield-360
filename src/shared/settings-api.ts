@@ -6,6 +6,8 @@ export type Settings = {
   'app.fontSize': number
   'terminal.fontFamily': string
   'terminal.fontSize': number
+  /** Draw terminals with WebGL; off uses the slower DOM renderer, for GPUs that render them wrong. */
+  'terminal.gpuAcceleration': boolean
   'editor.fontFamily': string
   'editor.fontSize': number
   'workbench.iconTheme': IconTheme
@@ -28,6 +30,7 @@ export const DEFAULT_SETTINGS: Settings = {
   'app.fontSize': 14,
   'terminal.fontFamily': MONOSPACE_FONTS,
   'terminal.fontSize': 13,
+  'terminal.gpuAcceleration': true,
   'editor.fontFamily': MONOSPACE_FONTS,
   'editor.fontSize': 13,
   'workbench.iconTheme': 'catppuccin'

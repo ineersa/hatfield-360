@@ -32,6 +32,7 @@ describe('parseSettings', () => {
       "app.fontSize": 12.5,
       "terminal.fontFamily": "'Iosevka Term', monospace",
       "terminal.fontSize": 14,
+      "terminal.gpuAcceleration": false,
       "editor.fontFamily": "Fira Code",
       "editor.fontSize": 15,
       "workbench.iconTheme": "lucide",
@@ -42,6 +43,7 @@ describe('parseSettings', () => {
         'app.fontSize': 12.5,
         'terminal.fontFamily': "'Iosevka Term', monospace",
         'terminal.fontSize': 14,
+        'terminal.gpuAcceleration': false,
         'editor.fontFamily': 'Fira Code',
         'editor.fontSize': 15,
         'workbench.iconTheme': 'lucide'
@@ -51,6 +53,7 @@ describe('parseSettings', () => {
         'app.fontSize',
         'terminal.fontFamily',
         'terminal.fontSize',
+        'terminal.gpuAcceleration',
         'editor.fontFamily',
         'editor.fontSize',
         'workbench.iconTheme'
@@ -85,6 +88,7 @@ describe('parseSettings', () => {
       'editor.fontFamily': '',
       'app.fontFamily': 'Inter; color: red',
       'workbench.iconTheme': 'material',
+      'terminal.gpuAcceleration': 'off',
       'app.fontsize': 15
     })
     expect(parseSettings(text, lastGood)).toEqual({
@@ -102,7 +106,8 @@ describe('parseSettings', () => {
         'editor.fontSize',
         'editor.fontFamily',
         'app.fontFamily',
-        'workbench.iconTheme'
+        'workbench.iconTheme',
+        'terminal.gpuAcceleration'
       ],
       editable: true,
       problems: [
@@ -112,6 +117,7 @@ describe('parseSettings', () => {
         '"editor.fontFamily" must be a font name.',
         '"app.fontFamily" must not contain ; { or }.',
         '"workbench.iconTheme" must be one of "catppuccin", "lucide".',
+        '"terminal.gpuAcceleration" must be true or false.',
         'Unknown setting "app.fontsize".'
       ]
     })

@@ -19,4 +19,25 @@
   --ring: #3871e1;
   /* Catppuccin Mocha, for the Catppuccin file and folder icons. */
   --icon-text: #cdd6f4;
+  /* Terminal: console colours of PhpStorm's Islands Dark scheme; the ANSI palette comes from its parent, Darcula. */
+  --terminal-background: #191a1c;
+  --terminal-foreground: #bcbec4;
+  --terminal-cursor: #ced0d6;
+  --terminal-selection: #2a4371;
+  --terminal-black: #000000;
+  --terminal-red: #f0524f;
+  --terminal-green: #5c962c;
+  --terminal-yellow: #a68a0d;
+  --terminal-blue: #3993d4;
+  --terminal-magenta: #a771bf;
+  --terminal-cyan: #00a3a3;
+  --terminal-white: #808080;
+  --terminal-bright-black: #595959;
+  --terminal-bright-red: #ff4050;
+  --terminal-bright-green: #4fc414;
+  --terminal-bright-yellow: #e5bf00;
+  --terminal-bright-blue: #1fb0ff;
+  --terminal-bright-magenta: #ed7eed;
+  --terminal-bright-cyan: #00e5e5;
+  --terminal-bright-white: #ffffff;
 }

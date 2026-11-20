@@ -31,3 +31,38 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
+
+## Orca
+
+Source: https://github.com/stablyai/orca (commit ccebbedaee8d7f6c26646ed6bf89302fd7b1c62a)
+Used in: terminal panes and shells, ported and trimmed:
+
+- `src/renderer/src/lib/pane-manager/` (split tree, draggable dividers, xterm pane lifecycle, fitting, WebGL renderer) from `src/renderer/src/lib/pane-manager/`
+- `src/renderer/src/assets/terminal.css` from `src/renderer/src/assets/terminal.css`
+- `src/main/terminal/terminal-environment.ts` (shell environment and its scrubbers) from `src/main/providers/local-pty/local-pty-spawn-environment.ts` and the shell-startup environment modules
+- `src/main/terminal/default-shell.ts` (Unix shell fallbacks, PowerShell lookup) from `src/main/providers/local-pty/local-pty-executable-spawn.ts` and `src/main/providers/shell-launch/windows/powershell-executable.ts`
+- `src/main/terminal/terminal-sessions.ts` (the macOS spawn-helper check) from `src/main/providers/local-pty/local-pty-executable-spawn.ts`
+
+```
+MIT License
+
+Copyright (c) 2026 Lovecast Inc.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```

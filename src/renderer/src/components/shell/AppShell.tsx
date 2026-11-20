@@ -2,11 +2,14 @@ import { useEffect, useRef } from 'react'
 import { SettingsMessage } from '@/components/settings/SettingsMessage'
 import { SettingsPage } from '@/components/settings/SettingsPage'
 import { useAppFont } from '@/components/settings/use-app-font'
+import { TerminalTabs } from '@/components/terminal/TerminalTabs'
+import { useTerminalCommands } from '@/components/terminal/use-terminal-commands'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { WelcomeScreen } from '@/components/workspace/WelcomeScreen'
 import { WorkspaceMessage } from '@/components/workspace/WorkspaceMessage'
 import { useSettingsStore } from '@/state/settings-store'
 import { SIDE_PANEL_MIN_WIDTH, useShellLayoutStore } from '@/state/shell-layout-store'
+import { useTerminalStore } from '@/state/terminal-store'
 import { useWorkspaceStore } from '@/state/workspace-store'
 import { ActivityBar } from './ActivityBar'
 import { SHELL_VIEWS } from './shell-views'
@@ -30,12 +33,14 @@ export function AppShell(): React.JSX.Element {
   const openSettings = useShellLayoutStore((state) => state.openSettings)
   const connectLayout = useShellLayoutStore((state) => state.connect)
   const layoutLoaded = useShellLayoutStore((state) => state.loaded)
+  const hasTerminals = useTerminalStore((state) => state.tabs.length > 0)
 
   useEffect(() => connectWorkspace(), [connectWorkspace])
   useEffect(() => connectSettings(), [connectSettings])
   useEffect(() => connectLayout(), [connectLayout])
   useEffect(() => window.desktop.subscribeShowSettings(openSettings), [openSettings])
   useAppFont()
+  useTerminalCommands()
   useEffect(() => {
     document.title = workspaceName ? `${workspaceName} — Hatfield 360` : 'Hatfield 360'
   }, [workspaceName])
@@ -48,6 +53,8 @@ export function AppShell(): React.JSX.Element {
   if (!view) throw new Error('No shell views defined')
   // A blank frame for the moment it takes to read the saved layout, instead of a default one that jumps.
   if (!layoutLoaded) return <div className="h-screen bg-background" />
+  // Terminal tabs stay mounted behind other views and Settings, so their shells keep running.
+  const showTerminals = hasTerminals && !settingsOpen && view.id === 'agents'
 
   return (
     <TooltipProvider>
@@ -95,7 +102,8 @@ export function AppShell(): React.JSX.Element {
               aria-label={settingsOpen ? 'Settings' : view.label}
               className="flex min-w-0 flex-1 rounded-xl bg-island"
             >
-              {settingsOpen ? (
+              {hasTerminals ? <TerminalTabs hidden={!showTerminals} /> : null}
+              {showTerminals ? null : settingsOpen ? (
                 <SettingsPage />
               ) : workspaceEmpty ? (
                 <WelcomeScreen />

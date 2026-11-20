@@ -218,6 +218,34 @@ const HEADER_BUTTON_CLASS =
   'flex h-9 shrink-0 items-center gap-2 rounded-lg px-2.5 font-medium whitespace-nowrap text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none disabled:opacity-50'
 
 /** The settings in settings.json as a form; every change is written to the file right away. */
+function TerminalGpuSetting(): React.JSX.Element {
+  const enabled = useSettingsStore((state) => state.values['terminal.gpuAcceleration'])
+  const editable = useSettingsStore((state) => state.editable)
+  const update = useSettingsStore((state) => state.update)
+  const descriptionId = useId()
+  return (
+    <section className="flex items-center gap-2 py-4">
+      <label className="flex flex-1 cursor-pointer items-start gap-3 has-disabled:cursor-default has-disabled:opacity-50">
+        <input
+          type="checkbox"
+          checked={enabled}
+          disabled={!editable}
+          aria-describedby={descriptionId}
+          onChange={(event) => void update('terminal.gpuAcceleration', event.target.checked)}
+          className="mt-1 size-4 shrink-0 accent-primary"
+        />
+        <span>
+          <span className="block font-semibold">Terminal GPU rendering</span>
+          <span id={descriptionId} className="block text-muted-foreground">
+            Draws terminals with WebGL. Turn it off if terminal text looks garbled or flickers.
+          </span>
+        </span>
+      </label>
+      <ResetButton settingKey="terminal.gpuAcceleration" label="Terminal GPU rendering" />
+    </section>
+  )
+}
+
 export function SettingsPage(): React.JSX.Element {
   const editable = useSettingsStore((state) => state.editable)
   const openFile = useSettingsStore((state) => state.openFile)
@@ -268,6 +296,7 @@ export function SettingsPage(): React.JSX.Element {
           {FONT_SETTINGS.map((setting) => (
             <FontSetting key={setting.familyKey} {...setting} />
           ))}
+          <TerminalGpuSetting />
         </div>
       </div>
     </div>

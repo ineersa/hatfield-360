@@ -21,7 +21,8 @@ export const SHELL_VIEWS: readonly ShellView[] = [
     description: 'Workspace, worktrees and agent sessions',
     Icon: TerminalSquare,
     Panel: WorkspacePanel,
-    mainPlaceholder: 'Terminals with tabs and split panes will open here.'
+    mainPlaceholder:
+      'Open a terminal from a project’s context menu (Open Terminal Here) or with Terminal → New Terminal.'
   },
   {
     id: 'files',

@@ -1,5 +1,7 @@
 import { app, BrowserWindow, Menu, type MenuItemConstructorOptions } from 'electron'
 import { sep } from 'node:path'
+import type { TerminalCommand } from '../../shared/terminal-api'
+import { terminalShortcut } from '../../shared/terminal-shortcuts'
 import type { RecentEntry, WorkspaceView } from '../../shared/workspace-api'
 import {
   openRecentOrOfferRemoval,
@@ -8,6 +10,7 @@ import {
   pickAndSaveWorkspaceAs
 } from '../workspace/workspace-dialogs'
 import { showSettingsPage } from '../ipc/settings-ipc'
+import { sendTerminalCommand } from '../ipc/terminal-ipc'
 import { openSettingsFile } from '../settings/open-settings-file'
 import { settingsStore } from '../settings/settings-store'
 import { WORKSPACE_FILE_EXTENSION } from '../workspace/workspace-file'
@@ -131,7 +134,29 @@ function buildAppMenu(view: WorkspaceView | null): void {
         ]
       },
       { type: 'separator' },
-      isMac ? { role: 'close' } : { role: 'quit', label: 'Exit' }
+      // Command+W closes the terminal pane, like iTerm; the window closes with Command+Shift+W.
+      isMac ? { role: 'close', accelerator: 'Command+Shift+W' } : { role: 'quit', label: 'Exit' }
+    ]
+  }
+  const terminalItem = (command: TerminalCommand, label: string): MenuItemConstructorOptions => ({
+    id: `terminal-${command}`,
+    label,
+    accelerator: terminalShortcut(command, process.platform),
+    click: fromMenu((window) => sendTerminalCommand(window, command))
+  })
+  const terminalMenu: MenuItemConstructorOptions = {
+    label: 'Terminal',
+    submenu: [
+      terminalItem('new-terminal', 'New Terminal'),
+      { type: 'separator' },
+      terminalItem('split-right', 'Split Right'),
+      terminalItem('split-down', 'Split Down'),
+      terminalItem('close-pane', 'Close Pane'),
+      { type: 'separator' },
+      terminalItem('focus-next-pane', 'Focus Next Pane'),
+      terminalItem('focus-previous-pane', 'Focus Previous Pane'),
+      terminalItem('next-tab', 'Next Terminal Tab'),
+      terminalItem('previous-tab', 'Previous Terminal Tab')
     ]
   }
   const template: MenuItemConstructorOptions[] = [
@@ -139,6 +164,7 @@ function buildAppMenu(view: WorkspaceView | null): void {
     fileMenu,
     { role: 'editMenu' },
     { role: 'viewMenu' },
+    terminalMenu,
     { role: 'windowMenu' }
   ]
   Menu.setApplicationMenu(Menu.buildFromTemplate(template))

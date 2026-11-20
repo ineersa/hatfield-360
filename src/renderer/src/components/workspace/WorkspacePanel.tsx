@@ -1,4 +1,4 @@
-import { CircleAlert, FolderPlus, FolderX } from 'lucide-react'
+import { CircleAlert, FolderPlus, FolderX, SquareTerminal } from 'lucide-react'
 import { RootFolderIcon } from '@/components/icons/RootFolderIcon'
 import {
   ContextMenu,
@@ -8,11 +8,13 @@ import {
 } from '@/components/ui/context-menu'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/class-names'
+import { useTerminalStore } from '@/state/terminal-store'
 import { useWorkspaceStore } from '@/state/workspace-store'
 import type { WorkspaceFolder } from '../../../../shared/workspace-api'
 
 function ProjectRow({ folder }: { folder: WorkspaceFolder }): React.JSX.Element {
   const removeFolder = useWorkspaceStore((state) => state.removeFolder)
+  const openTerminal = useTerminalStore((state) => state.openTerminal)
   return (
     <ContextMenu>
       <Tooltip>
@@ -47,6 +49,10 @@ function ProjectRow({ folder }: { folder: WorkspaceFolder }): React.JSX.Element 
         </TooltipContent>
       </Tooltip>
       <ContextMenuContent>
+        <ContextMenuItem disabled={folder.missing} onSelect={() => openTerminal(folder.path)}>
+          <SquareTerminal aria-hidden />
+          Open Terminal Here
+        </ContextMenuItem>
         <ContextMenuItem onSelect={() => void removeFolder(folder.path)}>
           <FolderX aria-hidden />
           Remove from Workspace

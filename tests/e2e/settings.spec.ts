@@ -104,6 +104,8 @@ test('the Settings page applies each change as it is made and writes it into set
   try {
     await withApp(
       async (app, page) => {
+        // A person uses the menu once the window shows its content, so the page is listening by then.
+        await expect(page.getByRole('list', { name: 'Workspace folders' })).toBeVisible()
         await clickMenuItem(app, 'open-settings')
         const settingsPage = settingsMain(page)
         await expect(settingsPage.getByRole('heading', { name: 'Settings' })).toBeVisible()
