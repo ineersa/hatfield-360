@@ -38,7 +38,7 @@ describe('parseSettings', () => {
       "workbench.iconTheme": "lucide",
       "workbench.colorTheme": "islands-catppuccin-mocha",
       "editor.colorTheme": "catppuccin-mocha-no-italics",
-      "terminal.colorTheme": "darcula",
+      "terminal.colorTheme": "catppuccin-mocha",
     }`
     expect(parseSettings(text, DEFAULT_SETTINGS)).toEqual({
       values: {
@@ -52,7 +52,7 @@ describe('parseSettings', () => {
         'workbench.iconTheme': 'lucide',
         'workbench.colorTheme': 'islands-catppuccin-mocha',
         'editor.colorTheme': 'catppuccin-mocha-no-italics',
-        'terminal.colorTheme': 'darcula'
+        'terminal.colorTheme': 'catppuccin-mocha'
       },
       customized: [
         'app.fontFamily',

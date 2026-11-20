@@ -211,32 +211,6 @@ export const TERMINAL_THEMES = [
     }
   },
   {
-    id: 'darcula',
-    label: 'Darcula',
-    palette: {
-      background: '#2b2b2b',
-      foreground: '#bbbbbb',
-      cursor: '#bbbbbb',
-      selection: '#214283',
-      black: '#000000',
-      red: '#f0524f',
-      green: '#5c962c',
-      yellow: '#a68a0d',
-      blue: '#3993d4',
-      magenta: '#a771bf',
-      cyan: '#00a3a3',
-      white: '#808080',
-      brightBlack: '#595959',
-      brightRed: '#ff4050',
-      brightGreen: '#4fc414',
-      brightYellow: '#e5bf00',
-      brightBlue: '#1fb0ff',
-      brightMagenta: '#ed7eed',
-      brightCyan: '#00e5e5',
-      brightWhite: '#ffffff'
-    }
-  },
-  {
     // GNOME Terminal profile "Dracula"; it sets no selection colour, so this is Dracula's own.
     id: 'dracula',
     label: 'Dracula',

@@ -27,7 +27,7 @@ test('app, editor and terminal themes come from settings.json and switch live fr
     JSON.stringify({
       'workbench.colorTheme': 'islands-catppuccin-mocha',
       'editor.colorTheme': 'catppuccin-mocha',
-      'terminal.colorTheme': 'darcula',
+      'terminal.colorTheme': 'catppuccin-mocha',
       'terminal.gpuAcceleration': false
     })
   )
@@ -43,7 +43,7 @@ test('app, editor and terminal themes come from settings.json and switch live fr
           .getByRole('main', { name: 'Agents' })
           .getByRole('button', { name: 'New Terminal' })
           .click()
-        await expect(terminalBackground(page)).toHaveCSS('background-color', 'rgb(43, 43, 43)')
+        await expect(terminalBackground(page)).toHaveCSS('background-color', 'rgb(30, 30, 46)')
         await saveScreenshot(page, 'theme-catppuccin-mocha-terminal')
 
         await clickMenuItem(app, 'open-settings')
