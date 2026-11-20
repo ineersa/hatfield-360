@@ -72,8 +72,6 @@ test('folders added from the empty state and the File menu are listed and saved 
         await expect(folderList(page).getByRole('listitem')).toHaveText(['api', 'web'])
         await expectSavedFolders(userData, [api, web])
 
-        await folderList(page).getByRole('listitem', { name: 'web' }).hover()
-        await expect(page.getByRole('tooltip')).toHaveText(web)
         await saveScreenshot(page, 'workspace-folders')
       },
       { userDataDir: userData }

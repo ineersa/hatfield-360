@@ -1,4 +1,12 @@
-import { CircleAlert, FolderPlus, FolderX, GitBranch, Lock, SquareTerminal } from 'lucide-react'
+import {
+  ChevronRight,
+  CircleAlert,
+  FolderPlus,
+  FolderX,
+  GitBranch,
+  Lock,
+  SquareTerminal
+} from 'lucide-react'
 import { RootFolderIcon } from '@/components/icons/RootFolderIcon'
 import {
   ContextMenu,
@@ -14,7 +22,7 @@ import { useTerminalStore } from '@/state/terminal-store'
 import { useWorkspaceStore } from '@/state/workspace-store'
 import { useWorktreeStore } from '@/state/worktree-store'
 import type { WorkspaceFolder } from '../../../../shared/workspace-api'
-import type { Worktree } from '../../../../shared/worktree-api'
+import type { ProjectWorktrees, Worktree } from '../../../../shared/worktree-api'
 
 /** A tree row's right-click menu: Open Terminal Here first, then the row's own items. */
 function RowMenuContent({
@@ -60,50 +68,48 @@ function WorktreeRow({ worktree }: { worktree: Worktree }): React.JSX.Element {
   const label = worktreeLabel(worktree)
   return (
     <ContextMenu>
-      <Tooltip>
-        <ContextMenuTrigger asChild>
-          <TooltipTrigger asChild>
-            <li
-              tabIndex={0}
-              aria-label={`${label} worktree${worktree.prunable ? ' (missing)' : ''}`}
-              className="flex h-8 cursor-default items-center gap-2 rounded-lg pr-2.5 pl-8 outline-none select-none hover:bg-accent focus-visible:bg-accent data-[state=open]:bg-accent"
-            >
-              <GitBranch className="size-4 shrink-0 text-muted-foreground" aria-hidden />
-              <span
-                className={cn(
-                  'truncate',
-                  worktree.prunable && 'text-muted-foreground line-through'
-                )}
-              >
-                {label}
-              </span>
-              <span className="min-w-0 shrink truncate text-ui-sm text-muted-foreground">
-                {worktree.name}
-              </span>
-              {worktree.locked ? (
-                <Lock className="size-3.5 shrink-0 text-muted-foreground" aria-label="locked" />
-              ) : null}
-              {worktree.prunable ? (
-                <span className="ml-auto shrink-0 text-ui-sm text-destructive">missing</span>
-              ) : null}
-            </li>
-          </TooltipTrigger>
-        </ContextMenuTrigger>
-        <TooltipContent side="bottom" align="start">
-          {worktree.path}
-        </TooltipContent>
-      </Tooltip>
+      <ContextMenuTrigger asChild>
+        <li
+          tabIndex={0}
+          aria-label={`${label} worktree${worktree.prunable ? ' (missing)' : ''}`}
+          className="flex h-8 cursor-default items-center gap-2 rounded-lg pr-2.5 pl-12 outline-none select-none hover:bg-accent focus-visible:bg-accent data-[state=open]:bg-accent"
+        >
+          <GitBranch className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+          <span
+            className={cn('truncate', worktree.prunable && 'text-muted-foreground line-through')}
+          >
+            {label}
+          </span>
+          <span className="min-w-0 shrink truncate text-ui-sm text-muted-foreground">
+            {worktree.name}
+          </span>
+          {worktree.locked ? (
+            <Lock className="size-3.5 shrink-0 text-muted-foreground" aria-label="locked" />
+          ) : null}
+          {worktree.prunable ? (
+            <span className="ml-auto shrink-0 text-ui-sm text-destructive">missing</span>
+          ) : null}
+        </li>
+      </ContextMenuTrigger>
       <RowMenuContent cwd={worktree.path} disabled={worktree.prunable} />
     </ContextMenu>
   )
 }
 
 /** The project's worktrees under its row; nothing for a folder outside git. */
+/** Rows a project can fold away: its linked worktrees, or why git can't list them. */
+function hasChildRows(project: ProjectWorktrees | undefined): boolean {
+  if (project?.status === 'error') return true
+  return project?.status === 'git' && project.worktrees.some((worktree) => !worktree.project)
+}
+
 function ProjectWorktreeRows({ folder }: { folder: string }): React.JSX.Element | null {
   const project = useWorktreeStore((state) => state.projects[folder])
+  const collapsed = useWorktreeStore((state) => state.collapsed[folder] === true)
+  if (collapsed) return null
   if (project?.status === 'error') {
     return (
-      <li role="alert" className="flex gap-2 py-1 pr-2.5 pl-8 text-ui-sm text-muted-foreground">
+      <li role="alert" className="flex gap-2 py-1 pr-2.5 pl-12 text-ui-sm text-muted-foreground">
         <CircleAlert className="mt-0.5 size-3.5 shrink-0 text-destructive" aria-hidden />
         <span className="min-w-0 break-words">Git: {project.message}</span>
       </li>
@@ -123,51 +129,65 @@ function ProjectWorktreeRows({ folder }: { folder: string }): React.JSX.Element 
 
 function ProjectRow({ folder }: { folder: WorkspaceFolder }): React.JSX.Element {
   const removeFolder = useWorkspaceStore((state) => state.removeFolder)
-  const checkout = useWorktreeStore((state) => {
-    const project = state.projects[folder.path]
-    return project?.status === 'git'
-      ? project.worktrees.find((worktree) => worktree.project)
-      : undefined
-  })
+  const project = useWorktreeStore((state) => state.projects[folder.path])
+  const collapsed = useWorktreeStore((state) => state.collapsed[folder.path] === true)
+  const toggleCollapsed = useWorktreeStore((state) => state.toggleCollapsed)
+  const checkout =
+    project?.status === 'git' ? project.worktrees.find((worktree) => worktree.project) : undefined
+  const foldable = !folder.missing && hasChildRows(project)
   return (
     <ContextMenu>
-      <Tooltip>
-        <ContextMenuTrigger asChild>
-          <TooltipTrigger asChild>
-            <li
-              tabIndex={0}
-              aria-label={folder.missing ? `${folder.name} (missing)` : folder.name}
-              className="flex h-9 cursor-default items-center gap-2.5 rounded-lg px-2.5 outline-none select-none hover:bg-accent focus-visible:bg-accent data-[state=open]:bg-accent"
+      <ContextMenuTrigger asChild>
+        <li
+          tabIndex={0}
+          aria-label={folder.missing ? `${folder.name} (missing)` : folder.name}
+          className="flex h-9 cursor-default items-center gap-1.5 rounded-lg pr-2.5 pl-1 outline-none select-none hover:bg-accent focus-visible:bg-accent data-[state=open]:bg-accent"
+          onClick={() => {
+            if (foldable) toggleCollapsed(folder.path)
+          }}
+          onKeyDown={(event) => {
+            if (!foldable) return
+            if (event.key === 'ArrowLeft' && !collapsed) toggleCollapsed(folder.path)
+            else if (event.key === 'ArrowRight' && collapsed) toggleCollapsed(folder.path)
+          }}
+        >
+          {foldable ? (
+            <button
+              type="button"
+              tabIndex={-1}
+              aria-label={`${collapsed ? 'Expand' : 'Collapse'} ${folder.name}`}
+              aria-expanded={!collapsed}
+              className="flex size-5 shrink-0 items-center justify-center rounded text-muted-foreground"
             >
-              {folder.missing ? (
-                <FolderX className="size-[18px] shrink-0 text-destructive" aria-hidden />
-              ) : (
-                <RootFolderIcon className="size-[18px] shrink-0" />
-              )}
-              <span
-                className={cn(
-                  'truncate text-ui-lg font-semibold',
-                  folder.missing && 'font-medium text-muted-foreground line-through'
-                )}
-              >
-                {folder.name}
-              </span>
-              {checkout ? (
-                <span className="flex min-w-0 shrink items-center gap-1 text-ui-sm text-muted-foreground">
-                  <GitBranch className="size-3.5 shrink-0" aria-hidden />
-                  <span className="truncate">{worktreeLabel(checkout)}</span>
-                </span>
-              ) : null}
-              {folder.missing ? (
-                <span className="ml-auto shrink-0 text-ui-sm text-destructive">missing</span>
-              ) : null}
-            </li>
-          </TooltipTrigger>
-        </ContextMenuTrigger>
-        <TooltipContent side="bottom" align="start">
-          {folder.path}
-        </TooltipContent>
-      </Tooltip>
+              <ChevronRight className={cn('size-4', !collapsed && 'rotate-90')} aria-hidden />
+            </button>
+          ) : (
+            <span className="size-5 shrink-0" aria-hidden />
+          )}
+          {folder.missing ? (
+            <FolderX className="size-[18px] shrink-0 text-destructive" aria-hidden />
+          ) : (
+            <RootFolderIcon className="size-[18px] shrink-0" />
+          )}
+          <span
+            className={cn(
+              'ml-1 truncate text-ui-lg font-semibold',
+              folder.missing && 'font-medium text-muted-foreground line-through'
+            )}
+          >
+            {folder.name}
+          </span>
+          {checkout ? (
+            <span className="flex min-w-0 shrink items-center gap-1 text-ui-sm text-muted-foreground">
+              <GitBranch className="size-3.5 shrink-0" aria-hidden />
+              <span className="truncate">{worktreeLabel(checkout)}</span>
+            </span>
+          ) : null}
+          {folder.missing ? (
+            <span className="ml-auto shrink-0 text-ui-sm text-destructive">missing</span>
+          ) : null}
+        </li>
+      </ContextMenuTrigger>
       <RowMenuContent cwd={folder.path} disabled={folder.missing}>
         <ContextMenuItem onSelect={() => void removeFolder(folder.path)}>
           <FolderX aria-hidden />

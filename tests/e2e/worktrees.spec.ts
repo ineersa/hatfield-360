@@ -86,6 +86,13 @@ test('projects list their git worktrees and follow git as worktrees come and go'
         // A plain folder that becomes a repository shows its branch.
         await expect(rows(page)).toHaveText(['appmain', 'renamedapp-feature', 'notestrunk'])
 
+        // Clicking a project folds its worktrees away and back.
+        await page.getByRole('listitem', { name: 'app', exact: true }).click()
+        await expect(rows(page)).toHaveText(['appmain', 'notestrunk'])
+        await expect(page.getByRole('button', { name: 'Expand app' })).toBeVisible()
+        await page.getByRole('listitem', { name: 'app', exact: true }).click()
+        await expect(rows(page)).toHaveText(['appmain', 'renamedapp-feature', 'notestrunk'])
+
         // A repository git can't read shows why instead of passing for a plain folder.
         await writeFile(join(notes, '.git', 'HEAD'), 'not a ref\n')
         await expect(page.getByRole('alert')).toContainText('Git: not a git repository')
