@@ -17,9 +17,9 @@
   height: 100%;
 }
 
-/* A stable scrollbar gutter; Linux auto-scrollbar churn can feed resize and reflow jitter. */
+/* xterm 6 draws its own scrollbar; the viewport's native one (classic on Linux/Windows) would show its arrow beneath. */
 .pane-manager-root .xterm-viewport {
-  overflow-y: scroll;
+  scrollbar-width: none;
 }
 
 /* xterm.css paints a black viewport layer that shows as 1px lines at fractional positions. */
@@ -70,6 +70,50 @@
 }
 
 /* Shown in a pane whose shell ended; the pane stays until closed, so its output can still be read. */
+.pane-close {
+  position: absolute;
+  top: 6px;
+  right: 10px;
+  z-index: 20;
+  display: none;
+  width: 22px;
+  height: 22px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  background: var(--accent);
+  color: var(--muted-foreground);
+  opacity: 0;
+  transition: opacity 100ms linear;
+}
+
+.pane-close svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
+/* A lone pane closes with its tab, so only split panes get their own close button. */
+.has-multiple-panes .pane-close {
+  display: flex;
+}
+
+.pane:hover .pane-close,
+.pane-close:focus-visible {
+  opacity: 1;
+}
+
+.pane-close:hover {
+  color: var(--foreground);
+}
+
+.pane-close:focus-visible {
+  outline: 2px solid var(--ring);
+}
+
 .pane-exit-badge {
   position: absolute;
   top: 8px;
@@ -81,4 +125,8 @@
   font-family: var(--font-sans);
   font-size: calc(var(--app-font-size) - 2px);
   pointer-events: none;
+}
+
+.has-multiple-panes .pane-exit-badge {
+  right: 40px;
 }

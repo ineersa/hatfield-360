@@ -87,6 +87,11 @@ test('Open Terminal Here runs a shell in the project that types, prints and resi
         await expect(page.getByRole('tab', { name: 'pty-project', selected: true })).toBeVisible()
         const pane = panes(page)
         await expect(pane).toHaveCount(1)
+        // xterm draws its own scrollbar; no native one may take room (or show its arrow) beneath it.
+        const nativeScrollbar = await page.evaluate<number>(
+          `(() => { const v = document.querySelector('[data-testid="terminal-pane"] .xterm-viewport'); return v ? v.offsetWidth - v.clientWidth : -1 })()`
+        )
+        expect(nativeScrollbar).toBe(0)
 
         await run(page, pane, 'pwd')
         await expect(screenText(pane)).toContainText(project)
@@ -97,6 +102,15 @@ test('Open Terminal Here runs a shell in the project that types, prints and resi
         if (!isWindows) {
           await run(page, pane, "printf '\\033[31m%s\\033[0m\\n' red-$((40+2))")
           await expect(pane.locator('.xterm-fg-1', { hasText: 'red-42' })).toBeVisible()
+
+          // Output past the screen stays in the scrollback; the mouse wheel scrolls back into it.
+          await run(page, pane, "seq -f 'row%gx' 1 300")
+          await expect(screenText(pane)).toContainText('row300x')
+          await pane.hover()
+          await page.mouse.wheel(0, -100)
+          await page.mouse.wheel(0, -100)
+          await expect(screenText(pane)).not.toContainText('row300x')
+          await run(page, pane, 'clear')
 
           // The pty's grid follows the pane: halving the window's width about halves the shell's columns.
           await run(page, pane, 'stty size')
@@ -197,6 +211,17 @@ test('splits give each pane its own shell; panes close, take focus and resize', 
         await expect.poll(() => isRunning(closedPid)).toBe(false)
         expect(isRunning(firstPid)).toBe(true)
 
+        // The strip's Split Down adds a pane; its own close button (shown on hover) removes it.
+        await page.getByRole('button', { name: 'Split Down' }).click()
+        await expect(panes(page)).toHaveCount(3)
+        const added = panes(page).last()
+        const addedPid = await panePid(added)
+        await added.hover()
+        await saveScreenshot(page, 'terminal-pane-close')
+        await added.getByRole('button', { name: 'Close pane' }).click()
+        await expect(panes(page)).toHaveCount(2)
+        await expect.poll(() => isRunning(addedPid)).toBe(false)
+
         // A shell that exits cleanly takes its pane with it; one that fails keeps it, with its code.
         await run(page, first, 'exit')
         await expect(panes(page)).toHaveCount(1)
@@ -204,6 +229,8 @@ test('splits give each pane its own shell; panes close, take focus and resize', 
         await run(page, panes(page), 'exit 3')
         await expect(panes(page).getByRole('status')).toHaveText('Process exited with code 3')
         await expect(page.getByRole('tab')).toHaveCount(1)
+        // A lone pane closes with its tab, so it has no close button of its own.
+        await expect(panes(page).getByRole('button', { name: 'Close pane' })).toBeHidden()
       },
       { userDataDir: userData }
     )

@@ -29,10 +29,32 @@ function defaultTerminalOptions(): ITerminalOptions {
   }
 }
 
+/** The pane's close button: a lucide `x`, shown on hover while its tab has more than one pane. */
+function createCloseButton(title: string, onClose: () => void): HTMLButtonElement {
+  const button = document.createElement('button')
+  button.type = 'button'
+  button.className = 'pane-close'
+  button.setAttribute('aria-label', 'Close pane')
+  button.title = title
+  const svgNs = 'http://www.w3.org/2000/svg'
+  const icon = document.createElementNS(svgNs, 'svg')
+  icon.setAttribute('viewBox', '0 0 24 24')
+  icon.setAttribute('aria-hidden', 'true')
+  for (const d of ['M18 6 6 18', 'm6 6 12 12']) {
+    const path = document.createElementNS(svgNs, 'path')
+    path.setAttribute('d', d)
+    icon.appendChild(path)
+  }
+  button.appendChild(icon)
+  button.addEventListener('click', onClose)
+  return button
+}
+
 export function createPaneDom(
   id: number,
   options: PaneManagerOptions,
-  onPointerDown: (id: number) => void
+  onPointerDown: (id: number) => void,
+  onClose: (id: number) => void
 ): ManagedPaneInternal {
   const container = document.createElement('div')
   container.className = 'pane'
@@ -41,6 +63,7 @@ export function createPaneDom(
   const xtermContainer = document.createElement('div')
   xtermContainer.className = 'xterm-container'
   container.appendChild(xtermContainer)
+  container.appendChild(createCloseButton(options.closePaneTitle, () => onClose(id)))
 
   const terminal = new Terminal({ ...defaultTerminalOptions(), ...options.terminalOptions() })
   const pane: ManagedPaneInternal = {

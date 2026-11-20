@@ -164,8 +164,11 @@ export class PaneManager {
   }
 
   private createPane(): ManagedPaneInternal {
-    const pane = createPaneDom(this.nextPaneId++, this.options, (id) =>
-      this.setActivePane(id, false)
+    const pane = createPaneDom(
+      this.nextPaneId++,
+      this.options,
+      (id) => this.setActivePane(id, false),
+      (id) => this.closePane(id)
     )
     this.panes.set(pane.id, pane)
     this.updateMultiPaneState()

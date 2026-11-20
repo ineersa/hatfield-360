@@ -15,6 +15,8 @@ export type PaneManagerOptions = {
   /** WebGL rendering; off falls back to xterm's DOM renderer. */
   gpuAcceleration: () => boolean
   onLinkClick: (event: MouseEvent, url: string) => void
+  /** Tooltip of each pane's close button, e.g. with its shortcut. */
+  closePaneTitle: string
 }
 
 export type ManagedPane = {
