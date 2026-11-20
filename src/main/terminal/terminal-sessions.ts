@@ -63,6 +63,8 @@ async function ensureSpawnHelperExecutable(): Promise<void> {
 class TerminalSessions {
   private readonly sessions = new Map<string, Session>()
   private readonly trackedOwners = new WeakSet<WebContents>()
+  /** Endings still waiting on lingering jobs; kept after their shell leaves `sessions`. */
+  private readonly endings = new Set<Promise<void>>()
   private helperChecked: Promise<void> | null = null
 
   async spawn(
@@ -139,13 +141,21 @@ class TerminalSessions {
     return session ? this.end(session) : Promise.resolve()
   }
 
-  /** Ends every shell; quitting waits for this, so no process outlives the app. */
+  /**
+   * Ends every shell and waits for endings already under way (a tab closed just before quitting
+   * may still be waiting out a job's grace period), so no process outlives the app.
+   */
   async killAll(): Promise<void> {
-    await Promise.all([...this.sessions.values()].map((session) => this.end(session)))
+    for (const session of this.sessions.values()) void this.end(session)
+    await Promise.all(this.endings)
   }
 
   private end(session: Session): Promise<void> {
-    session.ending ??= this.terminate(session)
+    if (!session.ending) {
+      const ending = this.terminate(session).finally(() => this.endings.delete(ending))
+      this.endings.add(ending)
+      session.ending = ending
+    }
     return session.ending
   }
 

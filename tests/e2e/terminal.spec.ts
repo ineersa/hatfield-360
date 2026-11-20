@@ -505,6 +505,44 @@ test('tabs: closing one ends its shells, quitting ends all of them', async () =>
   }
 })
 
+test('a tab closed just before quitting still ends its jobs', async () => {
+  test.skip(isWindows, 'Runs a Unix job that ignores the hangup.')
+  const { userData, cleanup } = await seedProject()
+  let jobPid = 0
+  try {
+    await withApp(
+      async (app, page) => {
+        await openProjectTerminal(page)
+        const pane = panes(page)
+        await panePid(pane)
+        await run(page, pane, `bash -c 'trap "" HUP; echo job-$$; exec sleep 600'`)
+        await expect(screenText(pane)).toContainText(/job-\d+/)
+        jobPid = Number(/job-(\d+)/.exec(await screenText(pane).innerText())?.[1])
+        expect(isRunning(jobPid)).toBe(true)
+        // The shell exits on the hangup while its job lingers through the grace period; the app
+        // quits inside it, with no terminal left open.
+        // Main's own exit event: from then on the shell is gone from its sessions.
+        await page.evaluate(
+          'window.desktop.subscribeTerminalExit((exit) => { globalThis.e2eShellExited = true })'
+        )
+        await page.getByRole('button', { name: 'Close pty-project' }).click()
+        await expect
+          .poll(() => page.evaluate<boolean>('globalThis.e2eShellExited === true'), {
+            intervals: [20]
+          })
+          .toBe(true)
+        const exited = new Promise((resolve) => app.process().once('exit', resolve))
+        await app.evaluate(({ app: electronApp }) => electronApp.quit())
+        await exited
+      },
+      { userDataDir: userData }
+    )
+    await expect.poll(() => isRunning(jobPid)).toBe(false)
+  } finally {
+    await cleanup()
+  }
+})
+
 /** Calls `window.desktop.<call>` in the page and returns main's refusal ('accepted' if none). */
 function refusal(page: Page, call: string): Promise<string> {
   return page.evaluate<string>(
