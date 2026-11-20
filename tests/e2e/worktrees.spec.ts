@@ -64,13 +64,18 @@ test('projects list their git worktrees and follow git as worktrees come and go'
 
         git(repo, 'worktree', 'add', '-q', '-b', 'second', join(projects, 'app-second'))
         await expect(page.getByRole('listitem', { name: 'second worktree' })).toBeVisible()
-        // A row's path shows beside the tree, not over the rows below it.
-        await page.getByRole('listitem', { name: 'feature worktree' }).hover()
+        // A row's path shows just under the mouse pointer.
+        const row = page.getByRole('listitem', { name: 'feature worktree' })
+        const box = await row.boundingBox()
+        if (!box) throw new Error('feature row not on screen')
+        const pointer = { x: box.x + 40, y: box.y + box.height / 2 }
+        await page.mouse.move(pointer.x, pointer.y)
         await expect(page.getByRole('tooltip')).toHaveText(feature)
-        const tree = await page.getByRole('list', { name: 'Workspace folders' }).boundingBox()
         const tip = await page.locator('[data-slot="tooltip-content"]').boundingBox()
-        if (!tree || !tip) throw new Error('tree or tooltip not on screen')
-        expect(tip.x).toBeGreaterThanOrEqual(tree.x + tree.width)
+        if (!tip) throw new Error('tooltip not on screen')
+        expect(Math.abs(tip.x - pointer.x)).toBeLessThan(2)
+        expect(tip.y - pointer.y).toBeGreaterThan(0)
+        expect(tip.y - pointer.y).toBeLessThan(30)
         await saveScreenshot(page, 'worktrees-listed')
         await page.mouse.move(0, 0)
         git(repo, 'worktree', 'remove', join(projects, 'app-second'))

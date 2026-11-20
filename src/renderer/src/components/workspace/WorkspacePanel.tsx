@@ -14,7 +14,7 @@ import {
   ContextMenuItem,
   ContextMenuTrigger
 } from '@/components/ui/context-menu'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { Tooltip, TooltipContent, TooltipTrigger, usePointerTooltip } from '@/components/ui/tooltip'
 import { cn } from '@/lib/class-names'
 import { Fragment, type ReactNode, useRef } from 'react'
 import { focusActiveTerminal } from '@/components/terminal/use-terminal-commands'
@@ -61,28 +61,20 @@ function RowMenuContent({
   )
 }
 
-/** Long enough that moving through the tree doesn't flash a path at every row. */
+/** Long enough that moving through the tree doesn't flash a path at every row; the path shows under the pointer. */
 const PATH_TOOLTIP_DELAY_MS = 700
-
-/** A tree row's full path, beside the row so it never covers the rows below. */
-function PathTooltip({ path }: { path: string }): React.JSX.Element {
-  return (
-    <TooltipContent side="right" align="center" sideOffset={8}>
-      {path}
-    </TooltipContent>
-  )
-}
 
 const worktreeLabel = (worktree: Worktree): string =>
   worktree.branch ?? `detached ${worktree.head.slice(0, 7)}`
 
 function WorktreeRow({ worktree }: { worktree: Worktree }): React.JSX.Element {
   const label = worktreeLabel(worktree)
+  const pathTip = usePointerTooltip()
   return (
     <ContextMenu>
-      <Tooltip delayDuration={PATH_TOOLTIP_DELAY_MS}>
+      <Tooltip delayDuration={PATH_TOOLTIP_DELAY_MS} onOpenChange={pathTip.onOpenChange}>
         <ContextMenuTrigger asChild>
-          <TooltipTrigger asChild>
+          <TooltipTrigger asChild onPointerMove={pathTip.track}>
             <li
               tabIndex={0}
               aria-label={`${label} worktree${worktree.prunable ? ' (missing)' : ''}`}
@@ -109,7 +101,7 @@ function WorktreeRow({ worktree }: { worktree: Worktree }): React.JSX.Element {
             </li>
           </TooltipTrigger>
         </ContextMenuTrigger>
-        <PathTooltip path={worktree.path} />
+        <TooltipContent {...pathTip.placement}>{worktree.path}</TooltipContent>
       </Tooltip>
       <RowMenuContent cwd={worktree.path} disabled={worktree.prunable} />
     </ContextMenu>
@@ -149,6 +141,7 @@ function ProjectWorktreeRows({ folder }: { folder: string }): React.JSX.Element 
 
 function ProjectRow({ folder }: { folder: WorkspaceFolder }): React.JSX.Element {
   const removeFolder = useWorkspaceStore((state) => state.removeFolder)
+  const pathTip = usePointerTooltip()
   const project = useWorktreeStore((state) => state.projects[folder.path])
   const collapsed = useWorktreeStore((state) => state.collapsed[folder.path] === true)
   const toggleCollapsed = useWorktreeStore((state) => state.toggleCollapsed)
@@ -157,9 +150,9 @@ function ProjectRow({ folder }: { folder: WorkspaceFolder }): React.JSX.Element 
   const foldable = !folder.missing && hasChildRows(project)
   return (
     <ContextMenu>
-      <Tooltip delayDuration={PATH_TOOLTIP_DELAY_MS}>
+      <Tooltip delayDuration={PATH_TOOLTIP_DELAY_MS} onOpenChange={pathTip.onOpenChange}>
         <ContextMenuTrigger asChild>
-          <TooltipTrigger asChild>
+          <TooltipTrigger asChild onPointerMove={pathTip.track}>
             <li
               tabIndex={0}
               aria-label={folder.missing ? `${folder.name} (missing)` : folder.name}
@@ -211,7 +204,7 @@ function ProjectRow({ folder }: { folder: WorkspaceFolder }): React.JSX.Element 
             </li>
           </TooltipTrigger>
         </ContextMenuTrigger>
-        <PathTooltip path={folder.path} />
+        <TooltipContent {...pathTip.placement}>{folder.path}</TooltipContent>
       </Tooltip>
       <RowMenuContent cwd={folder.path} disabled={folder.missing}>
         <ContextMenuItem onSelect={() => void removeFolder(folder.path)}>
