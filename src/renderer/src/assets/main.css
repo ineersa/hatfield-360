@@ -6,10 +6,9 @@
 
 /*
  * Every component styles itself through these roles, never with raw values. Colours, radii and row
- * heights come from the active app theme (themes/app/<id>.css, generated from JetBrains UI themes by
- * `pnpm themes:import`, selected by data-theme on <html>; the role table is
- * scripts/themes/app-theme-roles.mts). Text styles and control sizes come from themes/base.css,
- * shared by every app theme. Tailwind's own colours and radii are switched off, so only roles exist.
+ * heights come from the active app theme (themes/app/<id>.css, ported from JetBrains UI themes,
+ * selected by data-theme on <html>); a new role goes into every app theme. Text styles and control
+ * sizes come from themes/base.css, shared by every app theme. Tailwind's own colours and radii are switched off, so only roles exist.
  */
 :root {
   /* App font settings (app.fontFamily, app.fontSize); the renderer overrides these from settings.json. */

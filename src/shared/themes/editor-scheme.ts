@@ -1,5 +1,5 @@
 /** How a JetBrains scheme decorates text: `EFFECT_TYPE` in the scheme file. */
-export type TextEffect = {
+type TextEffect = {
   type: 'box' | 'underline' | 'wave' | 'strikethrough' | 'bold-underline' | 'dotted-underline'
   color: string
 }
@@ -16,7 +16,7 @@ export type TextAttributes = {
 }
 
 /**
- * A JetBrains editor colour scheme with its parent schemes applied, as `pnpm themes:import` writes it:
+ * A JetBrains editor colour scheme with its parent schemes applied, ported once into JSON:
  * editor colours (`CARET_ROW_COLOR`, `LINE_NUMBERS_COLOR`, `ADDED_LINES_COLOR`, ...) and text
  * attributes per token kind, keyed by the scheme's own names. Colours are `#rrggbb` or `#rrggbbaa`.
  */

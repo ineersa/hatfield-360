@@ -10,7 +10,6 @@
     "test-results/**",
     "playwright-report/**",
     ".claude/skills/**",
-    ".hatfield/**",
-    "scripts/themes/sources/**"
+    ".hatfield/**"
   ]
 }

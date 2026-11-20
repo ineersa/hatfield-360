@@ -35,7 +35,7 @@ SOFTWARE.
 ## Catppuccin for JetBrains
 
 Source: https://github.com/catppuccin/jetbrains (plugin version 3.6.1)
-Used in: `scripts/themes/sources/catppuccin/` (UI themes and editor schemes, vendored), converted by `pnpm themes:import` into the Catppuccin app, editor and terminal themes under `src/renderer/src/assets/themes/` and `src/shared/themes/`
+Used in: the Catppuccin app, editor and terminal themes (`src/renderer/src/assets/themes/app/islands-catppuccin-*.css`, `src/renderer/src/assets/themes/editor/catppuccin-*.json`, `src/shared/themes/*-theme-catalog.ts`), ported from its UI themes and editor schemes
 
 ```
 MIT License
@@ -64,7 +64,7 @@ SOFTWARE.
 ## IntelliJ Platform themes
 
 Source: https://github.com/JetBrains/intellij-community (theme files as shipped in PhpStorm 2026.3's platform jars)
-Used in: `scripts/themes/sources/jetbrains/` (UI themes, editor schemes and their theme registrations, vendored), converted by `pnpm themes:import` into the Islands, Darcula, Light and High Contrast app, editor and terminal themes under `src/renderer/src/assets/themes/` and `src/shared/themes/`
+Used in: the app, editor and terminal themes under `src/renderer/src/assets/themes/` and `src/shared/themes/` (Islands, Darcula, Light and High Contrast, and the platform themes the Catppuccin themes extend), ported from its UI themes and editor schemes
 
 ```
 Copyright 2000-2026 JetBrains s.r.o.

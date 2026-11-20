@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import type { EditorThemeId } from '../../../shared/settings-api'
 import type { EditorScheme, TextAttributes } from '../../../shared/themes/editor-scheme'
 
-/** The schemes `pnpm themes:import` writes, each loaded only when chosen. */
+/** The editor schemes, each loaded only when chosen. */
 const SCHEMES = import.meta.glob<EditorScheme>('../assets/themes/editor/*.json', {
   import: 'default'
 })

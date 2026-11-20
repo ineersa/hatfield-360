@@ -58,7 +58,7 @@ Two columns, JetBrains-style, not Orca's three columns (no right-hand file/proje
 ## Look and themes
 
 - Default look is JetBrains **Islands Dark**: rounded "island" panels on a slightly lighter frame, activity bar and status bar on the frame.
-- Themes are ported from JetBrains: `pnpm themes:import` converts the UI themes and editor schemes vendored in `scripts/themes/sources/` (IntelliJ Platform Islands, Darcula, Light, High Contrast; Catppuccin) into the app's theme files. Pass a plugin `.jar`, an extracted folder or a scheme file to add more.
+- Themes are ported once from JetBrains UI themes and editor schemes (IntelliJ Platform Islands, Darcula, Light, High Contrast; Catppuccin) into the app's theme files, which are then maintained as ours.
 - Three independent theme choices, each a separate setting:
   - **App theme** (`workbench.colorTheme`): colour roles, radii and row heights (`src/renderer/src/assets/themes/app/<id>.css`, selected by `data-theme` on `<html>`). Text styles and control sizes shared by every app theme are in `themes/base.css`. Components use only these roles; lint rejects raw colours, text sizes, weights, radii and heights.
   - **Editor theme** (`editor.colorTheme`): syntax, editor and diff colours for the editor and diff viewer (#6, #7), one scheme JSON per theme in `src/renderer/src/assets/themes/editor/`.

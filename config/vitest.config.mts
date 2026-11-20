@@ -7,7 +7,9 @@ export default defineConfig({
   root,
   test: {
     environment: 'node',
-    include: ['src/**/*.test.ts', 'scripts/**/*.test.mts'],
+    include: ['src/**/*.test.ts'],
+    // Stylesheets load as their text (the app theme tests read them with ?raw); Vitest empties them otherwise.
+    css: { include: [/\.css(\?|$)/] },
     // A focused test would silently skip its siblings, locally as well as in CI.
     allowOnly: false
   }
