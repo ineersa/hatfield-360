@@ -8,8 +8,12 @@ import {
   parseShellLayout,
   parseWindowPlacement,
   placeWindow,
+  type Bounds,
   type WindowPlacement
 } from './window-state-document'
+
+const sameBounds = (a: Bounds, b: Bounds): boolean =>
+  a.x === b.x && a.y === b.y && a.width === b.width && a.height === b.height
 
 const WINDOW_STATE_FILE_NAME = 'window-state.json'
 const WINDOW_STATE_VERSION = 1
@@ -73,12 +77,16 @@ class WindowStateStore {
    * Follows the window's size, position and maximized state. A background launch never maximizes
    * its hidden window, so it keeps the saved maximized state instead of recording "not maximized".
    */
-  track(window: BrowserWindow, options: { background: boolean }): void {
+  track(window: BrowserWindow, options: { background: boolean; requested: Bounds }): void {
     const savedMaximized = this.placement?.maximized ?? false
+    // Fractional display scaling rounds the window a pixel or so outward from what was asked for;
+    // saving that would grow the window on every launch, so it's kept until the user moves or resizes it.
+    const opened = window.getNormalBounds()
     const record = (): void => {
       if (window.isDestroyed()) return
+      const bounds = window.getNormalBounds()
       this.placement = {
-        bounds: window.getNormalBounds(),
+        bounds: sameBounds(bounds, opened) ? options.requested : bounds,
         maximized: options.background ? savedMaximized : window.isMaximized()
       }
       this.scheduleSave()

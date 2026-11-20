@@ -37,7 +37,7 @@ export function createMainWindow(): BrowserWindow {
       window.show()
     })
   }
-  windowStateStore.track(window, { background })
+  windowStateStore.track(window, { background, requested: bounds })
 
   // The window only ever shows the app. Opening external links needs an explicit, validated IPC capability.
   window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
