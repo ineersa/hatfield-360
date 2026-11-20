@@ -262,8 +262,9 @@ test('the largest app font in the smallest window keeps the status bar and Setti
         const footerBox = await page.locator('footer').boundingBox()
         if (!gearBox || !footerBox) throw new Error('layout is not rendered')
         expect(gearBox.y + gearBox.height).toBeLessThanOrEqual(footerBox.y)
-        expect(footerBox.y + footerBox.height).toBeLessThanOrEqual(
-          Number(await page.evaluate('window.innerHeight'))
+        // Text line heights are fractional; allow under a pixel of rounding at the window edge.
+        expect(footerBox.y + footerBox.height).toBeLessThan(
+          Number(await page.evaluate('window.innerHeight')) + 1
         )
         await gear.click()
         await expect(settingsMain(page)).toBeVisible()
