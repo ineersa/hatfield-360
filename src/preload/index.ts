@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { type DesktopApi, IPC_CHANNELS } from '../shared/desktop-api'
 import { SETTINGS_CHANNELS, type SettingsView } from '../shared/settings-api'
+import { SHELL_LAYOUT_CHANNELS } from '../shared/shell-layout-api'
 import { type WorkspaceView, WORKSPACE_CHANNELS } from '../shared/workspace-api'
 
 const desktopApi: DesktopApi = {
@@ -24,6 +25,8 @@ const desktopApi: DesktopApi = {
     ipcRenderer.on(SETTINGS_CHANNELS.changed, listener)
     return () => ipcRenderer.removeListener(SETTINGS_CHANNELS.changed, listener)
   },
+  getShellLayout: () => ipcRenderer.invoke(SHELL_LAYOUT_CHANNELS.get),
+  saveShellLayout: (layout) => ipcRenderer.invoke(SHELL_LAYOUT_CHANNELS.save, layout),
   subscribeShowSettings: (callback) => {
     const listener = (): void => callback()
     ipcRenderer.on(SETTINGS_CHANNELS.showPage, listener)
