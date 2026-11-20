@@ -105,6 +105,8 @@ test('a narrow window shrinks the side panel so the main area stays on screen', 
         window.setContentSize(newWidth, 800)
       }, width)
 
+    // Window managers adjust requested sizes slightly, so the window goes back to the width it had.
+    const startWidth = Number(await page.evaluate('window.innerWidth'))
     await resizeHandle(page, 'Agents').focus()
     await page.keyboard.press('End')
     const chosenWidth = await panelWidth(page, 'Agents')
@@ -124,7 +126,7 @@ test('a narrow window shrinks the side panel so the main area stays on screen', 
     expect(await page.evaluate('document.documentElement.scrollWidth')).toBe(viewportWidth)
 
     // The chosen width is kept and comes back when there is room again.
-    await setWindowWidth(1200)
+    await setWindowWidth(startWidth)
     await expect.poll(() => panelWidth(page, 'Agents')).toBe(chosenWidth)
   })
 })

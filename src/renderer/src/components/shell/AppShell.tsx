@@ -28,9 +28,12 @@ export function AppShell(): React.JSX.Element {
   const connectSettings = useSettingsStore((state) => state.connect)
   const settingsOpen = useShellLayoutStore((state) => state.settingsOpen)
   const openSettings = useShellLayoutStore((state) => state.openSettings)
+  const connectLayout = useShellLayoutStore((state) => state.connect)
+  const layoutLoaded = useShellLayoutStore((state) => state.loaded)
 
   useEffect(() => connectWorkspace(), [connectWorkspace])
   useEffect(() => connectSettings(), [connectSettings])
+  useEffect(() => connectLayout(), [connectLayout])
   useEffect(() => window.desktop.subscribeShowSettings(openSettings), [openSettings])
   useAppFont()
   useEffect(() => {
@@ -43,6 +46,8 @@ export function AppShell(): React.JSX.Element {
   }
   const view = SHELL_VIEWS.find((candidate) => candidate.id === activeView) ?? SHELL_VIEWS[0]
   if (!view) throw new Error('No shell views defined')
+  // A blank frame for the moment it takes to read the saved layout, instead of a default one that jumps.
+  if (!layoutLoaded) return <div className="h-screen bg-background" />
 
   return (
     <TooltipProvider>

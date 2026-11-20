@@ -1,8 +1,7 @@
 import { FolderTree, GitCommitHorizontal, TerminalSquare, type LucideIcon } from 'lucide-react'
 import type { ComponentType } from 'react'
 import { WorkspacePanel } from '@/components/workspace/WorkspacePanel'
-
-export type ShellViewId = 'agents' | 'files' | 'git'
+import type { ShellViewId } from '../../../../shared/shell-layout-api'
 
 export type ShellView = {
   id: ShellViewId

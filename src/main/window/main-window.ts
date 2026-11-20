@@ -2,16 +2,18 @@ import { BrowserWindow } from 'electron'
 import { join } from 'node:path'
 import appIcon from '../../../resources/icon.png?asset'
 import { rendererEntryUrl } from './renderer-entry'
+import { MIN_WINDOW_SIZE } from './window-state-document'
+import { windowStateStore } from './window-state-store'
 import { isBackgroundLaunch } from './window-launch-mode'
 
 export function createMainWindow(): BrowserWindow {
   const background = isBackgroundLaunch(process.env)
+  const { bounds, maximized } = windowStateStore.initialPlacement()
   const window = new BrowserWindow({
-    width: 1200,
-    height: 800,
+    ...bounds,
     // Narrowest window that still fits the activity bar, a minimum side panel and a usable main area.
-    minWidth: 600,
-    minHeight: 400,
+    minWidth: MIN_WINDOW_SIZE.width,
+    minHeight: MIN_WINDOW_SIZE.height,
     show: false,
     // Menu bar hidden until Alt on Linux/Windows (user preference); macOS uses the top bar.
     autoHideMenuBar: true,
@@ -29,8 +31,13 @@ export function createMainWindow(): BrowserWindow {
   })
 
   if (!background) {
-    window.once('ready-to-show', () => window.show())
+    window.once('ready-to-show', () => {
+      // maximize() also shows the window, so a background launch never calls it.
+      if (maximized) window.maximize()
+      window.show()
+    })
   }
+  windowStateStore.track(window, { background, requested: bounds })
 
   // The window only ever shows the app. Opening external links needs an explicit, validated IPC capability.
   window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))

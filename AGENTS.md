@@ -52,6 +52,7 @@ Process boundary rules, enforced by lint (`.oxlintrc.json` overrides plus `confi
 
 - `main` is always releasable. Never break CI; if it's broken, fixing it comes first.
 - **Testing policy.** Prefer integration and real Electron E2E tests. Add unit tests only for a specific, meaningful behavior (pure logic with real inputs). Do not introduce mocks, stubs, spies standing in for collaborators, `vi.stubGlobal` or fake implementations without explicit user authorization. A test must fail when its change is reverted. Read [test anti-patterns](docs/agents/test-antipatterns.md) and use the `testing` skill.
+- Commits are not GPG-signed: commit with `git -c commit.gpgsign=false commit …`. Sign only merges.
 - Focused tests (`.only`) fail the run in both Vitest and Playwright; don't commit them.
 - New dependencies: prefer what's already installed. pnpm refuses versions younger than 3 days (`minimumReleaseAge`); don't bypass it.
 
