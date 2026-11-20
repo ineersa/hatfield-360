@@ -107,6 +107,8 @@ export function AppShell(): React.JSX.Element {
                 <SettingsPage />
               ) : workspaceEmpty ? (
                 <WelcomeScreen />
+              ) : view.MainEmpty ? (
+                <view.MainEmpty />
               ) : (
                 <div className="flex flex-1 flex-col items-center justify-center gap-3 p-8 text-center">
                   <view.Icon

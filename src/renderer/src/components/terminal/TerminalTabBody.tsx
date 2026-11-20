@@ -33,7 +33,11 @@ export function TerminalTabBody({
     const panes = new PaneManager(element, {
       terminalOptions: () => ({ ...currentTerminalOptions(), theme: terminalTheme() }),
       gpuAcceleration: () => useSettingsStore.getState().values['terminal.gpuAcceleration'],
-      onPaneCreated: (pane) => shells.set(pane.id, startPaneShell(pane, tab.cwd)),
+      onPaneCreated: (pane) =>
+        shells.set(
+          pane.id,
+          startPaneShell(pane, tab.cwd, () => panes.closePane(pane.id))
+        ),
       onPaneClosed: (paneId) => {
         shells.get(paneId)?.dispose()
         shells.delete(paneId)

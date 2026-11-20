@@ -121,6 +121,34 @@ test('Open Terminal Here runs a shell in the project that types, prints and resi
   }
 })
 
+test('the empty Agents view opens a terminal in the first project with one click', async () => {
+  const { userData, project, cleanup } = await seedProject()
+  try {
+    await withApp(
+      async (_app, page) => {
+        await expect(page.getByRole('button', { name: 'New Terminal' })).toBeVisible()
+        await saveScreenshot(page, 'terminal-empty-state')
+        await page
+          .getByRole('main', { name: 'Agents' })
+          .getByRole('button', { name: 'New Terminal' })
+          .click()
+        await expect(page.getByRole('tab', { name: 'pty-project', selected: true })).toBeVisible()
+        await run(page, panes(page), 'pwd')
+        await expect(screenText(panes(page))).toContainText(project)
+        await saveScreenshot(page, 'terminal-from-empty-state')
+
+        // Exiting the only shell closes its tab and brings the empty view back.
+        await run(page, panes(page), 'exit')
+        await expect(page.getByRole('tab')).toHaveCount(0)
+        await expect(page.getByRole('button', { name: 'New Terminal' })).toBeVisible()
+      },
+      { userDataDir: userData }
+    )
+  } finally {
+    await cleanup()
+  }
+})
+
 test('splits give each pane its own shell; panes close, take focus and resize', async () => {
   const { userData, cleanup } = await seedProject()
   try {
@@ -169,9 +197,13 @@ test('splits give each pane its own shell; panes close, take focus and resize', 
         await expect.poll(() => isRunning(closedPid)).toBe(false)
         expect(isRunning(firstPid)).toBe(true)
 
+        // A shell that exits cleanly takes its pane with it; one that fails keeps it, with its code.
         await run(page, first, 'exit')
-        await expect(first.getByRole('status')).toHaveText(/Process exited/)
+        await expect(panes(page)).toHaveCount(1)
         await expect.poll(() => isRunning(firstPid)).toBe(false)
+        await run(page, panes(page), 'exit 3')
+        await expect(panes(page).getByRole('status')).toHaveText('Process exited with code 3')
+        await expect(page.getByRole('tab')).toHaveCount(1)
       },
       { userDataDir: userData }
     )
@@ -187,10 +219,11 @@ test('tabs: closing one ends its shells, quitting ends all of them', async () =>
     await withApp(
       async (app, page) => {
         await openProjectTerminal(page)
-        await clickMenuItem(app, 'terminal-split-right')
+        await page.getByRole('button', { name: 'Split Right' }).click()
         await expect(panes(page)).toHaveCount(2)
-        await clickMenuItem(app, 'terminal-new-terminal')
+        await page.getByRole('button', { name: 'New Terminal' }).click()
         await expect(page.getByRole('tab')).toHaveCount(2)
+        await saveScreenshot(page, 'terminal-tabs')
         const secondTab = page.getByRole('tabpanel', { name: 'pty-project' }).last()
         const secondTabPid = await panePid(secondTab.getByTestId('terminal-pane'))
 

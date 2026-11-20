@@ -21,14 +21,23 @@ function showExited(pane: ManagedPane, exit: TerminalExit): void {
   const badge = document.createElement('div')
   badge.className = 'pane-exit-badge'
   badge.setAttribute('role', 'status')
-  badge.textContent =
-    exit.exitCode === 0 ? 'Process exited' : `Process exited with code ${exit.exitCode}`
+  badge.textContent = exit.signal
+    ? `Process ended by signal ${exit.signal}`
+    : `Process exited with code ${exit.exitCode}`
   pane.container.appendChild(badge)
   pane.terminal.options.cursorBlink = false
 }
 
-/** Starts a shell for the pane once its terminal has its first size, and wires keys, output and resizes. */
-export function startPaneShell(pane: ManagedPane, cwd: string | null): PaneShell {
+/**
+ * Starts a shell for the pane once its terminal has its first size, and wires keys, output and
+ * resizes. A shell that exits cleanly (`exit`, Ctrl+D) calls `onCleanExit`; one that fails keeps
+ * its pane with an exited badge so its last output can be read.
+ */
+export function startPaneShell(
+  pane: ManagedPane,
+  cwd: string | null,
+  onCleanExit: () => void
+): PaneShell {
   const { terminal } = pane
   let sessionId: string | null = null
   let exited = false
@@ -71,7 +80,8 @@ export function startPaneShell(pane: ManagedPane, cwd: string | null): PaneShell
             data: (data) => terminal.write(data),
             exit: (exit) => {
               exited = true
-              showExited(pane, exit)
+              if (exit.exitCode === 0 && !exit.signal) onCleanExit()
+              else showExited(pane, exit)
             }
           })
           for (const data of typedBeforeStart.splice(0)) {

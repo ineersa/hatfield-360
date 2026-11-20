@@ -1,5 +1,6 @@
 import { FolderTree, GitCommitHorizontal, TerminalSquare, type LucideIcon } from 'lucide-react'
 import type { ComponentType } from 'react'
+import { TerminalEmptyState } from '@/components/terminal/TerminalEmptyState'
 import { WorkspacePanel } from '@/components/workspace/WorkspacePanel'
 import type { ShellViewId } from '../../../../shared/shell-layout-api'
 
@@ -9,6 +10,8 @@ export type ShellView = {
   description: string
   Icon: LucideIcon
   mainPlaceholder: string
+  /** Replaces the placeholder text when the view has something to start with. */
+  MainEmpty?: ComponentType
 } & (
   | { Panel: ComponentType; panelTitle?: never; panelPlaceholder?: never }
   | { Panel?: never; panelTitle: string; panelPlaceholder: string }
@@ -21,8 +24,8 @@ export const SHELL_VIEWS: readonly ShellView[] = [
     description: 'Workspace, worktrees and agent sessions',
     Icon: TerminalSquare,
     Panel: WorkspacePanel,
-    mainPlaceholder:
-      'Open a terminal from a project’s context menu (Open Terminal Here) or with Terminal → New Terminal.'
+    MainEmpty: TerminalEmptyState,
+    mainPlaceholder: 'Terminals with tabs and split panes open here.'
   },
   {
     id: 'files',

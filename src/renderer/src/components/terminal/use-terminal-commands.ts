@@ -1,3 +1,4 @@
+import { rendererPlatform } from '@/lib/terminal-shortcut-label'
 import { useEffect } from 'react'
 import { connectTerminalOutput } from '@/lib/terminal-output-router'
 import { terminalCommandForKey } from '@/lib/terminal-shortcut-match'
@@ -6,10 +7,8 @@ import { useWorkspaceStore } from '@/state/workspace-store'
 import type { TerminalCommand } from '../../../../shared/terminal-api'
 import { terminalTabControllers } from './terminal-tab-controllers'
 
-const platform = /Mac/.test(navigator.userAgent) ? 'darwin' : 'other'
-
 /** Runs a Terminal menu command; false when it has nothing to act on. */
-function runTerminalCommand(command: TerminalCommand): boolean {
+export function runTerminalCommand(command: TerminalCommand): boolean {
   const { tabs, activeTabId, openTerminal, cycleTab } = useTerminalStore.getState()
   const activeTab = tabs.find((tab) => tab.id === activeTabId)
   switch (command) {
@@ -41,7 +40,7 @@ export function useTerminalCommands(): void {
     })
     // Capture phase, before xterm turns the keys into input for the shell.
     const onKeyDown = (event: KeyboardEvent): void => {
-      const command = terminalCommandForKey(event, platform)
+      const command = terminalCommandForKey(event, rendererPlatform)
       if (!command || !runTerminalCommand(command)) return
       event.preventDefault()
       event.stopPropagation()
