@@ -78,7 +78,13 @@ export function startPaneShell(
           pane.container.dataset.terminalId = session.id
           pane.container.dataset.pid = String(session.pid)
           stopListening = listenToSession(session.id, {
-            data: (data) => terminal.write(data),
+            // Acknowledged once xterm has parsed it, so main reads the shell only as fast as it draws.
+            data: (data) =>
+              terminal.write(data, () => {
+                void window.desktop
+                  .ackTerminalOutput(session.id, data.length)
+                  .catch(() => undefined)
+              }),
             exit: (exit) => {
               exited = true
               if (!exit.signal) onShellEnded()

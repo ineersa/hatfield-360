@@ -10,7 +10,8 @@ import type { ManagedPaneInternal, PaneManagerOptions } from './pane-manager-typ
 
 /** Below this a pane is hidden or mid-layout; fitting would pin its shell to a two-column grid. */
 const MIN_FIT_BOX = { width: 48, height: 24 }
-const MIN_FIT_GRID = { cols: 8, rows: 4 }
+/** Any real grid fits: a split dragged to its smallest still shows its prompt line. */
+const MIN_FIT_GRID = { cols: 2, rows: 1 }
 
 function defaultTerminalOptions(): ITerminalOptions {
   return {

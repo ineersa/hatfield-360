@@ -9,13 +9,24 @@ import {
   type TerminalSession
 } from '../../shared/terminal-api'
 import { defaultShell } from './default-shell'
+import { descendantPids, isProcessAlive } from './process-tree'
 import { terminalEnvironment } from './terminal-environment'
 
 /** Output is sent in batches: a busy program writes thousands of small chunks a second. */
 const OUTPUT_FLUSH_MS = 5
 const OUTPUT_FLUSH_BYTES = 256 * 1024
-/** How long a shell gets to exit after SIGHUP before its process group is killed. */
+/** How long a shell and its jobs get to exit after SIGHUP before they are killed. */
 const KILL_GRACE_MS = 1500
+const EXIT_POLL_MS = 50
+/**
+ * Flow control: output the page hasn't drawn yet. Past the high mark the pty stops being read (the
+ * program blocks on its writes) until xterm catches up to the low mark; without it a flood
+ * outruns xterm, which drops data once its buffer passes 50 MB.
+ */
+const UNACKED_HIGH_BYTES = 2 * 1024 * 1024
+const UNACKED_LOW_BYTES = 512 * 1024
+
+const delay = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
 
 type Session = {
   id: string
@@ -24,7 +35,12 @@ type Session = {
   output: string[]
   outputBytes: number
   flushTimer: NodeJS.Timeout | null
+  unacked: number
+  paused: boolean
+  /** Set once the page it was started for is gone: nothing more is sent for it. */
+  detached: boolean
   exited: Promise<void>
+  ending: Promise<void> | null
 }
 
 /** Packaged macOS builds can lose node-pty's spawn-helper exec bit, which breaks every spawn. */
@@ -75,7 +91,11 @@ class TerminalSessions {
       output: [],
       outputBytes: 0,
       flushTimer: null,
-      exited: new Promise((resolve) => pty.onExit(() => resolve()))
+      unacked: 0,
+      paused: false,
+      detached: false,
+      exited: new Promise((resolve) => pty.onExit(() => resolve())),
+      ending: null
     }
     this.sessions.set(id, session)
     this.endWithOwner(owner)
@@ -84,7 +104,7 @@ class TerminalSessions {
       this.flushOutput(session)
       this.sessions.delete(id)
       const exit: TerminalExit = { id, exitCode, signal: signal ?? null }
-      if (!owner.isDestroyed()) owner.send(TERMINAL_CHANNELS.exit, exit)
+      if (!session.detached && !owner.isDestroyed()) owner.send(TERMINAL_CHANNELS.exit, exit)
     })
     return { id, pid: pty.pid, shell: shell.file }
   }
@@ -103,6 +123,17 @@ class TerminalSessions {
     }
   }
 
+  /** The page has drawn `bytes` more of the session's output. */
+  acknowledge(owner: WebContents, id: string, bytes: number): void {
+    const session = this.owned(owner, id)
+    if (!session) return
+    session.unacked = Math.max(0, session.unacked - bytes)
+    if (session.paused && session.unacked <= UNACKED_LOW_BYTES) {
+      session.paused = false
+      session.pty.resume()
+    }
+  }
+
   kill(owner: WebContents, id: string): Promise<void> {
     const session = this.owned(owner, id)
     return session ? this.end(session) : Promise.resolve()
@@ -113,29 +144,43 @@ class TerminalSessions {
     await Promise.all([...this.sessions.values()].map((session) => this.end(session)))
   }
 
-  /** SIGHUP like a closed terminal window, then SIGKILL for the process group if it lingers. */
-  private async end(session: Session): Promise<void> {
+  private end(session: Session): Promise<void> {
+    session.ending ??= this.terminate(session)
+    return session.ending
+  }
+
+  /**
+   * SIGHUP to the shell and everything it started, like a closed terminal window, then SIGKILL
+   * for whatever still runs after the grace period. Jobs run in their own process groups and can
+   * outlive the shell, so they are found up front and waited for even once the shell is gone.
+   */
+  private async terminate(session: Session): Promise<void> {
+    const unix = process.platform !== 'win32'
+    const jobs = unix ? await descendantPids(session.pty.pid) : []
+    const shell = { exited: false }
+    void session.exited.then(() => (shell.exited = true))
+    // A paused pty would leave a program blocked on its writes instead of seeing the hangup.
+    if (session.paused) {
+      session.paused = false
+      session.pty.resume()
+    }
     try {
       session.pty.kill()
     } catch {
       // Already gone.
     }
-    let timer: NodeJS.Timeout | null = null
-    const timedOut = new Promise<boolean>((resolve) => {
-      timer = setTimeout(() => resolve(true), KILL_GRACE_MS)
-    })
-    const lingered = await Promise.race([session.exited.then(() => false), timedOut])
-    if (timer) clearTimeout(timer)
-    if (!lingered) return
-    if (process.platform !== 'win32') {
-      try {
-        process.kill(-session.pty.pid, 'SIGKILL')
-      } catch {
-        // The group is gone or was never separate from the shell.
-      }
+    for (const pid of jobs) sendSignal(pid, 'SIGHUP')
+
+    const lingering = () => jobs.filter(isProcessAlive)
+    const deadline = Date.now() + KILL_GRACE_MS
+    while (Date.now() < deadline && (!shell.exited || lingering().length > 0)) {
+      await delay(EXIT_POLL_MS)
     }
+    if (unix) for (const pid of lingering()) sendSignal(pid, 'SIGKILL')
+    if (shell.exited) return
+    if (unix) sendSignal(-session.pty.pid, 'SIGKILL')
     try {
-      session.pty.kill(process.platform === 'win32' ? undefined : 'SIGKILL')
+      session.pty.kill(unix ? 'SIGKILL' : undefined)
     } catch {
       // Already gone.
     }
@@ -148,13 +193,24 @@ class TerminalSessions {
     return session
   }
 
+  /**
+   * A window's shells end with the page that started them: when the window closes, and when its
+   * page reloads or crashes, since the new page knows nothing of them.
+   */
   private endWithOwner(owner: WebContents): void {
     if (this.trackedOwners.has(owner)) return
     this.trackedOwners.add(owner)
-    owner.once('destroyed', () => {
+    const endOwned = () => {
       for (const session of this.sessions.values()) {
-        if (session.owner === owner) void this.end(session)
+        if (session.owner !== owner) continue
+        session.detached = true
+        void this.end(session)
       }
+    }
+    owner.once('destroyed', endOwned)
+    owner.on('render-process-gone', endOwned)
+    owner.on('did-start-navigation', (details) => {
+      if (details.isMainFrame && !details.isSameDocument) endOwned()
     })
   }
 
@@ -175,7 +231,21 @@ class TerminalSessions {
     const data = session.output.join('')
     session.output = []
     session.outputBytes = 0
-    if (!session.owner.isDestroyed()) session.owner.send(TERMINAL_CHANNELS.data, session.id, data)
+    if (session.detached || session.owner.isDestroyed()) return
+    session.owner.send(TERMINAL_CHANNELS.data, session.id, data)
+    session.unacked += data.length
+    if (!session.paused && session.unacked >= UNACKED_HIGH_BYTES) {
+      session.paused = true
+      session.pty.pause()
+    }
+  }
+}
+
+function sendSignal(pid: number, name: NodeJS.Signals): void {
+  try {
+    process.kill(pid, name)
+  } catch {
+    // Already gone.
   }
 }
 

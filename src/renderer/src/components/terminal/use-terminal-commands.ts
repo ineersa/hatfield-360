@@ -7,10 +7,22 @@ import { useWorkspaceStore } from '@/state/workspace-store'
 import type { TerminalCommand } from '../../../../shared/terminal-api'
 import { terminalTabControllers } from './terminal-tab-controllers'
 
-/** Runs a Terminal menu command; false when it has nothing to act on. */
+/** Gives the keys to the active tab's focused pane, if the terminals are on screen. */
+export function focusActiveTerminal(): void {
+  const { activeTabId } = useTerminalStore.getState()
+  const controller = activeTabId ? terminalTabControllers.get(activeTabId) : undefined
+  if (controller?.isShown()) controller.focus()
+}
+
+/**
+ * Runs a Terminal menu command; false when it has nothing to act on. Commands on tabs and panes
+ * act only on terminals on screen: a shortcut pressed in Settings must not close a hidden shell.
+ */
 export function runTerminalCommand(command: TerminalCommand): boolean {
   const { tabs, activeTabId, openTerminal, cycleTab } = useTerminalStore.getState()
   const activeTab = tabs.find((tab) => tab.id === activeTabId)
+  const controller = activeTab ? terminalTabControllers.get(activeTab.id) : undefined
+  const shown = controller?.isShown() ?? false
   switch (command) {
     case 'new-terminal': {
       const firstFolder = useWorkspaceStore
@@ -21,13 +33,13 @@ export function runTerminalCommand(command: TerminalCommand): boolean {
     }
     case 'next-tab':
     case 'previous-tab':
+      if (!shown) return false
       cycleTab(command === 'next-tab' ? 1 : -1)
-      return tabs.length > 0
-    default: {
-      const controller = activeTab ? terminalTabControllers.get(activeTab.id) : undefined
-      controller?.run(command)
-      return !!controller
-    }
+      return true
+    default:
+      if (!controller || !shown) return false
+      controller.run(command)
+      return true
   }
 }
 

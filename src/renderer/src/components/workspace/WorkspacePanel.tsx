@@ -8,6 +8,8 @@ import {
 } from '@/components/ui/context-menu'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/class-names'
+import { useRef } from 'react'
+import { focusActiveTerminal } from '@/components/terminal/use-terminal-commands'
 import { useTerminalStore } from '@/state/terminal-store'
 import { useWorkspaceStore } from '@/state/workspace-store'
 import type { WorkspaceFolder } from '../../../../shared/workspace-api'
@@ -15,6 +17,7 @@ import type { WorkspaceFolder } from '../../../../shared/workspace-api'
 function ProjectRow({ folder }: { folder: WorkspaceFolder }): React.JSX.Element {
   const removeFolder = useWorkspaceStore((state) => state.removeFolder)
   const openTerminal = useTerminalStore((state) => state.openTerminal)
+  const openedTerminal = useRef(false)
   return (
     <ContextMenu>
       <Tooltip>
@@ -48,8 +51,22 @@ function ProjectRow({ folder }: { folder: WorkspaceFolder }): React.JSX.Element 
           {folder.path}
         </TooltipContent>
       </Tooltip>
-      <ContextMenuContent>
-        <ContextMenuItem disabled={folder.missing} onSelect={() => openTerminal(folder.path)}>
+      <ContextMenuContent
+        onCloseAutoFocus={(event) => {
+          if (!openedTerminal.current) return
+          // The new terminal gets the keys, not the project row the menu would return them to.
+          event.preventDefault()
+          openedTerminal.current = false
+          setTimeout(focusActiveTerminal, 0)
+        }}
+      >
+        <ContextMenuItem
+          disabled={folder.missing}
+          onSelect={() => {
+            openedTerminal.current = true
+            openTerminal(folder.path)
+          }}
+        >
           <SquareTerminal aria-hidden />
           Open Terminal Here
         </ContextMenuItem>

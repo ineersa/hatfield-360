@@ -99,7 +99,12 @@ export function TerminalTabs({ hidden }: { hidden: boolean }): React.JSX.Element
       </div>
       <div className="flex min-h-0 flex-1 flex-col">
         {tabs.map((tab) => (
-          <TerminalTabBody key={tab.id} tab={tab} active={tab.id === activeTabId} />
+          <TerminalTabBody
+            key={tab.id}
+            tab={tab}
+            active={tab.id === activeTabId}
+            shown={tab.id === activeTabId && !hidden}
+          />
         ))}
       </div>
     </div>

@@ -360,6 +360,99 @@ test('splits give each pane its own shell; panes close, take focus and resize', 
   }
 })
 
+test('terminals take the keys when they show, ignore pane keys while hidden, fit small panes and end with the page', async () => {
+  const { userData, cleanup } = await seedProject()
+  try {
+    await withApp(
+      async (_app, page) => {
+        await openProjectTerminal(page)
+        const pane = panes(page)
+        const pid = await panePid(pane)
+        // Typed straight after the project menu closes, without clicking the terminal.
+        await page.keyboard.type('echo straight-from-menu')
+        await page.keyboard.press('Enter')
+        await expect(
+          screenText(pane).getByText('straight-from-menu', { exact: true })
+        ).toBeVisible()
+
+        // Settings covers the terminals: pane shortcuts there must not close or split them.
+        await page.getByRole('button', { name: 'Settings' }).click()
+        await expect(page.getByRole('main', { name: 'Settings' })).toBeVisible()
+        await press(page, 'close-pane')
+        await press(page, 'split-down')
+        await page.getByRole('button', { name: 'Agents' }).click()
+        await expect(panes(page)).toHaveCount(1)
+        expect(isRunning(pid)).toBe(true)
+        await page.keyboard.type('echo back-from-settings')
+        await page.keyboard.press('Enter')
+        await expect(
+          screenText(pane).getByText('back-from-settings', { exact: true })
+        ).toBeVisible()
+
+        // A split dragged to its smallest still fits its terminal, so the prompt stays in view.
+        await run(page, pane, isWindows ? '1..60' : 'seq 1 60')
+        await press(page, 'split-down')
+        await expect(panes(page)).toHaveCount(2)
+        const top = panes(page).first()
+        const divider = page.getByRole('separator', { name: 'Resize panes above and below' })
+        const handle = await divider.boundingBox()
+        if (!handle) throw new Error('no divider')
+        await page.mouse.move(handle.x + handle.width / 2, handle.y + handle.height / 2)
+        await page.mouse.down()
+        await page.mouse.move(handle.x + handle.width / 2, 0, { steps: 5 })
+        await page.mouse.up()
+        await expect.poll(async () => (await top.boundingBox())?.height ?? 0).toBeLessThan(60)
+        await expect
+          .poll(async () => {
+            const paneBox = await top.boundingBox()
+            const screenBox = await top.locator('.xterm-screen').boundingBox()
+            return paneBox && screenBox
+              ? paneBox.y + paneBox.height - (screenBox.y + screenBox.height)
+              : -1
+          })
+          .toBeGreaterThanOrEqual(0)
+        await saveScreenshot(page, 'terminal-small-pane')
+        const pids = [pid, await panePid(panes(page).last())]
+
+        // Reloading the page ends its shells; the new page starts without terminals.
+        await page.reload()
+        await expect(page.getByRole('button', { name: 'New Terminal' })).toBeVisible()
+        await expect.poll(() => pids.filter(isRunning)).toEqual([])
+      },
+      { userDataDir: userData }
+    )
+  } finally {
+    await cleanup()
+  }
+})
+
+test('a flood of output reaches the terminal whole, at the pace it can draw', async () => {
+  test.skip(isWindows, 'Prints the flood with Unix tools.')
+  const { userData, cleanup } = await seedProject()
+  try {
+    await withApp(
+      async (_app, page) => {
+        // xterm throws from write() once more than 50 MB waits to be parsed, dropping that output.
+        const pageErrors: string[] = []
+        page.on('pageerror', (error) => pageErrors.push(error.message))
+        await openProjectTerminal(page)
+        const pane = panes(page)
+        await panePid(pane)
+        // 80 MB of densely styled text: the shell writes it far faster than xterm can parse it.
+        const line = String.raw`\e[31mabcd\e[32;1mefgh\e[0m ijkl\e[4mmnop\e[0m qrst`
+        await run(page, pane, `yes $'${line}${line}' | head -c 80000000; echo; echo flood-$((6*7))`)
+        await expect(screenText(pane).getByText('flood-42', { exact: true })).toBeVisible({
+          timeout: 60_000
+        })
+        expect(pageErrors).toEqual([])
+      },
+      { userDataDir: userData }
+    )
+  } finally {
+    await cleanup()
+  }
+})
+
 test('tabs: closing one ends its shells, quitting ends all of them', async () => {
   const { userData, cleanup } = await seedProject()
   const pids: number[] = []
@@ -373,11 +466,21 @@ test('tabs: closing one ends its shells, quitting ends all of them', async () =>
         await expect(page.getByRole('tab')).toHaveCount(2)
         await saveScreenshot(page, 'terminal-tabs')
         const secondTab = page.getByRole('tabpanel', { name: 'pty-project' }).last()
-        const secondTabPid = await panePid(secondTab.getByTestId('terminal-pane'))
+        const secondTabPane = secondTab.getByTestId('terminal-pane')
+        const secondTabPid = await panePid(secondTabPane)
+        let jobPid = 0
+        if (!isWindows) {
+          // A job in its own process group that ignores the hangup must still end with its tab.
+          await run(page, secondTabPane, `bash -c 'trap "" HUP; echo job-$$; exec sleep 600'`)
+          await expect(screenText(secondTabPane)).toContainText(/job-\d+/)
+          jobPid = Number(/job-(\d+)/.exec(await screenText(secondTabPane).innerText())?.[1])
+          expect(isRunning(jobPid)).toBe(true)
+        }
 
         await page.getByRole('button', { name: 'Close pty-project' }).last().click()
         await expect(page.getByRole('tab')).toHaveCount(1)
         await expect.poll(() => isRunning(secondTabPid)).toBe(false)
+        if (!isWindows) await expect.poll(() => isRunning(jobPid)).toBe(false)
 
         // The first tab's shells keep running while it was hidden and after it shows again.
         await expect(panes(page)).toHaveCount(2)

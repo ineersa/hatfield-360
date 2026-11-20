@@ -17,12 +17,17 @@ function currentTerminalOptions(): { fontFamily: string; fontSize: number } {
 /** One tab's split panes; mounted while the tab is open, so its shells live while it is hidden. */
 export function TerminalTabBody({
   tab,
-  active
+  active,
+  shown
 }: {
   tab: TerminalTab
+  /** The tab chosen in the strip. */
   active: boolean
+  /** Active and on screen: no other page (Settings, another view) covers the terminals. */
+  shown: boolean
 }): React.JSX.Element {
   const root = useRef<HTMLDivElement>(null)
+  const isShown = useRef(shown)
   const manager = useRef<PaneManager | null>(null)
   const fontFamily = useSettingsStore((state) => state.values['terminal.fontFamily'])
   const fontSize = useSettingsStore((state) => state.values['terminal.fontSize'])
@@ -67,7 +72,8 @@ export function TerminalTabBody({
         else if (command === 'split-down') panes.splitPane(activePane.id, 'horizontal')
         else panes.closePane(activePane.id)
       },
-      focus: () => panes.getActivePane()?.terminal.focus()
+      focus: () => panes.getActivePane()?.terminal.focus(),
+      isShown: () => isShown.current
     })
     return () => {
       terminalTabControllers.delete(tab.id)
@@ -87,8 +93,13 @@ export function TerminalTabBody({
   }, [gpuAcceleration])
 
   useEffect(() => {
-    if (active) terminalTabControllers.get(tab.id)?.focus()
-  }, [active, tab.id])
+    isShown.current = shown
+  }, [shown])
+
+  // Showing the terminals again (a tab chosen, back from Settings or another view) gives them the keys.
+  useEffect(() => {
+    if (shown) terminalTabControllers.get(tab.id)?.focus()
+  }, [shown, tab.id])
 
   return (
     <TerminalContextMenu

@@ -38,6 +38,12 @@ export function registerTerminalIpc(): void {
     terminalSessions.resize(event.sender, id, size.cols, size.rows)
   })
 
+  handleTrusted(TERMINAL_CHANNELS.ack, (event, id, bytes) => {
+    if (!isTerminalId(id) || typeof bytes !== 'number' || !Number.isSafeInteger(bytes) || bytes < 0)
+      throw new Error('Invalid terminal acknowledgement.')
+    terminalSessions.acknowledge(event.sender, id, bytes)
+  })
+
   handleTrusted(TERMINAL_CHANNELS.kill, (event, id) => {
     if (!isTerminalId(id)) throw new Error('Invalid terminal.')
     return terminalSessions.kill(event.sender, id)

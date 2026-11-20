@@ -26,6 +26,7 @@ export const TERMINAL_CHANNELS = {
   write: 'terminal:write',
   resize: 'terminal:resize',
   kill: 'terminal:kill',
+  ack: 'terminal:ack',
   openLink: 'terminal:open-link',
   readClipboard: 'terminal:read-clipboard',
   writeClipboard: 'terminal:write-clipboard',
@@ -39,6 +40,8 @@ export type TerminalApi = {
   writeTerminal: (id: string, data: string) => Promise<void>
   resizeTerminal: (id: string, cols: number, rows: number) => Promise<void>
   killTerminal: (id: string) => Promise<void>
+  /** Tells main the page has drawn `bytes` (string length) of the terminal's output: flow control. */
+  ackTerminalOutput: (id: string, bytes: number) => Promise<void>
   /** Opens an http(s) link printed in a terminal in the default browser. */
   openTerminalLink: (url: string) => Promise<void>
   /** The clipboard's text for a terminal paste; '' when it holds none (an image, say). */
