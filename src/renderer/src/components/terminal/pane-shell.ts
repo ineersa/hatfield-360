@@ -30,13 +30,14 @@ function showExited(pane: ManagedPane, exit: TerminalExit): void {
 
 /**
  * Starts a shell for the pane once its terminal has its first size, and wires keys, output and
- * resizes. A shell that exits cleanly (`exit`, Ctrl+D) calls `onCleanExit`; one that fails keeps
- * its pane with an exited badge so its last output can be read.
+ * resizes. A shell that ends itself (`exit`, Ctrl+D) calls `onShellEnded`, whatever its exit code:
+ * bash exits with its last command's status. One killed by a signal keeps its pane, with a badge,
+ * so its last output can be read.
  */
 export function startPaneShell(
   pane: ManagedPane,
   cwd: string | null,
-  onCleanExit: () => void
+  onShellEnded: () => void
 ): PaneShell {
   const { terminal } = pane
   let sessionId: string | null = null
@@ -80,7 +81,7 @@ export function startPaneShell(
             data: (data) => terminal.write(data),
             exit: (exit) => {
               exited = true
-              if (exit.exitCode === 0 && !exit.signal) onCleanExit()
+              if (!exit.signal) onShellEnded()
               else showExited(pane, exit)
             }
           })

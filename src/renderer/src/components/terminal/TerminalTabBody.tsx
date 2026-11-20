@@ -6,6 +6,7 @@ import { useSettingsStore } from '@/state/settings-store'
 import { useTerminalStore, type TerminalTab } from '@/state/terminal-store'
 import { startPaneShell, type PaneShell } from './pane-shell'
 import { bindClipboardKeys } from './terminal-clipboard'
+import { TerminalContextMenu } from './TerminalContextMenu'
 import { terminalTabControllers } from './terminal-tab-controllers'
 
 function currentTerminalOptions(): { fontFamily: string; fontSize: number } {
@@ -90,13 +91,18 @@ export function TerminalTabBody({
   }, [active, tab.id])
 
   return (
-    <div
-      ref={root}
-      role="tabpanel"
-      aria-label={tab.title}
-      data-testid="terminal-tab-panel"
-      className="min-h-0 flex-1 rounded-b-xl"
-      hidden={!active}
-    />
+    <TerminalContextMenu
+      activeTerminal={() => manager.current?.getActivePane()?.terminal ?? null}
+      runCommand={(command) => terminalTabControllers.get(tab.id)?.run(command)}
+    >
+      <div
+        ref={root}
+        role="tabpanel"
+        aria-label={tab.title}
+        data-testid="terminal-tab-panel"
+        className="min-h-0 flex-1 rounded-b-xl"
+        hidden={!active}
+      />
+    </TerminalContextMenu>
   )
 }

@@ -1,4 +1,4 @@
-import { expect, test, type Locator, type Page } from '@playwright/test'
+import { expect, test, type ElectronApplication, type Locator, type Page } from '@playwright/test'
 import { mkdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { TerminalCommand } from '../../src/shared/terminal-api'
@@ -163,62 +163,116 @@ test('the empty Agents view opens a terminal in the first project with one click
   }
 })
 
+/**
+ * On a real display the test shares the user's clipboard. Plain text is saved and put back;
+ * anything else (an image) can't be (reading its contents crashes Electron 45's main process),
+ * so the test is skipped rather than lose it. Under xvfb and in CI the clipboard is the test's.
+ */
+async function keepUserClipboard(app: ElectronApplication): Promise<(() => Promise<void>) | null> {
+  const textOnly = await app.evaluate(async ({ clipboard }) =>
+    (await clipboard.read()).every((item) =>
+      item.types.every((type) => type.startsWith('text/plain'))
+    )
+  )
+  if (!textOnly) return null
+  const text = await app.evaluate(({ clipboard }) => clipboard.readText())
+  return () => app.evaluate(({ clipboard }, saved) => clipboard.writeText(saved), text)
+}
+
 test('the system copy and paste keys copy and paste, and Ctrl+C still interrupts', async () => {
   const { userData, cleanup } = await seedProject()
   const modifier = process.platform === 'darwin' ? 'Meta' : 'Control'
   try {
     await withApp(
       async (app, page) => {
-        await openProjectTerminal(page)
-        const pane = panes(page)
-        await panePid(pane)
+        const restoreClipboard = await keepUserClipboard(app)
+        test.skip(
+          restoreClipboard === null,
+          "The clipboard holds more than text, which the test couldn't put back."
+        )
+        try {
+          await openProjectTerminal(page)
+          const pane = panes(page)
+          await panePid(pane)
 
-        await app.evaluate(({ clipboard }) => clipboard.writeText('pasted-77'))
-        await pane.click()
-        await page.keyboard.type('echo ')
-        await page.keyboard.press(`${modifier}+V`)
-        await page.keyboard.press('Enter')
-        // Pasted once, as text: the command line and its output, no ^V and no second paste.
-        await expect(screenText(pane)).toContainText('echo pasted-77')
-        await expect
-          .poll(
-            async () => ((await screenText(pane).textContent()) ?? '').split('pasted-77').length - 1
-          )
-          .toBe(2)
-
-        // With no text on the clipboard (an image), Ctrl+V reaches the program as ^V, as does
-        // Ctrl+Shift+V always: `od` shows the byte (026 octal).
-        if (!isWindows) {
-          await app.evaluate(({ clipboard }) => clipboard.clear())
-          // -iexten: the tty would otherwise take the first ^V as "insert the next key literally".
-          await run(page, pane, 'stty -iexten; od -c')
-          await page.keyboard.press('Control+V')
-          await expect(screenText(pane)).toContainText('od -c^V')
-          await page.keyboard.press('Control+Shift+V')
-          await expect(screenText(pane)).toContainText('od -c^V^V')
+          await app.evaluate(({ clipboard }) => clipboard.writeText('pasted-77'))
+          await pane.click()
+          await page.keyboard.type('echo ')
+          await page.keyboard.press(`${modifier}+V`)
           await page.keyboard.press('Enter')
-          await page.keyboard.press('Control+D')
-          await expect(screenText(pane)).toContainText(/026\s+026/)
+          // Pasted once, as text: the command line and its output, no ^V and no second paste.
+          await expect(screenText(pane)).toContainText('echo pasted-77')
+          await expect
+            .poll(
+              async () =>
+                ((await screenText(pane).textContent()) ?? '').split('pasted-77').length - 1
+            )
+            .toBe(2)
+
+          // With no text on the clipboard (an image), Ctrl+V reaches the program as ^V, as does
+          // Ctrl+Shift+V always: `od` shows the byte (026 octal).
+          if (!isWindows) {
+            await app.evaluate(({ clipboard }) => clipboard.clear())
+            // -iexten: the tty would otherwise take the first ^V as "insert the next key literally".
+            await run(page, pane, 'stty -iexten; od -c')
+            await page.keyboard.press('Control+V')
+            await expect(screenText(pane)).toContainText('od -c^V')
+            await page.keyboard.press('Control+Shift+V')
+            await expect(screenText(pane)).toContainText('od -c^V^V')
+            await page.keyboard.press('Enter')
+            await page.keyboard.press('Control+D')
+            await expect(screenText(pane)).toContainText(/026\s+026/)
+          }
+
+          await run(page, pane, 'echo copy-me-42')
+          const output = screenText(pane).getByText('copy-me-42', { exact: true })
+          // xterm's screen layer takes the mouse above its text rows: double-click where the word shows.
+          const word = await output.boundingBox()
+          if (!word) throw new Error('copy-me-42 is not on screen')
+          await page.mouse.dblclick(word.x + word.width / 2, word.y + word.height / 2)
+          await page.keyboard.press(`${modifier}+C`)
+          await expect
+            .poll(() => app.evaluate(({ clipboard }) => clipboard.readText()))
+            .toBe('copy-me-42')
+
+          // The right-click menu copies a selection, pastes, splits and closes the pane under the mouse.
+          await app.evaluate(({ clipboard }) => clipboard.writeText('something-else'))
+          await page.mouse.dblclick(word.x + word.width / 2, word.y + word.height / 2)
+          await page.mouse.click(word.x + word.width / 2, word.y + word.height / 2, {
+            button: 'right'
+          })
+          const menu = page.getByRole('menu')
+          await saveScreenshot(page, 'terminal-context-menu')
+          await menu.getByRole('menuitem', { name: 'Copy' }).click()
+          await expect
+            .poll(() => app.evaluate(({ clipboard }) => clipboard.readText()))
+            .toBe('copy-me-42')
+          // Closing the menu gives the keys back to the terminal.
+          await expect(pane.getByRole('textbox', { name: 'Terminal input' })).toBeFocused()
+          await page.keyboard.type('echo menu-')
+          await pane.click({ button: 'right' })
+          await expect(menu.getByRole('menuitem', { name: 'Copy' })).toBeDisabled()
+          await menu.getByRole('menuitem', { name: 'Paste' }).click()
+          await expect(screenText(pane)).toContainText('echo menu-copy-me-42')
+          await page.keyboard.press('Enter')
+          await expect(screenText(pane).getByText('menu-copy-me-42', { exact: true })).toBeVisible()
+          await pane.click({ button: 'right' })
+          await menu.getByRole('menuitem', { name: 'Split Right' }).click()
+          await expect(panes(page)).toHaveCount(2)
+          await panes(page).last().click({ button: 'right' })
+          await menu.getByRole('menuitem', { name: 'Close Pane' }).click()
+          await expect(panes(page)).toHaveCount(1)
+
+          // With nothing selected, Ctrl+C is the shell's interrupt.
+          await run(page, panes(page), 'sleep 30')
+          await page.keyboard.press('Control+C')
+          await run(page, pane, 'echo after-interrupt')
+          await expect(screenText(pane).getByText('after-interrupt', { exact: true })).toBeVisible({
+            timeout: 10_000
+          })
+        } finally {
+          await restoreClipboard?.()
         }
-
-        await run(page, pane, 'echo copy-me-42')
-        const output = screenText(pane).getByText('copy-me-42', { exact: true })
-        // xterm's screen layer takes the mouse above its text rows: double-click where the word shows.
-        const word = await output.boundingBox()
-        if (!word) throw new Error('copy-me-42 is not on screen')
-        await page.mouse.dblclick(word.x + word.width / 2, word.y + word.height / 2)
-        await page.keyboard.press(`${modifier}+C`)
-        await expect
-          .poll(() => app.evaluate(({ clipboard }) => clipboard.readText()))
-          .toBe('copy-me-42')
-
-        // With nothing selected, Ctrl+C is the shell's interrupt.
-        await run(page, pane, 'sleep 30')
-        await page.keyboard.press('Control+C')
-        await run(page, pane, 'echo after-interrupt')
-        await expect(screenText(pane).getByText('after-interrupt', { exact: true })).toBeVisible({
-          timeout: 10_000
-        })
       },
       { userDataDir: userData }
     )
@@ -286,13 +340,16 @@ test('splits give each pane its own shell; panes close, take focus and resize', 
         await expect(panes(page)).toHaveCount(2)
         await expect.poll(() => isRunning(addedPid)).toBe(false)
 
-        // A shell that exits cleanly takes its pane with it; one that fails keeps it, with its code.
-        await run(page, first, 'exit')
+        // A shell that ends itself takes its pane with it, whatever its code (bash exits with the
+        // last command's status, 130 after a ^C); one killed by a signal keeps it, with a badge.
+        await run(page, first, 'exit 130')
         await expect(panes(page)).toHaveCount(1)
         await expect.poll(() => isRunning(firstPid)).toBe(false)
-        await run(page, panes(page), 'exit 3')
-        await expect(panes(page).getByRole('status')).toHaveText('Process exited with code 3')
-        await expect(page.getByRole('tab')).toHaveCount(1)
+        if (!isWindows) {
+          await run(page, panes(page), 'kill -9 $$')
+          await expect(panes(page).getByRole('status')).toHaveText('Process ended by signal 9')
+          await expect(page.getByRole('tab')).toHaveCount(1)
+        }
         // A lone pane closes with its tab, so it has no close button of its own.
         await expect(panes(page).getByRole('button', { name: 'Close pane' })).toBeHidden()
       },
