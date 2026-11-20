@@ -116,6 +116,17 @@ describe('parseSettings', () => {
       ]
     })
   })
+
+  it('locks page edits when a key is set twice, using the last value like JSON does', () => {
+    expect(
+      parseSettings('{ "app.fontSize": 16, "editor.fontSize": 15, "app.fontSize": 20 }', lastGood)
+    ).toEqual({
+      values: { ...DEFAULT_SETTINGS, 'app.fontSize': 20, 'editor.fontSize': 15 },
+      customized: ['app.fontSize', 'editor.fontSize'],
+      editable: false,
+      problems: ['"app.fontSize" is set more than once; the last one is used. Remove the others.']
+    })
+  })
 })
 
 describe('withSetting', () => {

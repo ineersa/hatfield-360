@@ -67,11 +67,11 @@ function IconThemeSetting(): React.JSX.Element {
         </p>
       </div>
       <div className="flex items-center gap-2">
-        <div role="radiogroup" aria-labelledby={headingId} className="flex gap-2">
+        <div role="radiogroup" aria-labelledby={headingId} className="flex flex-wrap gap-2">
           {ICON_THEME_CHOICES.map(({ theme, name, Icon }) => (
             <label
               key={theme}
-              className="flex h-11 cursor-pointer items-center gap-2.5 rounded-lg border border-border px-3 has-checked:border-primary has-checked:bg-selection has-focus-visible:ring-2 has-focus-visible:ring-ring has-disabled:cursor-default has-disabled:opacity-50"
+              className="relative flex h-11 cursor-pointer items-center gap-2.5 rounded-lg border border-border px-3 has-checked:border-primary has-checked:bg-selection has-focus-visible:ring-2 has-focus-visible:ring-ring has-disabled:cursor-default has-disabled:opacity-50"
             >
               <input
                 type="radio"
@@ -196,7 +196,7 @@ function ResetAllButton(): React.JSX.Element | null {
   }
   return (
     <div role="group" aria-label="Reset all settings" className="flex items-center gap-1">
-      <span className="px-1 text-muted-foreground">Reset every setting?</span>
+      <span className="px-1 whitespace-nowrap text-muted-foreground">Reset every setting?</span>
       <button
         type="button"
         onClick={() => {
@@ -215,7 +215,7 @@ function ResetAllButton(): React.JSX.Element | null {
 }
 
 const HEADER_BUTTON_CLASS =
-  'flex h-9 items-center gap-2 rounded-lg px-2.5 font-medium text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none disabled:opacity-50'
+  'flex h-9 shrink-0 items-center gap-2 rounded-lg px-2.5 font-medium whitespace-nowrap text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none disabled:opacity-50'
 
 /** The settings in settings.json as a form; every change is written to the file right away. */
 export function SettingsPage(): React.JSX.Element {
@@ -237,13 +237,13 @@ export function SettingsPage(): React.JSX.Element {
   return (
     <div className="flex min-h-0 w-full flex-1 justify-center overflow-y-auto px-8 py-8">
       <div className="flex w-full max-w-2xl flex-col">
-        <header className="flex items-center gap-2 pb-2">
+        <header className="flex flex-wrap items-center gap-2 pb-2">
           <h1 className="flex-1 text-ui-lg font-semibold">Settings</h1>
           <ResetAllButton />
           <button
             type="button"
             onClick={() => void openFile()}
-            className="flex h-9 items-center gap-2 rounded-lg px-2.5 font-medium text-primary hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+            className="flex h-9 shrink-0 items-center gap-2 rounded-lg px-2.5 font-medium whitespace-nowrap text-primary hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
           >
             <FileJson className="size-4" aria-hidden />
             Open settings.json

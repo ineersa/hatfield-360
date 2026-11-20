@@ -26,6 +26,8 @@ export function FontSizeInput({
   // While the field has focus it shows what the user typed; otherwise the saved size.
   const [draft, setDraft] = useState<string | null>(null)
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Escape blurs the field; the blur handler still sees the old draft, so it must be told to drop it.
+  const discard = useRef(false)
 
   const cancelPending = (): void => {
     if (timer.current) clearTimeout(timer.current)
@@ -74,7 +76,8 @@ export function FontSizeInput({
           timer.current = setTimeout(() => apply(text), TYPING_DELAY_MS)
         }}
         onBlur={() => {
-          if (draft !== null) apply(draft)
+          if (draft !== null && !discard.current) apply(draft)
+          discard.current = false
           setDraft(null)
         }}
         onKeyDown={(event) => {
@@ -88,7 +91,7 @@ export function FontSizeInput({
             // Escape here only undoes the typing; it doesn't close the page.
             event.stopPropagation()
             cancelPending()
-            setDraft(null)
+            discard.current = true
             event.currentTarget.blur()
           }
         }}

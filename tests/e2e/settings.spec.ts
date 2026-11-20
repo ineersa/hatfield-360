@@ -114,6 +114,11 @@ test('the Settings page applies each change as it is made and writes it into set
         // Sizes apply while typing, without Enter or leaving the field.
         await settingsPage.getByLabel('App font size', { exact: true }).fill('16')
         await expect(page.locator('body')).toHaveCSS('font-size', '16px')
+        // Escape drops what was typed, even before it would have applied.
+        await settingsPage.getByLabel('App font size', { exact: true }).fill('20')
+        await page.keyboard.press('Escape')
+        await expect(settingsPage.getByLabel('App font size', { exact: true })).toHaveValue('16')
+        await expect(settingsPage).toBeVisible()
         await settingsPage.getByRole('button', { name: 'Increase Terminal font size' }).click()
         await expect(settingsPage.getByLabel('Terminal font size', { exact: true })).toHaveValue(
           '16'
@@ -213,5 +218,64 @@ test('the Settings page applies each change as it is made and writes it into set
   } finally {
     await cleanUserData()
     await cleanProjects()
+  }
+})
+
+test('a settings.json that could not be read at launch is read again once it is fixed', async () => {
+  const [userData, cleanUserData] = await makeTempDir('user-data')
+  const settings = join(userData, 'settings.json')
+  await mkdir(settings)
+  try {
+    await withApp(
+      async (_app, page) => {
+        await expect(message(page)).toContainText('EISDIR')
+        await rm(settings, { recursive: true })
+        await writeFile(settings, '{ "app.fontSize": 20 }')
+        await expect(page.locator('body')).toHaveCSS('font-size', '20px')
+        // A fresh page asks main again and must get the fixed file, not the first failure.
+        await page.reload()
+        await expect(page.locator('body')).toHaveCSS('font-size', '20px')
+        await expect(message(page)).toHaveCount(0)
+      },
+      { userDataDir: userData }
+    )
+  } finally {
+    await cleanUserData()
+  }
+})
+
+test('the largest app font in the smallest window keeps the status bar and Settings page in the window', async () => {
+  const [userData, cleanUserData] = await makeTempDir('user-data')
+  await writeFile(join(userData, 'settings.json'), '{ "app.fontSize": 32 }')
+  try {
+    await withApp(
+      async (app, page) => {
+        await app.evaluate(({ BrowserWindow }) => {
+          const window = BrowserWindow.getAllWindows()[0]
+          if (!window) throw new Error('no window')
+          window.setContentSize(600, 400)
+        })
+        await expect.poll(() => page.evaluate('window.innerHeight')).toBeLessThan(420)
+        await expect(page.locator('body')).toHaveCSS('font-size', '32px')
+        const gear = page.getByRole('button', { name: 'Settings' })
+        const gearBox = await gear.boundingBox()
+        const footerBox = await page.locator('footer').boundingBox()
+        if (!gearBox || !footerBox) throw new Error('layout is not rendered')
+        expect(gearBox.y + gearBox.height).toBeLessThanOrEqual(footerBox.y)
+        expect(footerBox.y + footerBox.height).toBeLessThanOrEqual(
+          Number(await page.evaluate('window.innerHeight'))
+        )
+        await gear.click()
+        await expect(settingsMain(page)).toBeVisible()
+        // Nothing on the Settings page makes the whole window scroll sideways.
+        expect(await page.evaluate('document.documentElement.scrollWidth')).toBe(
+          await page.evaluate('window.innerWidth')
+        )
+        await saveScreenshot(page, 'settings-font-32-small-window')
+      },
+      { userDataDir: userData }
+    )
+  } finally {
+    await cleanUserData()
   }
 })

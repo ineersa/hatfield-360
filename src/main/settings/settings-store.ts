@@ -51,7 +51,11 @@ class SettingsStore {
   }
 
   async view(): Promise<SettingsView> {
-    this.loaded ??= this.enqueue(() => this.reload())
+    // A failed first read (e.g. settings.json is a folder) is retried next time instead of cached.
+    this.loaded ??= this.enqueue(() => this.reload()).catch((error: unknown) => {
+      this.loaded = null
+      throw error
+    })
     await this.loaded
     return this.snapshot()
   }

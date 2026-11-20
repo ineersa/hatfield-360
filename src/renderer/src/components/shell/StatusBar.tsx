@@ -11,13 +11,13 @@ export function StatusBar(): React.JSX.Element {
   }, [loadAppInfo])
 
   return (
-    <footer className="flex h-7 shrink-0 items-center justify-end gap-3 px-3 text-ui-sm text-muted-foreground">
+    <footer className="flex min-h-7 shrink-0 items-center justify-end gap-3 px-3 py-0.5 text-ui-sm text-muted-foreground">
       {error ? (
-        <span role="alert" className="text-destructive">
+        <span role="alert" className="truncate text-destructive">
           Could not load app info: {error}
         </span>
       ) : (
-        <span data-testid="app-info">
+        <span data-testid="app-info" className="truncate">
           {appInfo
             ? `Hatfield 360 v${appInfo.version} · Electron ${appInfo.electronVersion} · ${appInfo.platform}`
             : 'Loading…'}

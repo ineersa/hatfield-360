@@ -1,4 +1,11 @@
-import { applyEdits, modify, type ParseError, parse, printParseErrorCode } from 'jsonc-parser'
+import {
+  applyEdits,
+  modify,
+  type ParseError,
+  parse,
+  parseTree,
+  printParseErrorCode
+} from 'jsonc-parser'
 import { isPlainObject } from '../../shared/plain-object'
 import {
   DEFAULT_SETTINGS,
@@ -13,7 +20,7 @@ export type ParsedSettings = {
   values: Settings
   /** Settings the file sets, in file order. */
   customized: SettingKey[]
-  /** The file is a JSON object (or empty), so single settings can be written into it. */
+  /** The file is a JSON object (or empty) with each key once, so single settings can be written into it. */
   editable: boolean
   /** One line per problem, in file order; empty when the file is fine. */
   problems: string[]
@@ -72,6 +79,17 @@ function lineOf(text: string, offset: number): number {
   return text.slice(0, offset).split('\n').length
 }
 
+/** Keys the file sets more than once; JSON uses the last, but an edit would only change the first. */
+function duplicateKeys(text: string): string[] {
+  const keys = (parseTree(text, [], { allowTrailingComma: true })?.children ?? []).flatMap(
+    (property) => {
+      const key: unknown = property.children?.[0]?.value
+      return typeof key === 'string' ? [key] : []
+    }
+  )
+  return [...new Set(keys.filter((key, index) => keys.indexOf(key) !== index))]
+}
+
 function applySetting<K extends SettingKey>(
   values: Pick<Settings, K>,
   key: K,
@@ -122,7 +140,11 @@ export function parseSettings(text: string, lastGood: Settings): ParsedSettings 
       problems.push(`Unknown setting "${key}".`)
     }
   }
-  return { values, customized, editable: true, problems }
+  const duplicates = duplicateKeys(text)
+  for (const key of duplicates) {
+    problems.push(`"${key}" is set more than once; the last one is used. Remove the others.`)
+  }
+  return { values, customized, editable: duplicates.length === 0, problems }
 }
 
 /** A value from the Settings page: checked like the file's, clamped sizes accepted, anything else refused. */
