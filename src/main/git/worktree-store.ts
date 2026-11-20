@@ -1,6 +1,6 @@
 import { type FSWatcher, watch } from 'node:fs'
-import { lstat, readdir, realpath } from 'node:fs/promises'
-import { basename, join, normalize } from 'node:path'
+import { lstat, readFile, readdir, realpath, stat } from 'node:fs/promises'
+import { basename, join, normalize, resolve } from 'node:path'
 import type { ProjectWorktrees, Worktree } from '../../shared/worktree-api'
 import { GitError, runGit } from './git-command'
 import { parseWorktreeList, shortBranchName } from './worktree-list'
@@ -10,11 +10,16 @@ type ChangeListener = (projects: ProjectWorktrees[]) => void
 /** Git writes several files per command; list again once it is done. */
 const REFRESH_DELAY_MS = 150
 
+/** A watch on one folder, tied to the folder that existed then: a recreated folder needs a new one. */
+type Watch = { watcher: FSWatcher; ino: number }
+
 type Project = {
   folder: string
   state: ProjectWorktrees | null
   /** Watched folders by path: the project, the repository's git dir and its worktree records. */
-  watchers: Map<string, FSWatcher>
+  watchers: Map<string, Watch>
+  /** The repository's common git dir as last known, kept while git can't read it so its repair is seen. */
+  gitDir: string | null
   timer: NodeJS.Timeout | null
   /** Bumped per listing, so a slow older listing can't overwrite a newer one. */
   generation: number
@@ -30,6 +35,16 @@ async function hasGitEntry(folder: string): Promise<boolean> {
     () => true,
     () => false
   )
+}
+
+/** The git dir a `.git` entry points at, for a repository git can't read: the folder itself or a `gitdir:` file. */
+async function gitDirOfEntry(folder: string): Promise<string | null> {
+  const entry = join(folder, '.git')
+  const info = await lstat(entry).catch(() => null)
+  if (!info) return null
+  if (info.isDirectory()) return entry
+  const pointer = /^gitdir:\s*(.+?)\s*$/m.exec(await readFile(entry, 'utf8').catch(() => ''))
+  return pointer?.[1] ? resolve(folder, pointer[1]) : null
 }
 
 async function readProject(
@@ -68,7 +83,7 @@ const isNoise = (name: string | null): boolean =>
   name !== null && (name.endsWith('.lock') || name === 'index' || name === 'FETCH_HEAD')
 
 /** The git worktrees of each workspace project, listed again whenever git changes them. */
-class WorktreeStore {
+export class WorktreeStore {
   private readonly projects = new Map<string, Project>()
   private order: string[] = []
   private readonly listeners = new Set<ChangeListener>()
@@ -98,6 +113,7 @@ class WorktreeStore {
         folder,
         state: null,
         watchers: new Map(),
+        gitDir: null,
         timer: null,
         generation: 0
       })
@@ -111,8 +127,17 @@ class WorktreeStore {
     if (!project) return false
     const generation = ++project.generation
     const { state, gitDir } = await readProject(folder)
-    if (this.projects.get(folder) !== project || generation !== project.generation) return false
-    this.watch(project, gitDir ? await this.gitDirs(gitDir) : [])
+    const current = (): boolean =>
+      this.projects.get(folder) === project && generation === project.generation
+    if (!current()) return false
+    if (gitDir) project.gitDir = gitDir
+    else if (state.status === 'not-git') project.gitDir = null
+    // Broken: keep watching the git dir so a repair shows, found from `.git` if never read.
+    else project.gitDir ??= await gitDirOfEntry(folder)
+    const dirs = project.gitDir ? await this.gitDirs(project.gitDir) : []
+    const wanted = await this.existing([project.folder, ...dirs])
+    if (!current()) return false
+    this.watch(project, wanted, new Set(dirs))
     const changed = JSON.stringify(state) !== JSON.stringify(project.state)
     project.state = state
     return changed
@@ -121,32 +146,52 @@ class WorktreeStore {
   /** The git dir (main HEAD, `worktrees` appearing), its `worktrees` folder and each record (linked HEADs). */
   private async gitDirs(gitDir: string): Promise<string[]> {
     const records = join(gitDir, 'worktrees')
-    const names = await readdir(records).catch((): string[] => [])
+    const names = await readdir(records).catch(() => null)
+    // Git deletes `worktrees` with the last linked worktree; the git dir's watch sees it come back.
+    if (names === null) return [gitDir]
     return [gitDir, records, ...names.map((name) => join(records, name))]
   }
 
-  private watch(project: Project, gitDirs: string[]): void {
-    // The project folder itself catches `git init` and a deleted `.git`.
-    const wanted = new Set([project.folder, ...gitDirs])
-    for (const [dir, watcher] of project.watchers) {
-      if (wanted.has(dir)) continue
-      watcher.close()
+  /** Each folder that exists now, with its inode, so a folder deleted and made again is told apart. */
+  private async existing(dirs: string[]): Promise<Map<string, number>> {
+    const found = await Promise.all(
+      dirs.map(
+        async (dir) =>
+          [
+            dir,
+            await stat(dir).then(
+              (info) => info.ino,
+              () => null
+            )
+          ] as const
+      )
+    )
+    return new Map(found.flatMap(([dir, ino]) => (ino === null ? [] : [[dir, ino]])))
+  }
+
+  private watch(project: Project, wanted: Map<string, number>, gitDirs: Set<string>): void {
+    for (const [dir, held] of project.watchers) {
+      if (wanted.get(dir) === held.ino) continue
+      held.watcher.close()
       project.watchers.delete(dir)
     }
-    for (const dir of wanted) {
+    for (const [dir, ino] of wanted) {
       if (project.watchers.has(dir)) continue
+      // The project folder alone only matters for `.git` (`git init`, a deleted `.git`); a bare
+      // repository's folder is also its git dir, where every change counts.
+      const onlyGitEntry = dir === project.folder && !gitDirs.has(dir)
       try {
         const watcher = watch(dir, (_event, name) => {
-          if (dir === project.folder ? name !== null && name !== '.git' : isNoise(name)) return
+          if (onlyGitEntry ? name !== null && name !== '.git' : isNoise(name)) return
           this.schedule(project)
         })
         // A watched record folder disappears when its worktree is removed.
         watcher.on('error', () => {
           watcher.close()
-          project.watchers.delete(dir)
+          if (project.watchers.get(dir)?.watcher === watcher) project.watchers.delete(dir)
           this.schedule(project)
         })
-        project.watchers.set(dir, watcher)
+        project.watchers.set(dir, { watcher, ino })
       } catch {
         // Gone between listing and watching; the next refresh sees that.
       }
@@ -165,7 +210,7 @@ class WorktreeStore {
 
   private close(project: Project): void {
     if (project.timer) clearTimeout(project.timer)
-    for (const watcher of project.watchers.values()) watcher.close()
+    for (const { watcher } of project.watchers.values()) watcher.close()
     project.watchers.clear()
   }
 

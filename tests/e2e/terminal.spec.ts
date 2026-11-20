@@ -1,4 +1,4 @@
-import { expect, test, type Locator, type Page } from '@playwright/test'
+import { type ElectronApplication, expect, test, type Locator, type Page } from '@playwright/test'
 import { mkdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { makeTempDir, saveScreenshot, withApp } from './launch-app'
@@ -138,13 +138,33 @@ test('splits and tabs each get their own shell; closing them ends it, and so doe
   }
 })
 
+/**
+ * On a real display the test shares the user's clipboard. Plain text is saved and put back;
+ * anything else (an image) can't be (reading its contents crashes Electron 45's main process),
+ * so the test is skipped rather than lose it. Under xvfb and in CI the clipboard is the test's.
+ */
+async function keepUserClipboard(app: ElectronApplication): Promise<(() => Promise<void>) | null> {
+  const textOnly = await app.evaluate(async ({ clipboard }) =>
+    (await clipboard.read()).every((item) =>
+      item.types.every((type) => type.startsWith('text/plain'))
+    )
+  )
+  if (!textOnly) return null
+  const text = await app.evaluate(({ clipboard }) => clipboard.readText())
+  return () => app.evaluate(({ clipboard }, saved) => clipboard.writeText(saved), text)
+}
+
 test('the system keys paste into the terminal and copy its selection', async () => {
   const { userData, cleanup } = await seedProject()
   const modifier = process.platform === 'darwin' ? 'Meta' : 'Control'
   try {
     await withApp(
       async (app, page) => {
-        const saved = await app.evaluate(({ clipboard }) => clipboard.readText())
+        const restoreClipboard = await keepUserClipboard(app)
+        test.skip(
+          restoreClipboard === null,
+          "The clipboard holds more than text, which the test couldn't put back."
+        )
         try {
           await openProjectTerminal(page)
           const pane = panes(page)
@@ -165,7 +185,7 @@ test('the system keys paste into the terminal and copy its selection', async () 
             .poll(() => app.evaluate(({ clipboard }) => clipboard.readText()))
             .toBe('pasted-77')
         } finally {
-          await app.evaluate(({ clipboard }, text) => clipboard.writeText(text), saved)
+          await restoreClipboard?.()
         }
       },
       { userDataDir: userData }
