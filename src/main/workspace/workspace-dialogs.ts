@@ -74,7 +74,9 @@ export async function pickAndSaveWorkspaceAs(
   const result = await showSaveDialog(parent, {
     title: mode === 'duplicate' ? 'Duplicate Workspace' : 'Save Workspace As',
     defaultPath: join(directory, `${name}${WORKSPACE_FILE_EXTENSION}`),
-    filters: WORKSPACE_FILE_FILTERS
+    filters: WORKSPACE_FILE_FILTERS,
+    // GTK only asks before replacing a file when told to; macOS and Windows always ask.
+    properties: ['showOverwriteConfirmation']
   })
   if (result.canceled || !result.filePath) return
   const target = withWorkspaceExtension(result.filePath)

@@ -9,6 +9,10 @@ type SidePanelState = { width: number; collapsed: boolean }
 type ShellLayoutState = {
   activeView: ShellViewId
   panels: Record<ShellViewId, SidePanelState>
+  /** The Settings page covers the main area until it is closed or a view is chosen. */
+  settingsOpen: boolean
+  openSettings: () => void
+  closeSettings: () => void
   /** Activating the current view toggles its side panel, like JetBrains tool window buttons. */
   activateView: (view: ShellViewId) => void
   setPanelWidth: (view: ShellViewId, width: number) => void
@@ -19,8 +23,13 @@ const defaultPanel: SidePanelState = { width: SIDE_PANEL_DEFAULT_WIDTH, collapse
 export const useShellLayoutStore = create<ShellLayoutState>((set) => ({
   activeView: 'agents',
   panels: { agents: defaultPanel, files: defaultPanel, git: defaultPanel },
+  settingsOpen: false,
+  openSettings: () => set({ settingsOpen: true }),
+  closeSettings: () => set({ settingsOpen: false }),
   activateView: (view) => {
     set((state) => {
+      // Leaving Settings shows the chosen view as it was, without toggling its panel.
+      if (state.settingsOpen) return { settingsOpen: false, activeView: view }
       if (state.activeView !== view) {
         return { activeView: view }
       }

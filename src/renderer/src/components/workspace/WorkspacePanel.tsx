@@ -1,5 +1,5 @@
 import { CircleAlert, FolderPlus, FolderX } from 'lucide-react'
-import { CatppuccinRootFolderIcon } from '@/components/icons/CatppuccinIcons'
+import { RootFolderIcon } from '@/components/icons/RootFolderIcon'
 import {
   ContextMenu,
   ContextMenuContent,
@@ -26,18 +26,18 @@ function ProjectRow({ folder }: { folder: WorkspaceFolder }): React.JSX.Element 
               {folder.missing ? (
                 <FolderX className="size-[18px] shrink-0 text-destructive" aria-hidden />
               ) : (
-                <CatppuccinRootFolderIcon className="size-[18px] shrink-0" />
+                <RootFolderIcon className="size-[18px] shrink-0" />
               )}
               <span
                 className={cn(
-                  'truncate text-[15px] font-semibold',
+                  'truncate text-ui-lg font-semibold',
                   folder.missing && 'font-medium text-muted-foreground line-through'
                 )}
               >
                 {folder.name}
               </span>
               {folder.missing ? (
-                <span className="ml-auto shrink-0 text-xs text-destructive">missing</span>
+                <span className="ml-auto shrink-0 text-ui-sm text-destructive">missing</span>
               ) : null}
             </li>
           </TooltipTrigger>

@@ -7,14 +7,20 @@ import {
   pickAndOpenWorkspaceFile,
   pickAndSaveWorkspaceAs
 } from '../workspace/workspace-dialogs'
+import { showSettingsPage } from '../ipc/settings-ipc'
+import { openSettingsFile } from '../settings/open-settings-file'
+import { settingsStore } from '../settings/settings-store'
 import { WORKSPACE_FILE_EXTENSION } from '../workspace/workspace-file'
 import { workspaceStore } from '../workspace/workspace-store'
 
 /** Runs a menu action against the focused window; failures are shown in the window. */
-function fromMenu(action: (window: BrowserWindow | null) => Promise<void>): () => void {
+function fromMenu(
+  action: (window: BrowserWindow | null) => Promise<void>,
+  report: (error: unknown) => Promise<void> = (error) => workspaceStore.report(error)
+): () => void {
   return () => {
     const window = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0] ?? null
-    action(window).catch((error: unknown) => workspaceStore.report(error))
+    action(window).catch(report)
   }
 }
 
@@ -105,6 +111,24 @@ function buildAppMenu(view: WorkspaceView | null): void {
         label: 'Close Workspace',
         enabled: inWorkspaceFile,
         click: fromMenu(() => workspaceStore.closeWorkspace())
+      },
+      { type: 'separator' },
+      {
+        id: 'preferences',
+        label: 'Preferences',
+        submenu: [
+          {
+            id: 'open-settings',
+            label: 'Settings',
+            accelerator: 'CommandOrControl+,',
+            click: fromMenu(showSettingsPage, (error) => settingsStore.report(error))
+          },
+          {
+            id: 'open-settings-json',
+            label: 'Open Settings (JSON)',
+            click: fromMenu(openSettingsFile, (error) => settingsStore.report(error))
+          }
+        ]
       },
       { type: 'separator' },
       isMac ? { role: 'close' } : { role: 'quit', label: 'Exit' }

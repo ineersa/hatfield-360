@@ -37,7 +37,7 @@ export function TooltipContent({
         data-slot="tooltip-content"
         sideOffset={sideOffset}
         className={cn(
-          'z-50 w-fit rounded-md border border-border bg-island px-2.5 py-1.5 text-xs text-balance text-foreground shadow-lg',
+          'z-50 w-fit rounded-md border border-border bg-island px-2.5 py-1.5 text-ui-sm text-balance text-foreground shadow-lg',
           className
         )}
         {...props}

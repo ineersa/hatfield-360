@@ -1,9 +1,9 @@
 import { app } from 'electron'
 import { readdir, rename, stat } from 'node:fs/promises'
 import { basename, dirname, join, resolve } from 'node:path'
+import type { Notice } from '../../shared/notice'
 import type {
   RecentEntry,
-  WorkspaceNotice,
   RecentTarget,
   WorkspaceFolder,
   WorkspaceView
@@ -98,7 +98,7 @@ async function loadWorkspaceFile(file: string): Promise<OpenWorkspace> {
 /** The workspace open in the window, the Recent list, and change notifications. */
 class WorkspaceStore {
   private session: Promise<Session> | null = null
-  private notice: WorkspaceNotice | null = null
+  private notice: Notice | null = null
   private noticeCount = 0
   /** Serializes changes so concurrent actions can't interleave their writes. */
   private queue: Promise<unknown> = Promise.resolve()

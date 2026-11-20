@@ -1,7 +1,11 @@
 import { useEffect, useRef } from 'react'
+import { SettingsMessage } from '@/components/settings/SettingsMessage'
+import { SettingsPage } from '@/components/settings/SettingsPage'
+import { useAppFont } from '@/components/settings/use-app-font'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { WelcomeScreen } from '@/components/workspace/WelcomeScreen'
 import { WorkspaceMessage } from '@/components/workspace/WorkspaceMessage'
+import { useSettingsStore } from '@/state/settings-store'
 import { SIDE_PANEL_MIN_WIDTH, useShellLayoutStore } from '@/state/shell-layout-store'
 import { useWorkspaceStore } from '@/state/workspace-store'
 import { ActivityBar } from './ActivityBar'
@@ -21,7 +25,14 @@ export function AppShell(): React.JSX.Element {
   const workspaceName = useWorkspaceStore((state) => state.workspace?.name)
   const workspaceEmpty = useWorkspaceStore((state) => state.workspace?.folders.length === 0)
 
+  const connectSettings = useSettingsStore((state) => state.connect)
+  const settingsOpen = useShellLayoutStore((state) => state.settingsOpen)
+  const openSettings = useShellLayoutStore((state) => state.openSettings)
+
   useEffect(() => connectWorkspace(), [connectWorkspace])
+  useEffect(() => connectSettings(), [connectSettings])
+  useEffect(() => window.desktop.subscribeShowSettings(openSettings), [openSettings])
+  useAppFont()
   useEffect(() => {
     document.title = workspaceName ? `${workspaceName} — Hatfield 360` : 'Hatfield 360'
   }, [workspaceName])
@@ -37,6 +48,7 @@ export function AppShell(): React.JSX.Element {
     <TooltipProvider>
       <div className="flex h-screen flex-col bg-background text-foreground">
         <WorkspaceMessage />
+        <SettingsMessage />
         <div className="flex min-h-0 flex-1 pt-1.5 pr-1.5">
           <ActivityBar />
           <div className="flex min-w-0 flex-1">
@@ -74,8 +86,13 @@ export function AppShell(): React.JSX.Element {
                 />
               </>
             )}
-            <main aria-label={view.label} className="flex min-w-0 flex-1 rounded-xl bg-island">
-              {workspaceEmpty ? (
+            <main
+              aria-label={settingsOpen ? 'Settings' : view.label}
+              className="flex min-w-0 flex-1 rounded-xl bg-island"
+            >
+              {settingsOpen ? (
+                <SettingsPage />
+              ) : workspaceEmpty ? (
                 <WelcomeScreen />
               ) : (
                 <div className="flex flex-1 flex-col items-center justify-center gap-3 p-8 text-center">

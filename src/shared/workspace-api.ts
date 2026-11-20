@@ -1,3 +1,5 @@
+import type { Notice } from './notice'
+
 /** A project folder in the open workspace, as the renderer sees it. */
 export type WorkspaceFolder = {
   path: string
@@ -21,9 +23,6 @@ export type RecentEntry = RecentTarget & {
   stored: boolean
 }
 
-/** A message from main; each occurrence has its own id, so dismissing one doesn't hide the next. */
-export type WorkspaceNotice = { id: number; message: string }
-
 export type WorkspaceView = {
   /** "Default Workspace" or the workspace file's name. */
   name: string
@@ -33,7 +32,7 @@ export type WorkspaceView = {
   /** Set when the workspace file can't be used (e.g. written by a newer app version); changes are refused. */
   problem: string | null
   /** Why the last workspace action started outside the window failed (File menu, reopening at launch). */
-  notice: WorkspaceNotice | null
+  notice: Notice | null
   /** The default workspace first, then workspace files (recent, then the rest of Hatfield's workspaces folder), then recent folders. */
   recent: RecentEntry[]
 }
