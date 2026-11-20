@@ -7,7 +7,8 @@ export type Worktree = {
   branch: string | null
   /** The checked-out commit (empty for a repository without commits). */
   head: string
-  main: boolean
+  /** The project folder itself: the tree shows its branch on the project row instead of a row of its own. */
+  project: boolean
   locked: boolean
   /** Git still lists it but its folder is gone (`git worktree prune` would remove it). */
   prunable: boolean

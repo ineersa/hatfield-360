@@ -77,11 +77,9 @@ function WorktreeRow({ worktree }: { worktree: Worktree }): React.JSX.Element {
               >
                 {label}
               </span>
-              {worktree.main ? null : (
-                <span className="min-w-0 shrink truncate text-ui-sm text-muted-foreground">
-                  {worktree.name}
-                </span>
-              )}
+              <span className="min-w-0 shrink truncate text-ui-sm text-muted-foreground">
+                {worktree.name}
+              </span>
               {worktree.locked ? (
                 <Lock className="size-3.5 shrink-0 text-muted-foreground" aria-label="locked" />
               ) : null}
@@ -114,15 +112,23 @@ function ProjectWorktreeRows({ folder }: { folder: string }): React.JSX.Element 
   if (project?.status !== 'git') return null
   return (
     <>
-      {project.worktrees.map((worktree) => (
-        <WorktreeRow key={worktree.path} worktree={worktree} />
-      ))}
+      {project.worktrees
+        .filter((worktree) => !worktree.project)
+        .map((worktree) => (
+          <WorktreeRow key={worktree.path} worktree={worktree} />
+        ))}
     </>
   )
 }
 
 function ProjectRow({ folder }: { folder: WorkspaceFolder }): React.JSX.Element {
   const removeFolder = useWorkspaceStore((state) => state.removeFolder)
+  const checkout = useWorktreeStore((state) => {
+    const project = state.projects[folder.path]
+    return project?.status === 'git'
+      ? project.worktrees.find((worktree) => worktree.project)
+      : undefined
+  })
   return (
     <ContextMenu>
       <Tooltip>
@@ -146,6 +152,12 @@ function ProjectRow({ folder }: { folder: WorkspaceFolder }): React.JSX.Element 
               >
                 {folder.name}
               </span>
+              {checkout ? (
+                <span className="flex min-w-0 shrink items-center gap-1 text-ui-sm text-muted-foreground">
+                  <GitBranch className="size-3.5 shrink-0" aria-hidden />
+                  <span className="truncate">{worktreeLabel(checkout)}</span>
+                </span>
+              ) : null}
               {folder.missing ? (
                 <span className="ml-auto shrink-0 text-ui-sm text-destructive">missing</span>
               ) : null}

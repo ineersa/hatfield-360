@@ -1,5 +1,5 @@
 import { type FSWatcher, watch } from 'node:fs'
-import { lstat, readdir } from 'node:fs/promises'
+import { lstat, readdir, realpath } from 'node:fs/promises'
 import { basename, join, normalize } from 'node:path'
 import type { ProjectWorktrees, Worktree } from '../../shared/worktree-api'
 import { GitError, runGit } from './git-command'
@@ -36,18 +36,20 @@ async function readProject(
   folder: string
 ): Promise<{ state: ProjectWorktrees; gitDir: string | null }> {
   try {
-    const [listing, commonDir] = await Promise.all([
+    const [listing, commonDir, resolved] = await Promise.all([
       runGit(folder, ['worktree', 'list', '--porcelain', '-z']),
-      runGit(folder, ['rev-parse', '--path-format=absolute', '--git-common-dir'])
+      runGit(folder, ['rev-parse', '--path-format=absolute', '--git-common-dir']),
+      // Git prints resolved paths; the workspace may hold the folder through a symlink.
+      realpath(folder).catch(() => folder)
     ])
     const worktrees: Worktree[] = parseWorktreeList(listing)
       .filter((listed) => !listed.bare)
-      .map((listed, index) => ({
+      .map((listed) => ({
         path: nativePath(listed.path),
         name: basename(nativePath(listed.path)),
         branch: listed.branch === null ? null : shortBranchName(listed.branch),
         head: listed.head,
-        main: index === 0,
+        project: nativePath(listed.path) === nativePath(resolved),
         locked: listed.locked,
         prunable: listed.prunable
       }))

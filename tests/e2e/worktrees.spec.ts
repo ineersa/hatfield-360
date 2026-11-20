@@ -59,8 +59,8 @@ test('projects list their git worktrees and follow git as worktrees come and go'
   try {
     await withApp(
       async (_app, page) => {
-        // The main worktree, then the linked one with its folder; the plain folder has none.
-        await expect(rows(page)).toHaveText(['app', 'main', 'featureapp-feature', 'notes'])
+        // The project shows its own branch; its linked worktree gets a row; the plain folder has none.
+        await expect(rows(page)).toHaveText(['appmain', 'featureapp-feature', 'notes'])
 
         git(repo, 'worktree', 'add', '-q', '-b', 'second', join(projects, 'app-second'))
         await expect(page.getByRole('listitem', { name: 'second worktree' })).toBeVisible()
@@ -82,9 +82,9 @@ test('projects list their git worktrees and follow git as worktrees come and go'
         await page.keyboard.press('Enter')
         await expect(pane.locator('.xterm-rows')).toContainText(feature)
 
-        // A plain folder that becomes a repository gets its worktree.
         git(notes, 'init', '-q', '-b', 'trunk')
-        await expect(rows(page)).toHaveText(['app', 'main', 'renamedapp-feature', 'notes', 'trunk'])
+        // A plain folder that becomes a repository shows its branch.
+        await expect(rows(page)).toHaveText(['appmain', 'renamedapp-feature', 'notestrunk'])
 
         // A repository git can't read shows why instead of passing for a plain folder.
         await writeFile(join(notes, '.git', 'HEAD'), 'not a ref\n')
