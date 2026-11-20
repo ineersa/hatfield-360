@@ -4,6 +4,7 @@ import { registerSettingsIpc } from './ipc/settings-ipc'
 import { registerShellLayoutIpc } from './ipc/shell-layout-ipc'
 import { registerTerminalIpc } from './ipc/terminal-ipc'
 import { registerWorkspaceIpc } from './ipc/workspace-ipc'
+import { registerWorktreeIpc } from './ipc/worktree-ipc'
 import { installAppMenu } from './menu/app-menu'
 import { terminalSessions } from './terminal/terminal-sessions'
 import { createMainWindow } from './window/main-window'
@@ -16,6 +17,7 @@ void app.whenReady().then(async () => {
   installPermissionPolicy()
   registerAppInfoIpc()
   registerWorkspaceIpc()
+  registerWorktreeIpc()
   registerSettingsIpc()
   registerShellLayoutIpc()
   registerTerminalIpc()

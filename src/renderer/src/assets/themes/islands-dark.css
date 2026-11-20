@@ -17,6 +17,10 @@
   --primary-foreground: #ffffff;
   --destructive: #f75464;
   --ring: #3871e1;
+  /* ToolTip.background / foreground / infoForeground of the Islands Dark UI theme. */
+  --tooltip: #33353b;
+  --tooltip-foreground: #d1d3d9;
+  --tooltip-muted-foreground: #9fa2a8;
   /* Catppuccin Mocha, for the Catppuccin file and folder icons. */
   --icon-text: #cdd6f4;
   /* Terminal: console colours of PhpStorm's Islands Dark scheme; the ANSI palette comes from its parent, Darcula. */

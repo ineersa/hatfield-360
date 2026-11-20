@@ -9,6 +9,7 @@
  *   background  window frame behind the islands (activity bar, status bar, gaps)
  *   island      rounded panels: side panel, main area
  *   accent      hover / subtle fill; selection: selected row; primary: active control, focus ring
+ *   tooltip     hover hints: a raised surface that stands out over both the frame and the islands
  */
 /* App font settings (app.fontFamily, app.fontSize); the renderer overrides these from settings.json. */
 :root {
@@ -33,6 +34,9 @@
   --color-primary-foreground: var(--primary-foreground);
   --color-destructive: var(--destructive);
   --color-ring: var(--ring);
+  --color-tooltip: var(--tooltip);
+  --color-tooltip-foreground: var(--tooltip-foreground);
+  --color-tooltip-muted-foreground: var(--tooltip-muted-foreground);
   /* File and folder icon colours (Catppuccin icon palette), defined per theme. */
   --color-icon-text: var(--icon-text);
 }

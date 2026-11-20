@@ -4,8 +4,10 @@ import { defineConfig } from '@playwright/test'
 export default defineConfig({
   testDir: resolve(import.meta.dirname, '../tests/e2e'),
   outputDir: resolve(import.meta.dirname, '../test-results'),
-  timeout: 60_000,
-  workers: 1,
+  // Each test launches its own app with its own data folder, so tests run side by side.
+  fullyParallel: true,
+  workers: '50%',
+  timeout: 30_000,
   forbidOnly: true,
   reporter: process.env.CI ? 'github' : 'list'
 })

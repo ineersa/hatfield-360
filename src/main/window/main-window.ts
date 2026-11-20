@@ -26,7 +26,9 @@ export function createMainWindow(): BrowserWindow {
       contextIsolation: true,
       sandbox: true,
       nodeIntegration: false,
-      backgroundThrottling: !background
+      backgroundThrottling: !background,
+      // A never-shown window otherwise draws about once a second, and each mouse event waits for a frame.
+      offscreen: background
     }
   })
 

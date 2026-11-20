@@ -2,6 +2,7 @@ import type { SettingsApi } from './settings-api'
 import type { ShellLayoutApi } from './shell-layout-api'
 import type { TerminalApi } from './terminal-api'
 import type { WorkspaceApi } from './workspace-api'
+import type { WorktreeApi } from './worktree-api'
 
 export type AppInfo = {
   name: string
@@ -18,6 +19,7 @@ export const IPC_CHANNELS = {
 export type DesktopApi = WorkspaceApi &
   SettingsApi &
   ShellLayoutApi &
-  TerminalApi & {
+  TerminalApi &
+  WorktreeApi & {
     getAppInfo: () => Promise<AppInfo>
   }

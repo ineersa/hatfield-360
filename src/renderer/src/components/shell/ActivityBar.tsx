@@ -40,7 +40,7 @@ export function ActivityBar(): React.JSX.Element {
             </TooltipTrigger>
             <TooltipContent side="right">
               <span className="font-medium">{view.label}</span>
-              <span className="text-muted-foreground"> · {view.description}</span>
+              <span className="text-tooltip-muted-foreground"> · {view.description}</span>
             </TooltipContent>
           </Tooltip>
         )

@@ -1,4 +1,4 @@
-import type { ComponentProps } from 'react'
+import { type ComponentProps, type PointerEvent, useCallback, useRef, useState } from 'react'
 import { Tooltip as TooltipPrimitive } from 'radix-ui'
 import { cn } from '@/lib/class-names'
 
@@ -37,7 +37,7 @@ export function TooltipContent({
         data-slot="tooltip-content"
         sideOffset={sideOffset}
         className={cn(
-          'z-50 w-fit rounded-md border border-border bg-island px-2.5 py-1.5 text-ui-sm text-balance text-foreground shadow-lg',
+          'z-50 w-fit max-w-[min(36rem,var(--radix-tooltip-content-available-width))] rounded-md bg-tooltip px-2.5 py-1.5 text-ui-sm break-words text-tooltip-foreground shadow-lg',
           className
         )}
         {...props}
@@ -46,4 +46,41 @@ export function TooltipContent({
       </TooltipPrimitive.Content>
     </TooltipPrimitive.Portal>
   )
+}
+
+/** Below the pointer, clear of the cursor arrow. */
+const BELOW_POINTER_PX = 20
+
+type PointerPlacement = Pick<
+  ComponentProps<typeof TooltipPrimitive.Content>,
+  'side' | 'align' | 'sideOffset' | 'alignOffset'
+>
+
+/**
+ * Opens a tooltip just under the mouse pointer instead of beside its trigger:
+ * spread `track` on the trigger, `onOpenChange` on the Tooltip and `placement` on the content.
+ */
+export function usePointerTooltip(): {
+  track: (event: PointerEvent<HTMLElement>) => void
+  onOpenChange: (open: boolean) => void
+  placement: PointerPlacement
+} {
+  const last = useRef<{ x: number; y: number; rect: DOMRect } | null>(null)
+  const [offsets, setOffsets] = useState({ sideOffset: 0, alignOffset: 0 })
+  const track = useCallback((event: PointerEvent<HTMLElement>) => {
+    last.current = {
+      x: event.clientX,
+      y: event.clientY,
+      rect: event.currentTarget.getBoundingClientRect()
+    }
+  }, [])
+  const onOpenChange = useCallback((open: boolean) => {
+    const pointer = last.current
+    if (!open || !pointer) return
+    setOffsets({
+      sideOffset: pointer.y - pointer.rect.bottom + BELOW_POINTER_PX,
+      alignOffset: pointer.x - pointer.rect.left
+    })
+  }, [])
+  return { track, onOpenChange, placement: { side: 'bottom', align: 'start', ...offsets } }
 }

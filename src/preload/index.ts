@@ -4,6 +4,7 @@ import { SETTINGS_CHANNELS, type SettingsView } from '../shared/settings-api'
 import { SHELL_LAYOUT_CHANNELS } from '../shared/shell-layout-api'
 import { TERMINAL_CHANNELS, type TerminalCommand, type TerminalExit } from '../shared/terminal-api'
 import { type WorkspaceView, WORKSPACE_CHANNELS } from '../shared/workspace-api'
+import { type ProjectWorktrees, WORKTREE_CHANNELS } from '../shared/worktree-api'
 
 const desktopApi: DesktopApi = {
   getAppInfo: () => ipcRenderer.invoke(IPC_CHANNELS.getAppInfo),
@@ -17,6 +18,12 @@ const desktopApi: DesktopApi = {
     const listener = (_event: unknown, workspace: WorkspaceView): void => callback(workspace)
     ipcRenderer.on(WORKSPACE_CHANNELS.changed, listener)
     return () => ipcRenderer.removeListener(WORKSPACE_CHANNELS.changed, listener)
+  },
+  getWorktrees: () => ipcRenderer.invoke(WORKTREE_CHANNELS.get),
+  subscribeWorktrees: (callback) => {
+    const listener = (_event: unknown, projects: ProjectWorktrees[]): void => callback(projects)
+    ipcRenderer.on(WORKTREE_CHANNELS.changed, listener)
+    return () => ipcRenderer.removeListener(WORKTREE_CHANNELS.changed, listener)
   },
   getSettings: () => ipcRenderer.invoke(SETTINGS_CHANNELS.get),
   updateSetting: (key, value) => ipcRenderer.invoke(SETTINGS_CHANNELS.update, key, value),
