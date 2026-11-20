@@ -49,7 +49,7 @@ export const DEFAULT_SETTINGS: Settings = {
   'workbench.iconTheme': 'catppuccin',
   'workbench.colorTheme': 'islands-dark',
   'editor.colorTheme': 'islands-dark',
-  'terminal.colorTheme': 'islands-dark'
+  'terminal.colorTheme': 'dracula'
 }
 
 export type SettingsView = {

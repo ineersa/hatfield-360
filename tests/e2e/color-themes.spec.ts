@@ -59,21 +59,19 @@ test('app, editor and terminal themes come from settings.json and switch live fr
         await settingsPage
           .getByRole('combobox', { name: 'Editor theme' })
           .selectOption('Islands Dark')
-        await settingsPage
-          .getByRole('combobox', { name: 'Terminal theme' })
-          .selectOption('Islands Dark')
+        await settingsPage.getByRole('combobox', { name: 'Terminal theme' }).selectOption('Dracula')
         await expect(page.locator('html')).toHaveAttribute('data-theme', 'islands-dark')
         await expect(page.locator('body')).toHaveCSS('background-color', 'rgb(38, 40, 44)')
         await expect(keyword).toHaveCSS('color', 'rgb(207, 142, 109)')
         await expect.poll(() => windowBackground(app)).toBe('#26282c')
-        // Islands Dark is the default of all three, so their keys leave settings.json.
+        // These are the three defaults, so their keys leave settings.json.
         await expect
           .poll(async (): Promise<unknown> => parse(await readFile(settings, 'utf8')))
           .toEqual({ 'terminal.gpuAcceleration': false })
         await saveScreenshot(page, 'theme-islands-dark-settings')
 
         await settingsPage.getByRole('button', { name: 'Close Settings' }).click()
-        await expect(terminalBackground(page)).toHaveCSS('background-color', 'rgb(25, 26, 28)')
+        await expect(terminalBackground(page)).toHaveCSS('background-color', 'rgb(40, 42, 54)')
       },
       { userDataDir: userData }
     )

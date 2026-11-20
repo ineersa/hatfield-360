@@ -1,6 +1,6 @@
 import type { TerminalPalette } from './terminal-palette'
 
-/** Terminal themes: the console colours of each editor scheme. */
+/** Terminal themes: the console colours of each editor scheme, and two GNOME Terminal profiles. */
 export const TERMINAL_THEMES = [
   {
     id: 'catppuccin-frappe',
@@ -237,6 +237,33 @@ export const TERMINAL_THEMES = [
     }
   },
   {
+    // GNOME Terminal profile "Dracula"; it sets no selection colour, so this is Dracula's own.
+    id: 'dracula',
+    label: 'Dracula',
+    palette: {
+      background: '#282a36',
+      foreground: '#f8f8f2',
+      cursor: '#f8f8f2',
+      selection: '#44475a',
+      black: '#262626',
+      red: '#e64747',
+      green: '#42e66c',
+      yellow: '#e4f34a',
+      blue: '#9b6bdf',
+      magenta: '#e356a7',
+      cyan: '#75d7ec',
+      white: '#f8f8f2',
+      brightBlack: '#7a7a7a',
+      brightRed: '#ff5555',
+      brightGreen: '#50fa7b',
+      brightYellow: '#f1fa8c',
+      brightBlue: '#bd93f9',
+      brightMagenta: '#ff79c6',
+      brightCyan: '#8be9fd',
+      brightWhite: '#f9f9fb'
+    }
+  },
+  {
     id: 'high-contrast',
     label: 'High contrast',
     palette: {
@@ -312,6 +339,33 @@ export const TERMINAL_THEMES = [
       brightMagenta: '#e617e6',
       brightCyan: '#15c1c1',
       brightWhite: '#c9c9c9'
+    }
+  },
+  {
+    // GNOME Terminal profile "Solarized Darcula"; it sets no selection colour, so this is Darcula's.
+    id: 'solarized-darcula',
+    label: 'Solarized Darcula',
+    palette: {
+      background: '#3d3f41',
+      foreground: '#d2d8d9',
+      cursor: '#d2d8d9',
+      selection: '#214283',
+      black: '#25292a',
+      red: '#f24840',
+      green: '#629655',
+      yellow: '#b68800',
+      blue: '#2075c7',
+      magenta: '#797fd4',
+      cyan: '#15968d',
+      white: '#d2d8d9',
+      brightBlack: '#25292a',
+      brightRed: '#f24840',
+      brightGreen: '#629655',
+      brightYellow: '#b68800',
+      brightBlue: '#2075c7',
+      brightMagenta: '#797fd4',
+      brightCyan: '#15968d',
+      brightWhite: '#d2d8d9'
     }
   }
 ] as const satisfies readonly {
