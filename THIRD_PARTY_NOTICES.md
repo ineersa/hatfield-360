@@ -32,6 +32,56 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
+## Catppuccin for JetBrains
+
+Source: https://github.com/catppuccin/jetbrains (plugin version 3.6.1)
+Used in: `scripts/themes/sources/catppuccin/` (UI themes and editor schemes, vendored), converted by `pnpm themes:import` into the Catppuccin app, editor and terminal themes under `src/renderer/src/assets/themes/` and `src/shared/themes/`
+
+```
+MIT License
+
+Copyright (c) 2022 Catppuccin
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
+## IntelliJ Platform themes
+
+Source: https://github.com/JetBrains/intellij-community (theme files as shipped in PhpStorm 2026.3's platform jars)
+Used in: `scripts/themes/sources/jetbrains/` (UI themes, editor schemes and their theme registrations, vendored), converted by `pnpm themes:import` into the Islands, Darcula, Light and High Contrast app, editor and terminal themes under `src/renderer/src/assets/themes/` and `src/shared/themes/`
+
+```
+Copyright 2000-2026 JetBrains s.r.o.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+```
+
 ## Orca
 
 Source: https://github.com/stablyai/orca (commit ccebbedaee8d7f6c26646ed6bf89302fd7b1c62a)

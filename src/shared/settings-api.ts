@@ -1,4 +1,7 @@
 import type { Notice } from './notice'
+import type { APP_THEMES } from './themes/app-theme-catalog'
+import type { EDITOR_THEMES } from './themes/editor-theme-catalog'
+import type { TERMINAL_THEMES } from './themes/terminal-theme-catalog'
 
 /** Every user setting with its value; `settings.json` holds only the ones the user changed. */
 export type Settings = {
@@ -11,6 +14,12 @@ export type Settings = {
   'editor.fontFamily': string
   'editor.fontSize': number
   'workbench.iconTheme': IconTheme
+  /** The UI chrome's colours, text styles and shapes. */
+  'workbench.colorTheme': AppThemeId
+  /** Syntax, editor and diff colours. */
+  'editor.colorTheme': EditorThemeId
+  /** Terminal background, text and ANSI colours. */
+  'terminal.colorTheme': TerminalThemeId
 }
 
 export type SettingKey = keyof Settings
@@ -18,6 +27,10 @@ export type SettingKey = keyof Settings
 export type IconTheme = 'catppuccin' | 'lucide'
 
 export const ICON_THEMES: readonly IconTheme[] = ['catppuccin', 'lucide']
+
+export type AppThemeId = (typeof APP_THEMES)[number]['id']
+export type EditorThemeId = (typeof EDITOR_THEMES)[number]['id']
+export type TerminalThemeId = (typeof TERMINAL_THEMES)[number]['id']
 
 /** Font sizes outside this range are clamped. */
 export const FONT_SIZE_RANGE = { min: 8, max: 32 } as const
@@ -33,7 +46,10 @@ export const DEFAULT_SETTINGS: Settings = {
   'terminal.gpuAcceleration': true,
   'editor.fontFamily': MONOSPACE_FONTS,
   'editor.fontSize': 13,
-  'workbench.iconTheme': 'catppuccin'
+  'workbench.iconTheme': 'catppuccin',
+  'workbench.colorTheme': 'islands-dark',
+  'editor.colorTheme': 'islands-dark',
+  'terminal.colorTheme': 'islands-dark'
 }
 
 export type SettingsView = {

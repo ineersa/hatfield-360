@@ -36,6 +36,9 @@ describe('parseSettings', () => {
       "editor.fontFamily": "Fira Code",
       "editor.fontSize": 15,
       "workbench.iconTheme": "lucide",
+      "workbench.colorTheme": "islands-catppuccin-mocha",
+      "editor.colorTheme": "catppuccin-mocha-no-italics",
+      "terminal.colorTheme": "darcula",
     }`
     expect(parseSettings(text, DEFAULT_SETTINGS)).toEqual({
       values: {
@@ -46,7 +49,10 @@ describe('parseSettings', () => {
         'terminal.gpuAcceleration': false,
         'editor.fontFamily': 'Fira Code',
         'editor.fontSize': 15,
-        'workbench.iconTheme': 'lucide'
+        'workbench.iconTheme': 'lucide',
+        'workbench.colorTheme': 'islands-catppuccin-mocha',
+        'editor.colorTheme': 'catppuccin-mocha-no-italics',
+        'terminal.colorTheme': 'darcula'
       },
       customized: [
         'app.fontFamily',
@@ -56,7 +62,10 @@ describe('parseSettings', () => {
         'terminal.gpuAcceleration',
         'editor.fontFamily',
         'editor.fontSize',
-        'workbench.iconTheme'
+        'workbench.iconTheme',
+        'workbench.colorTheme',
+        'editor.colorTheme',
+        'terminal.colorTheme'
       ],
       editable: true,
       problems: []
@@ -89,6 +98,7 @@ describe('parseSettings', () => {
       'app.fontFamily': 'Inter; color: red',
       'workbench.iconTheme': 'material',
       'terminal.gpuAcceleration': 'off',
+      'workbench.colorTheme': 'Islands Dark',
       'app.fontsize': 15
     })
     expect(parseSettings(text, lastGood)).toEqual({
@@ -107,7 +117,8 @@ describe('parseSettings', () => {
         'editor.fontFamily',
         'app.fontFamily',
         'workbench.iconTheme',
-        'terminal.gpuAcceleration'
+        'terminal.gpuAcceleration',
+        'workbench.colorTheme'
       ],
       editable: true,
       problems: [
@@ -118,6 +129,7 @@ describe('parseSettings', () => {
         '"app.fontFamily" must not contain ; { or }.',
         '"workbench.iconTheme" must be one of "catppuccin", "lucide".',
         '"terminal.gpuAcceleration" must be true or false.',
+        '"workbench.colorTheme" must be one of "high-contrast", "islands-catppuccin-frappe", "islands-catppuccin-latte", "islands-catppuccin-macchiato", "islands-catppuccin-mocha", "islands-darcula", "islands-dark", "islands-light".',
         'Unknown setting "app.fontsize".'
       ]
     })

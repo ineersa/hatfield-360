@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.base.json",
+  "include": ["../scripts/**/*.mts", "../src/shared/**/*"],
+  "compilerOptions": {
+    "composite": true,
+    "lib": ["es2023"],
+    "types": ["node"],
+    "allowImportingTsExtensions": true
+  }
+}

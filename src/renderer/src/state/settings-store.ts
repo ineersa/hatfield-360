@@ -9,6 +9,8 @@ import {
 type SettingsState = {
   /** Defaults until main answers, so the UI never waits on settings. */
   values: Settings
+  /** True once main has answered; until then `values` are the defaults, not the user's settings. */
+  loaded: boolean
   customized: SettingKey[]
   editable: boolean
   notice: SettingsView['notice']
@@ -34,7 +36,7 @@ const mainErrorMessage = (error: unknown): string =>
 
 export const useSettingsStore = create<SettingsState>((set, get) => {
   const apply = ({ values, customized, editable, notice }: SettingsView): void =>
-    set({ values, customized, editable, notice })
+    set({ values, loaded: true, customized, editable, notice })
   const run = async (action: () => Promise<void>): Promise<void> => {
     try {
       await action()
@@ -45,6 +47,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => {
   }
   return {
     values: DEFAULT_SETTINGS,
+    loaded: false,
     customized: [],
     editable: true,
     notice: null,

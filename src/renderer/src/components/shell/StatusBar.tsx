@@ -11,9 +11,9 @@ export function StatusBar(): React.JSX.Element {
   }, [loadAppInfo])
 
   return (
-    <footer className="flex min-h-7 shrink-0 items-center justify-end gap-3 px-3 py-0.5 text-ui-sm text-muted-foreground">
+    <footer className="type-status flex min-h-status-bar shrink-0 items-center justify-end gap-3 px-3 py-0.5">
       {error ? (
-        <span role="alert" className="truncate text-destructive">
+        <span role="alert" className="truncate text-error">
           Could not load app info: {error}
         </span>
       ) : (

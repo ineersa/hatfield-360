@@ -57,11 +57,12 @@ Two columns, JetBrains-style, not Orca's three columns (no right-hand file/proje
 
 ## Look and themes
 
-- Default look is JetBrains **Islands Dark**: rounded "island" panels on a slightly lighter frame, activity bar and status bar on the frame. The PhpStorm editor scheme export is `resources/themes/islands-dark.icls` (source for editor and console colours).
+- Default look is JetBrains **Islands Dark**: rounded "island" panels on a slightly lighter frame, activity bar and status bar on the frame.
+- Themes are ported from JetBrains: `pnpm themes:import` converts the UI themes and editor schemes vendored in `scripts/themes/sources/` (IntelliJ Platform Islands, Darcula, Light, High Contrast; Catppuccin) into the app's theme files. Pass a plugin `.jar`, an extracted folder or a scheme file to add more.
 - Three independent theme choices, each a separate setting:
-  - **App theme**: CSS colour roles (`src/renderer/src/assets/themes/<id>.css`, selected by `data-theme` on `<html>`).
-  - **Editor theme**: syntax and editor colours for the editor and diff viewer (#6, #7); default derived from the Islands Dark `.icls`.
-  - **Terminal theme**: xterm colours and ANSI palette (#4); default derived from Islands Dark console colours.
+  - **App theme** (`workbench.colorTheme`): colour roles, radii and row heights (`src/renderer/src/assets/themes/app/<id>.css`, selected by `data-theme` on `<html>`). Text styles and control sizes shared by every app theme are in `themes/base.css`. Components use only these roles; lint rejects raw colours, text sizes, weights, radii and heights.
+  - **Editor theme** (`editor.colorTheme`): syntax, editor and diff colours for the editor and diff viewer (#6, #7), one scheme JSON per theme in `src/renderer/src/assets/themes/editor/`.
+  - **Terminal theme** (`terminal.colorTheme`): xterm colours and ANSI palette (#4), from each scheme's console colours.
 - File and folder icons: Catppuccin icon set (catppuccin/vscode-icons, MIT) in the file tree, tabs and changes list.
 - A theme picker (settings) comes after the first views exist; until then Islands Dark is fixed.
 

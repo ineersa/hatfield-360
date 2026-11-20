@@ -78,7 +78,7 @@ function WorktreeRow({ worktree }: { worktree: Worktree }): React.JSX.Element {
             <li
               tabIndex={0}
               aria-label={`${label} worktree${worktree.prunable ? ' (missing)' : ''}`}
-              className="flex h-8 cursor-default items-center gap-2 rounded-lg pr-2.5 pl-12 outline-none select-none hover:bg-accent focus-visible:bg-accent data-[state=open]:bg-accent"
+              className="type-tree-row flex h-tree-row cursor-default items-center gap-2 rounded-component pr-2.5 pl-tree-indent outline-none select-none hover:bg-row-hover focus-visible:bg-selection-inactive data-[state=open]:bg-selection-inactive"
             >
               <GitBranch className="size-4 shrink-0 text-muted-foreground" aria-hidden />
               <span
@@ -89,14 +89,12 @@ function WorktreeRow({ worktree }: { worktree: Worktree }): React.JSX.Element {
               >
                 {label}
               </span>
-              <span className="min-w-0 shrink truncate text-ui-sm text-muted-foreground">
-                {worktree.name}
-              </span>
+              <span className="type-hint min-w-0 shrink truncate">{worktree.name}</span>
               {worktree.locked ? (
                 <Lock className="size-3.5 shrink-0 text-muted-foreground" aria-label="locked" />
               ) : null}
               {worktree.prunable ? (
-                <span className="ml-auto shrink-0 text-ui-sm text-destructive">missing</span>
+                <span className="type-hint ml-auto shrink-0 text-error">missing</span>
               ) : null}
             </li>
           </TooltipTrigger>
@@ -121,8 +119,8 @@ function ProjectWorktreeRows({ folder }: { folder: string }): React.JSX.Element 
   if (collapsed) return null
   if (project?.status === 'error') {
     return (
-      <li role="alert" className="flex gap-2 py-1 pr-2.5 pl-12 text-ui-sm text-muted-foreground">
-        <CircleAlert className="mt-0.5 size-3.5 shrink-0 text-destructive" aria-hidden />
+      <li role="alert" className="type-hint flex gap-2 py-1 pr-2.5 pl-tree-indent">
+        <CircleAlert className="mt-0.5 size-3.5 shrink-0 text-error" aria-hidden />
         <span className="min-w-0 break-words">Git: {project.message}</span>
       </li>
     )
@@ -156,7 +154,7 @@ function ProjectRow({ folder }: { folder: WorkspaceFolder }): React.JSX.Element 
             <li
               tabIndex={0}
               aria-label={folder.missing ? `${folder.name} (missing)` : folder.name}
-              className="flex h-9 cursor-default items-center gap-1.5 rounded-lg pr-2.5 pl-1 outline-none select-none hover:bg-accent focus-visible:bg-accent data-[state=open]:bg-accent"
+              className="flex h-project-row cursor-default items-center gap-1.5 rounded-component pr-2.5 pl-1 outline-none select-none hover:bg-row-hover focus-visible:bg-selection-inactive data-[state=open]:bg-selection-inactive"
               onClick={() => {
                 if (foldable) toggleCollapsed(folder.path)
               }}
@@ -172,7 +170,7 @@ function ProjectRow({ folder }: { folder: WorkspaceFolder }): React.JSX.Element 
                   tabIndex={-1}
                   aria-label={`${collapsed ? 'Expand' : 'Collapse'} ${folder.name}`}
                   aria-expanded={!collapsed}
-                  className="flex size-5 shrink-0 items-center justify-center rounded text-muted-foreground"
+                  className="flex size-5 shrink-0 items-center justify-center rounded-button text-muted-foreground"
                 >
                   <ChevronRight className={cn('size-4', !collapsed && 'rotate-90')} aria-hidden />
                 </button>
@@ -180,26 +178,26 @@ function ProjectRow({ folder }: { folder: WorkspaceFolder }): React.JSX.Element 
                 <span className="size-5 shrink-0" aria-hidden />
               )}
               {folder.missing ? (
-                <FolderX className="size-[18px] shrink-0 text-destructive" aria-hidden />
+                <FolderX className="size-[18px] shrink-0 text-error" aria-hidden />
               ) : (
                 <RootFolderIcon className="size-[18px] shrink-0" />
               )}
               <span
                 className={cn(
-                  'ml-1 truncate text-ui-lg font-semibold',
-                  folder.missing && 'font-medium text-muted-foreground line-through'
+                  'type-project-row ml-1 truncate',
+                  folder.missing && 'text-muted-foreground line-through'
                 )}
               >
                 {folder.name}
               </span>
               {checkout ? (
-                <span className="flex min-w-0 shrink items-center gap-1 text-ui-sm text-muted-foreground">
+                <span className="type-hint flex min-w-0 shrink items-center gap-1">
                   <GitBranch className="size-3.5 shrink-0" aria-hidden />
                   <span className="truncate">{worktreeLabel(checkout)}</span>
                 </span>
               ) : null}
               {folder.missing ? (
-                <span className="ml-auto shrink-0 text-ui-sm text-destructive">missing</span>
+                <span className="type-hint ml-auto shrink-0 text-error">missing</span>
               ) : null}
             </li>
           </TooltipTrigger>
@@ -227,15 +225,15 @@ export function WorkspacePanel(): React.JSX.Element {
 
   return (
     <>
-      <div className="flex h-11 shrink-0 items-center gap-1 pt-1 pr-2 pl-4">
-        <h2 className="flex-1 truncate font-medium text-muted-foreground">Projects</h2>
+      <div className="flex h-panel-header shrink-0 items-center gap-1 pt-1 pr-2 pl-4">
+        <h2 className="type-panel-title flex-1 truncate">Projects</h2>
         <Tooltip>
           <TooltipTrigger asChild>
             <button
               type="button"
               aria-label="Add Folder to Workspace"
               onClick={() => void addFolder()}
-              className="flex size-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+              className="flex size-icon-button items-center justify-center rounded-button text-muted-foreground hover:bg-hover hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
             >
               <FolderPlus className="size-[18px]" strokeWidth={1.75} aria-hidden />
             </button>
@@ -244,18 +242,21 @@ export function WorkspacePanel(): React.JSX.Element {
         </Tooltip>
       </div>
       {problem ? (
-        <p role="alert" className="mx-2 mb-2 flex gap-2 rounded-md px-2 py-1.5 text-destructive">
-          <CircleAlert className="mt-0.5 size-4 shrink-0" aria-hidden />
+        <p
+          role="alert"
+          className="mx-2 mb-2 flex gap-2 rounded-banner border border-error-border bg-error-background px-2 py-1.5"
+        >
+          <CircleAlert className="mt-0.5 size-4 shrink-0 text-error" aria-hidden />
           {problem}
         </p>
       ) : null}
       {workspace && folders.length === 0 && !workspace.problem ? (
         <div className="flex flex-col items-start gap-3 px-4 pt-1">
-          <p className="text-muted-foreground">No folders in this workspace yet.</p>
+          <p className="type-description">No folders in this workspace yet.</p>
           <button
             type="button"
             onClick={() => void addFolder()}
-            className="flex h-9 items-center gap-2 rounded-lg bg-primary px-3.5 font-medium text-primary-foreground hover:bg-primary/90 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+            className="type-button flex h-control items-center gap-2 rounded-button bg-primary px-3.5 text-primary-foreground hover:bg-primary/90 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
           >
             <FolderPlus className="size-4" aria-hidden />
             Open Folder

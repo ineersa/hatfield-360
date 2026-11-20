@@ -5,31 +5,13 @@ import { cn } from '@/lib/class-names'
 import { cssFontFamily } from '@/lib/css-font-family'
 import { useSettingsStore } from '@/state/settings-store'
 import { useShellLayoutStore } from '@/state/shell-layout-store'
-import { DEFAULT_SETTINGS, type IconTheme, type SettingKey } from '../../../../shared/settings-api'
+import { DEFAULT_SETTINGS, type IconTheme } from '../../../../shared/settings-api'
+import { ColorThemeSettings } from './ColorThemeSettings'
 import { FONT_PICKER_ATTRIBUTE, FontPicker } from './FontPicker'
 import { FontSizeInput } from './FontSizeInput'
+import { ResetButton } from './ResetButton'
 
 const PREVIEW_TEXT = 'The quick brown fox jumps over the lazy dog · 0O 1lI {}'
-
-function ResetButton({ settingKey, label }: { settingKey: SettingKey; label: string }) {
-  const customized = useSettingsStore((state) => state.customized.includes(settingKey))
-  const editable = useSettingsStore((state) => state.editable)
-  const update = useSettingsStore((state) => state.update)
-  // Keeps its place when hidden, so the fields line up across sections.
-  if (!customized) return <span className="size-9 shrink-0" aria-hidden />
-  return (
-    <button
-      type="button"
-      aria-label={`Reset ${label}`}
-      title="Reset to default"
-      disabled={!editable}
-      onClick={() => void update(settingKey, null)}
-      className="flex size-9 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-    >
-      <RotateCcw className="size-4" aria-hidden />
-    </button>
-  )
-}
 
 const ICON_THEME_CHOICES: {
   theme: IconTheme
@@ -58,10 +40,10 @@ function IconThemeSetting(): React.JSX.Element {
   return (
     <section aria-labelledby={headingId} className="flex flex-col gap-2 py-4">
       <div>
-        <h3 id={headingId} className="font-semibold">
+        <h3 id={headingId} className="type-section-title">
           File icons
         </h3>
-        <p className="text-muted-foreground">
+        <p className="type-description">
           Icons for folders and files. For now the project folders in the Projects panel use them;
           the Files view will use them for every file.
         </p>
@@ -71,7 +53,7 @@ function IconThemeSetting(): React.JSX.Element {
           {ICON_THEME_CHOICES.map(({ theme, name, Icon }) => (
             <label
               key={theme}
-              className="relative flex h-11 cursor-pointer items-center gap-2.5 rounded-lg border border-border px-3 has-checked:border-primary has-checked:bg-selection has-focus-visible:ring-2 has-focus-visible:ring-ring has-disabled:cursor-default has-disabled:opacity-50"
+              className="relative flex h-control cursor-pointer items-center gap-2.5 rounded-component border border-input-border px-3 has-checked:border-primary has-checked:bg-selection has-focus-visible:ring-2 has-focus-visible:ring-ring has-disabled:cursor-default has-disabled:opacity-50"
             >
               <input
                 type="radio"
@@ -113,10 +95,10 @@ function FontSetting({
   return (
     <section aria-labelledby={headingId} className="flex flex-col gap-2 py-4">
       <div>
-        <h3 id={headingId} className="font-semibold">
+        <h3 id={headingId} className="type-section-title">
           {name} font
         </h3>
-        <p className="text-muted-foreground">{description}</p>
+        <p className="type-description">{description}</p>
       </div>
       <div className="flex items-center gap-2">
         <FontPicker
@@ -139,7 +121,7 @@ function FontSetting({
       </div>
       <p
         aria-label={`${name} font preview`}
-        className="truncate rounded-lg bg-background px-2.5 py-2"
+        className="truncate rounded-component bg-frame px-2.5 py-2"
         style={{ fontFamily: cssFontFamily(family), fontSize: size }}
       >
         {PREVIEW_TEXT}
@@ -196,14 +178,14 @@ function ResetAllButton(): React.JSX.Element | null {
   }
   return (
     <div role="group" aria-label="Reset all settings" className="flex items-center gap-1">
-      <span className="px-1 whitespace-nowrap text-muted-foreground">Reset every setting?</span>
+      <span className="type-description px-1 whitespace-nowrap">Reset every setting?</span>
       <button
         type="button"
         onClick={() => {
           setConfirming(false)
           void resetAll()
         }}
-        className={cn(HEADER_BUTTON_CLASS, 'text-destructive')}
+        className={cn(HEADER_BUTTON_CLASS, 'text-error')}
       >
         Reset
       </button>
@@ -215,7 +197,7 @@ function ResetAllButton(): React.JSX.Element | null {
 }
 
 const HEADER_BUTTON_CLASS =
-  'flex h-9 shrink-0 items-center gap-2 rounded-lg px-2.5 font-medium whitespace-nowrap text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none disabled:opacity-50'
+  'type-button flex h-control shrink-0 items-center gap-2 rounded-button px-2.5 whitespace-nowrap text-muted-foreground hover:bg-hover hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none disabled:opacity-50'
 
 /** The settings in settings.json as a form; every change is written to the file right away. */
 function TerminalGpuSetting(): React.JSX.Element {
@@ -235,8 +217,8 @@ function TerminalGpuSetting(): React.JSX.Element {
           className="mt-1 size-4 shrink-0 accent-primary"
         />
         <span>
-          <span className="block font-semibold">Terminal GPU rendering</span>
-          <span id={descriptionId} className="block text-muted-foreground">
+          <span className="type-section-title block">Terminal GPU rendering</span>
+          <span id={descriptionId} className="type-description block">
             Draws terminals with WebGL. Turn it off if terminal text looks garbled or flickers.
           </span>
         </span>
@@ -266,12 +248,12 @@ export function SettingsPage(): React.JSX.Element {
     <div className="flex min-h-0 w-full flex-1 justify-center overflow-y-auto px-8 py-8">
       <div className="flex w-full max-w-2xl flex-col">
         <header className="flex flex-wrap items-center gap-2 pb-2">
-          <h1 className="flex-1 text-ui-lg font-semibold">Settings</h1>
+          <h1 className="type-page-title flex-1">Settings</h1>
           <ResetAllButton />
           <button
             type="button"
             onClick={() => void openFile()}
-            className="flex h-9 shrink-0 items-center gap-2 rounded-lg px-2.5 font-medium whitespace-nowrap text-primary hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+            className="type-button flex h-control shrink-0 items-center gap-2 rounded-button px-2.5 whitespace-nowrap text-link hover:bg-hover focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
           >
             <FileJson className="size-4" aria-hidden />
             Open settings.json
@@ -280,18 +262,22 @@ export function SettingsPage(): React.JSX.Element {
             type="button"
             aria-label="Close Settings"
             onClick={close}
-            className="flex size-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+            className="flex size-icon-button items-center justify-center rounded-button text-muted-foreground hover:bg-hover hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
           >
             <X className="size-4" aria-hidden />
           </button>
         </header>
         {editable ? null : (
-          <p role="status" className="rounded-lg bg-background px-3 py-2 text-destructive">
+          <p
+            role="status"
+            className="rounded-banner border border-error-border bg-error-background px-3 py-2"
+          >
             settings.json has errors, so settings can't be changed here. Fix the file with Open
             settings.json.
           </p>
         )}
-        <div className="flex flex-col divide-y divide-border">
+        <div className="flex flex-col divide-y divide-separator">
+          <ColorThemeSettings />
           <IconThemeSetting />
           {FONT_SETTINGS.map((setting) => (
             <FontSetting key={setting.familyKey} {...setting} />

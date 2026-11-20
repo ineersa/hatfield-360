@@ -7,7 +7,7 @@ export default defineConfig({
   root,
   test: {
     environment: 'node',
-    include: ['src/**/*.test.ts'],
+    include: ['src/**/*.test.ts', 'scripts/**/*.test.mts'],
     // A focused test would silently skip its siblings, locally as well as in CI.
     allowOnly: false
   }

@@ -24,7 +24,7 @@ function StripCommand({
           type="button"
           aria-label={label}
           onClick={() => runTerminalCommand(command)}
-          className="flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+          className="flex size-icon-button shrink-0 items-center justify-center rounded-button text-muted-foreground hover:bg-hover hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
         >
           <Icon className="size-4" aria-hidden />
         </button>
@@ -45,9 +45,9 @@ export function TerminalTabs({ hidden }: { hidden: boolean }): React.JSX.Element
   const closeTab = useTerminalStore((state) => state.closeTab)
 
   return (
-    <div className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-xl" hidden={hidden}>
+    <div className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-island" hidden={hidden}>
       {/* The active tab covers the strip's bottom line, so it reads as one piece with its panes. */}
-      <div className="flex h-10 shrink-0 items-stretch bg-background shadow-[inset_0_-1px_0_var(--border)]">
+      <div className="flex h-tab-bar shrink-0 items-stretch bg-frame shadow-[inset_0_-1px_0_var(--separator)]">
         <div
           role="tablist"
           aria-label="Terminals"
@@ -59,10 +59,10 @@ export function TerminalTabs({ hidden }: { hidden: boolean }): React.JSX.Element
               <div
                 key={tab.id}
                 className={cn(
-                  'group flex max-w-60 min-w-0 shrink-0 items-center gap-2 border-r border-border pr-2 pl-3.5 select-none',
+                  'type-tab group flex max-w-60 min-w-0 shrink-0 items-center gap-2 border-r border-separator pr-2 pl-3.5 select-none',
                   active
                     ? 'bg-island text-foreground'
-                    : 'text-muted-foreground hover:bg-accent hover:text-foreground'
+                    : 'text-muted-foreground hover:bg-tab-hover hover:text-foreground'
                 )}
               >
                 <SquareTerminal className="size-4 shrink-0" aria-hidden />
@@ -81,7 +81,7 @@ export function TerminalTabs({ hidden }: { hidden: boolean }): React.JSX.Element
                   aria-label={`Close ${tab.title}`}
                   onClick={() => closeTab(tab.id)}
                   className={cn(
-                    'flex size-5 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:opacity-100',
+                    'flex size-5 shrink-0 items-center justify-center rounded-button text-muted-foreground hover:bg-hover hover:text-foreground focus-visible:opacity-100',
                     active ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
                   )}
                 >

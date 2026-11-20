@@ -29,7 +29,7 @@ export function ActivityBar(): React.JSX.Element {
                 aria-expanded={active ? open : undefined}
                 onClick={() => activateView(view.id)}
                 className={cn(
-                  'flex size-10 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none',
+                  'flex size-activity-button items-center justify-center rounded-button text-muted-foreground transition-colors hover:bg-hover hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none',
                   active && 'text-foreground',
                   open &&
                     'bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground'
@@ -39,7 +39,7 @@ export function ActivityBar(): React.JSX.Element {
               </button>
             </TooltipTrigger>
             <TooltipContent side="right">
-              <span className="font-medium">{view.label}</span>
+              <span className="type-tooltip-title">{view.label}</span>
               <span className="text-tooltip-muted-foreground"> · {view.description}</span>
             </TooltipContent>
           </Tooltip>
@@ -53,7 +53,7 @@ export function ActivityBar(): React.JSX.Element {
             aria-pressed={settingsOpen}
             onClick={openSettings}
             className={cn(
-              'mt-auto flex size-10 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none',
+              'mt-auto flex size-activity-button items-center justify-center rounded-button text-muted-foreground transition-colors hover:bg-hover hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none',
               settingsOpen &&
                 'bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground'
             )}
@@ -62,7 +62,7 @@ export function ActivityBar(): React.JSX.Element {
           </button>
         </TooltipTrigger>
         <TooltipContent side="right">
-          <span className="font-medium">Settings</span>
+          <span className="type-tooltip-title">Settings</span>
         </TooltipContent>
       </Tooltip>
     </nav>

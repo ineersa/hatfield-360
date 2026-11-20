@@ -11,10 +11,12 @@ import {
   DEFAULT_SETTINGS,
   FONT_SIZE_RANGE,
   ICON_THEMES,
-  type IconTheme,
   type SettingKey,
   type Settings
 } from '../../shared/settings-api'
+import { APP_THEMES } from '../../shared/themes/app-theme-catalog'
+import { EDITOR_THEMES } from '../../shared/themes/editor-theme-catalog'
+import { TERMINAL_THEMES } from '../../shared/themes/terminal-theme-catalog'
 
 export type ParsedSettings = {
   values: Settings
@@ -49,12 +51,17 @@ function fontSize(value: unknown): Checked<number> {
     : { value: clamped, problem: `must be between ${min} and ${max}; using ${clamped}` }
 }
 
-function iconTheme(value: unknown): Checked<IconTheme> {
-  const theme = ICON_THEMES.find((candidate) => candidate === value)
-  return theme
-    ? { value: theme }
-    : { problem: `must be one of ${ICON_THEMES.map((name) => `"${name}"`).join(', ')}` }
+/** Checks a value is one of `choices`. */
+function oneOf<T extends string>(choices: readonly T[]): (value: unknown) => Checked<T> {
+  return (value) => {
+    const choice = choices.find((candidate) => candidate === value)
+    return choice
+      ? { value: choice }
+      : { problem: `must be one of ${choices.map((name) => `"${name}"`).join(', ')}` }
+  }
 }
+
+const ids = <T extends string>(themes: readonly { id: T }[]): T[] => themes.map(({ id }) => id)
 
 function flag(value: unknown): Checked<boolean> {
   return typeof value === 'boolean' ? { value } : { problem: 'must be true or false' }
@@ -68,7 +75,10 @@ const CHECKS: { [K in SettingKey]: (value: unknown) => Checked<Settings[K]> } = 
   'terminal.gpuAcceleration': flag,
   'editor.fontFamily': fontFamily,
   'editor.fontSize': fontSize,
-  'workbench.iconTheme': iconTheme
+  'workbench.iconTheme': oneOf(ICON_THEMES),
+  'workbench.colorTheme': oneOf(ids(APP_THEMES)),
+  'editor.colorTheme': oneOf(ids(EDITOR_THEMES)),
+  'terminal.colorTheme': oneOf(ids(TERMINAL_THEMES))
 }
 
 export const isSettingKey = (key: string): key is SettingKey => Object.hasOwn(CHECKS, key)

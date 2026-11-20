@@ -1,5 +1,11 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
   "entry": ["config/*.mts", "tests/e2e/**/*.spec.ts"],
-  "project": ["src/**/*.{ts,tsx,css}", "tests/**/*.ts", "config/*.mts"]
+  "project": [
+    "src/**/*.{ts,tsx,css}",
+    "tests/**/*.ts",
+    "config/*.mts",
+    "scripts/**/*.mts",
+    "!scripts/themes/sources/**"
+  ]
 }

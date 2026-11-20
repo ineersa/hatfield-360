@@ -9,7 +9,7 @@ const clamp = (size: number): number =>
   Math.min(FONT_SIZE_RANGE.max, Math.max(FONT_SIZE_RANGE.min, size))
 
 const STEP_BUTTON_CLASS =
-  'flex size-9 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none disabled:opacity-50'
+  'flex size-icon-button shrink-0 items-center justify-center rounded-button text-muted-foreground hover:bg-hover hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none disabled:opacity-50'
 
 /** A font size that applies while the user types or steps it; Escape puts the saved size back. */
 export function FontSizeInput({
@@ -95,7 +95,7 @@ export function FontSizeInput({
             event.currentTarget.blur()
           }
         }}
-        className="h-9 w-14 rounded-lg border border-border bg-background px-2 text-center outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+        className="h-control w-14 rounded-component border border-input-border bg-input px-2 text-center text-input-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
       />
       <button
         type="button"

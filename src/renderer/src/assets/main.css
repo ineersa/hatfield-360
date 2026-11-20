@@ -1,49 +1,117 @@
 @import 'tailwindcss';
 @import '@fontsource-variable/inter';
-@import './themes/islands-dark.css';
+@import './themes/app-themes.css';
+@import './themes/base.css';
 @import './terminal.css';
 
 /*
- * Colour roles: every component uses these, never ad-hoc colours. Values come from the active
- * app theme (assets/themes/, selected by data-theme on <html>).
- *   background  window frame behind the islands (activity bar, status bar, gaps)
- *   island      rounded panels: side panel, main area
- *   accent      hover / subtle fill; selection: selected row; primary: active control, focus ring
- *   tooltip     hover hints: a raised surface that stands out over both the frame and the islands
+ * Every component styles itself through these roles, never with raw values. Colours, radii and row
+ * heights come from the active app theme (themes/app/<id>.css, generated from JetBrains UI themes by
+ * `pnpm themes:import`, selected by data-theme on <html>; the role table is
+ * scripts/themes/app-theme-roles.mts). Text styles and control sizes come from themes/base.css,
+ * shared by every app theme. Tailwind's own colours and radii are switched off, so only roles exist.
  */
-/* App font settings (app.fontFamily, app.fontSize); the renderer overrides these from settings.json. */
 :root {
+  /* App font settings (app.fontFamily, app.fontSize); the renderer overrides these from settings.json. */
   --app-font-family: 'Inter Variable', system-ui, sans-serif;
   --app-font-size: 14px;
 }
 
 @theme inline {
   --font-sans: var(--app-font-family);
-  /* Text sizes relative to the app font size, so the whole UI follows app.fontSize. */
-  --text-ui-sm: calc(var(--app-font-size) - 2px);
-  --text-ui-lg: calc(var(--app-font-size) + 1px);
-  --color-background: var(--background);
+  --color-*: initial;
+  --color-frame: var(--frame);
   --color-island: var(--island);
   --color-foreground: var(--foreground);
   --color-muted-foreground: var(--muted-foreground);
-  --color-border: var(--border);
-  --color-accent: var(--accent);
-  --color-accent-foreground: var(--accent-foreground);
+  --color-disabled-foreground: var(--disabled-foreground);
+  --color-status-foreground: var(--status-foreground);
+  --color-link: var(--link);
+  --color-icon-text: var(--icon-text);
+  --color-hover: var(--hover);
+  --color-pressed: var(--pressed);
+  --color-row-hover: var(--row-hover);
   --color-selection: var(--selection);
+  --color-selection-foreground: var(--selection-foreground);
+  --color-selection-inactive: var(--selection-inactive);
+  --color-ring: var(--ring);
+  --color-border: var(--border);
+  --color-separator: var(--separator);
+  --color-input: var(--input);
+  --color-input-foreground: var(--input-foreground);
+  --color-input-border: var(--input-border);
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
-  --color-destructive: var(--destructive);
-  --color-ring: var(--ring);
+  --color-button: var(--button);
+  --color-button-foreground: var(--button-foreground);
+  --color-button-border: var(--button-border);
+  --color-tab-selected: var(--tab-selected);
+  --color-tab-underline: var(--tab-underline);
+  --color-tab-hover: var(--tab-hover);
   --color-tooltip: var(--tooltip);
   --color-tooltip-foreground: var(--tooltip-foreground);
   --color-tooltip-muted-foreground: var(--tooltip-muted-foreground);
-  /* File and folder icon colours (Catppuccin icon palette), defined per theme. */
-  --color-icon-text: var(--icon-text);
+  --color-tooltip-border: var(--tooltip-border);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover-border: var(--popover-border);
+  --color-popover-selection: var(--popover-selection);
+  --color-popover-selection-foreground: var(--popover-selection-foreground);
+  --color-popover-shortcut: var(--popover-shortcut);
+  --color-dialog: var(--dialog);
+  --color-dialog-border: var(--dialog-border);
+  --color-toast: var(--toast);
+  --color-toast-foreground: var(--toast-foreground);
+  --color-toast-border: var(--toast-border);
+  --color-counter: var(--counter);
+  --color-counter-foreground: var(--counter-foreground);
+  --color-error: var(--error);
+  --color-error-background: var(--error-background);
+  --color-error-border: var(--error-border);
+  --color-warning: var(--warning);
+  --color-warning-background: var(--warning-background);
+  --color-warning-border: var(--warning-border);
+  --color-success: var(--success);
+  --color-success-background: var(--success-background);
+  --color-success-border: var(--success-border);
+  --color-info: var(--info);
+  --color-info-background: var(--info-background);
+  --color-info-border: var(--info-border);
+  --color-scrollbar-thumb: var(--scrollbar-thumb);
+  --color-scrollbar-thumb-hover: var(--scrollbar-thumb-hover);
+  /* The terminal theme's background (terminal.colorTheme), set by the renderer. */
+  --color-terminal: var(--terminal-background);
+
+  --radius-*: initial;
+  --radius-island: var(--island-radius);
+  --radius-component: var(--component-radius);
+  --radius-button: var(--button-radius);
+  --radius-popup: var(--popup-radius);
+  --radius-banner: var(--banner-radius);
+
+  /* Heights, sizes and gaps: h-tree-row, size-icon-button, p-island-gap, ... */
+  --spacing-tree-row: var(--tree-row-height);
+  --spacing-list-row: var(--list-row-height);
+  --spacing-project-row: var(--project-row-height);
+  --spacing-control: var(--control-height);
+  --spacing-icon-button: var(--icon-button-size);
+  --spacing-activity-button: var(--activity-button-size);
+  --spacing-small-icon-button: var(--small-icon-button-size);
+  --spacing-panel-header: var(--panel-header-height);
+  --spacing-tab-bar: var(--tab-bar-height);
+  --spacing-status-bar: var(--status-bar-height);
+  --spacing-island-gap: var(--island-gap);
+  --spacing-tree-indent: var(--tree-indent);
+  --spacing-empty-state-icon: var(--empty-state-icon-size);
 }
 
 body {
-  background-color: var(--background);
+  background-color: var(--frame);
   color: var(--foreground);
   font-family: var(--font-sans);
   font-size: var(--app-font-size);
+}
+
+* {
+  scrollbar-color: var(--scrollbar-thumb) transparent;
 }

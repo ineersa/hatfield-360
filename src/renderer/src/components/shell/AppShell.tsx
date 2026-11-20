@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react'
 import { SettingsMessage } from '@/components/settings/SettingsMessage'
 import { SettingsPage } from '@/components/settings/SettingsPage'
 import { useAppFont } from '@/components/settings/use-app-font'
+import { useColorThemes } from '@/components/settings/use-color-themes'
 import { TerminalTabs } from '@/components/terminal/TerminalTabs'
 import { useTerminalCommands } from '@/components/terminal/use-terminal-commands'
 import { TooltipProvider } from '@/components/ui/tooltip'
@@ -43,6 +44,7 @@ export function AppShell(): React.JSX.Element {
   useEffect(() => connectLayout(), [connectLayout])
   useEffect(() => window.desktop.subscribeShowSettings(openSettings), [openSettings])
   useAppFont()
+  useColorThemes()
   useTerminalCommands()
   useEffect(() => {
     document.title = workspaceName ? `${workspaceName} — Hatfield 360` : 'Hatfield 360'
@@ -55,16 +57,16 @@ export function AppShell(): React.JSX.Element {
   const view = SHELL_VIEWS.find((candidate) => candidate.id === activeView) ?? SHELL_VIEWS[0]
   if (!view) throw new Error('No shell views defined')
   // A blank frame for the moment it takes to read the saved layout, instead of a default one that jumps.
-  if (!layoutLoaded) return <div className="h-screen bg-background" />
+  if (!layoutLoaded) return <div className="h-screen bg-frame" />
   // Terminal tabs stay mounted behind other views and Settings, so their shells keep running.
   const showTerminals = hasTerminals && !settingsOpen && view.id === 'agents'
 
   return (
     <TooltipProvider>
-      <div className="flex h-screen flex-col bg-background text-foreground">
+      <div className="type-body flex h-screen flex-col bg-frame">
         <WorkspaceMessage />
         <SettingsMessage />
-        <div className="flex min-h-0 flex-1 pt-1.5 pr-1.5">
+        <div className="flex min-h-0 flex-1 pt-island-gap pr-island-gap">
           <ActivityBar />
           <div className="flex min-w-0 flex-1">
             {panel.collapsed ? null : (
@@ -78,16 +80,16 @@ export function AppShell(): React.JSX.Element {
                     minWidth: SIDE_PANEL_MIN_WIDTH,
                     maxWidth: `calc(100% - ${SIDE_PANEL_HANDLE_WIDTH + MAIN_AREA_MIN_WIDTH}px)`
                   }}
-                  className="flex shrink-0 flex-col overflow-hidden rounded-xl bg-island"
+                  className="flex shrink-0 flex-col overflow-hidden rounded-island bg-island"
                 >
                   {view.Panel ? (
                     <view.Panel />
                   ) : (
                     <>
-                      <h2 className="flex h-10 shrink-0 items-center px-4 font-semibold">
+                      <h2 className="type-panel-title flex h-panel-header shrink-0 items-center px-4">
                         {view.panelTitle}
                       </h2>
-                      <p className="px-4 text-muted-foreground">{view.panelPlaceholder}</p>
+                      <p className="type-description px-4">{view.panelPlaceholder}</p>
                     </>
                   )}
                 </aside>
@@ -103,7 +105,7 @@ export function AppShell(): React.JSX.Element {
             )}
             <main
               aria-label={settingsOpen ? 'Settings' : view.label}
-              className="flex min-w-0 flex-1 rounded-xl bg-island"
+              className="flex min-w-0 flex-1 rounded-island bg-island"
             >
               {hasTerminals ? <TerminalTabs hidden={!showTerminals} /> : null}
               {showTerminals ? null : settingsOpen ? (
@@ -115,11 +117,11 @@ export function AppShell(): React.JSX.Element {
               ) : (
                 <div className="flex flex-1 flex-col items-center justify-center gap-3 p-8 text-center">
                   <view.Icon
-                    className="size-10 text-muted-foreground"
+                    className="size-empty-state-icon text-muted-foreground"
                     strokeWidth={1.5}
                     aria-hidden
                   />
-                  <p className="max-w-sm text-muted-foreground">{view.mainPlaceholder}</p>
+                  <p className="type-description max-w-sm">{view.mainPlaceholder}</p>
                 </div>
               )}
             </main>

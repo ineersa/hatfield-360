@@ -13,14 +13,15 @@
     "format": "oxfmt --write .",
     "format:check": "oxfmt --check .",
     "lint": "oxlint --type-aware --deny-warnings",
-    "typecheck": "tsc --noEmit -p config/tsconfig.node.json && tsc --noEmit -p config/tsconfig.web.json",
+    "typecheck": "tsc --noEmit -p config/tsconfig.node.json && tsc --noEmit -p config/tsconfig.web.json && tsc --noEmit -p config/tsconfig.scripts.json",
     "knip": "knip --config config/knip.json",
     "test": "vitest run --config config/vitest.config.mts",
     "test:watch": "vitest --config config/vitest.config.mts",
     "test:e2e": "electron-vite build && playwright test --config config/playwright.config.mts",
     "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm knip && pnpm test",
     "verify": "pnpm check && pnpm test:e2e",
-    "prepare": "husky"
+    "prepare": "husky",
+    "themes:import": "node scripts/themes/import-themes.mts"
   },
   "dependencies": {
     "node-pty": "1.1.0"

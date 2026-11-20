@@ -23,7 +23,7 @@ export function ContextMenuContent({
       <ContextMenuPrimitive.Content
         data-slot="context-menu-content"
         className={cn(
-          'z-50 min-w-48 overflow-hidden rounded-lg border border-border bg-island p-1 text-foreground shadow-lg',
+          'type-menu-item z-50 min-w-48 overflow-hidden rounded-popup border border-popover-border bg-popover p-1 shadow-lg',
           className
         )}
         {...props}
@@ -40,7 +40,7 @@ export function ContextMenuItem({
     <ContextMenuPrimitive.Item
       data-slot="context-menu-item"
       className={cn(
-        'flex cursor-default items-center gap-2 rounded-md px-2 py-1.5 outline-hidden select-none focus:bg-selection data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&_svg]:size-4 [&_svg]:shrink-0 [&_svg]:text-muted-foreground',
+        'flex h-list-row cursor-default items-center gap-2 rounded-component px-2 outline-hidden select-none focus:bg-popover-selection focus:text-popover-selection-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&_svg]:size-4 [&_svg]:shrink-0 [&_svg]:text-muted-foreground',
         className
       )}
       {...props}
@@ -55,7 +55,7 @@ export function ContextMenuSeparator({
   return (
     <ContextMenuPrimitive.Separator
       data-slot="context-menu-separator"
-      className={cn('-mx-1 my-1 h-px bg-border', className)}
+      className={cn('-mx-1 my-1 h-px bg-separator', className)}
       {...props}
     />
   )
@@ -68,7 +68,7 @@ export function ContextMenuShortcut({
   return (
     <span
       data-slot="context-menu-shortcut"
-      className={cn('ml-auto pl-6 text-ui-sm text-muted-foreground', className)}
+      className={cn('type-shortcut ml-auto pl-6', className)}
       {...props}
     />
   )

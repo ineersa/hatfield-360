@@ -1,0 +1,15 @@
+<!-- The <themeProvider> registrations of intellij.platform.ide.impl.xml (lib/intellij.platform.ide.impl.jar, PhpStorm 2026.3), for the theme files in this folder. -->
+<idea-plugin>
+  <extensions defaultExtensionNs="com.intellij">
+    <themeProvider id="Darcula" path="/themes/darcula.theme.json" targetUi="classic"/>
+    <themeProvider id="IntelliJ" path="/themes/intellijlaf.theme.json" targetUi="classic"/>
+    <themeProvider id="JetBrainsLightTheme" path="/themes/Light.theme.json" targetUi="classic"/>
+    <themeProvider id="ExperimentalLight" path="/themes/expUI/expUI_light.theme.json" targetUi="new"/>
+    <themeProvider id="ExperimentalLightWithLightHeader" path="/themes/expUI/expUI_light_with_light_header.theme.json" targetUi="new"/>
+    <themeProvider id="ExperimentalDark" path="/themes/expUI/expUI_dark.theme.json" targetUi="new"/>
+    <themeProvider id="JetBrainsHighContrastTheme" path="/themes/islands/HighContrast.theme.json"/>
+    <themeProvider id="Islands Dark" path="/themes/islands/ManyIslandsDark.theme.json" targetUi="islands"/>
+    <themeProvider id="Islands Light" path="/themes/islands/ManyIslandsLight.theme.json" targetUi="islands"/>
+    <themeProvider id="Islands Darcula" path="/themes/islands/ManyIslandsDarcula.theme.json" targetUi="islands"/>
+  </extensions>
+</idea-plugin>
