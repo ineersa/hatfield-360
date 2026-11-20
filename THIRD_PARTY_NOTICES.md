@@ -35,13 +35,14 @@ SOFTWARE.
 ## Orca
 
 Source: https://github.com/stablyai/orca (commit ccebbedaee8d7f6c26646ed6bf89302fd7b1c62a)
-Used in: terminal panes and shells, ported and trimmed:
+Used in: terminal panes and shells and the git worktree list, ported and trimmed:
 
 - `src/renderer/src/lib/pane-manager/` (split tree, draggable dividers, xterm pane lifecycle, fitting, WebGL renderer) from `src/renderer/src/lib/pane-manager/`
 - `src/renderer/src/assets/terminal.css` from `src/renderer/src/assets/terminal.css`
 - `src/main/terminal/terminal-environment.ts` (shell environment and its scrubbers) from `src/main/providers/local-pty/local-pty-spawn-environment.ts` and the shell-startup environment modules
 - `src/main/terminal/default-shell.ts` (Unix shell fallbacks, PowerShell lookup) from `src/main/providers/local-pty/local-pty-executable-spawn.ts` and `src/main/providers/shell-launch/windows/powershell-executable.ts`
 - `src/main/terminal/terminal-sessions.ts` (the macOS spawn-helper check) from `src/main/providers/local-pty/local-pty-executable-spawn.ts`
+- `src/main/git/worktree-list.ts` (`git worktree list --porcelain -z` parsing) from `src/shared/git/worktrees/git-worktree-porcelain-parser.ts`
 
 ```
 MIT License

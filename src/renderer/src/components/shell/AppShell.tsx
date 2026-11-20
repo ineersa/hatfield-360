@@ -10,6 +10,7 @@ import { WorkspaceMessage } from '@/components/workspace/WorkspaceMessage'
 import { useSettingsStore } from '@/state/settings-store'
 import { SIDE_PANEL_MIN_WIDTH, useShellLayoutStore } from '@/state/shell-layout-store'
 import { useTerminalStore } from '@/state/terminal-store'
+import { useWorktreeStore } from '@/state/worktree-store'
 import { useWorkspaceStore } from '@/state/workspace-store'
 import { ActivityBar } from './ActivityBar'
 import { SHELL_VIEWS } from './shell-views'
@@ -28,6 +29,7 @@ export function AppShell(): React.JSX.Element {
   const workspaceName = useWorkspaceStore((state) => state.workspace?.name)
   const workspaceEmpty = useWorkspaceStore((state) => state.workspace?.folders.length === 0)
 
+  const connectWorktrees = useWorktreeStore((state) => state.connect)
   const connectSettings = useSettingsStore((state) => state.connect)
   const settingsOpen = useShellLayoutStore((state) => state.settingsOpen)
   const openSettings = useShellLayoutStore((state) => state.openSettings)
@@ -36,6 +38,7 @@ export function AppShell(): React.JSX.Element {
   const hasTerminals = useTerminalStore((state) => state.tabs.length > 0)
 
   useEffect(() => connectWorkspace(), [connectWorkspace])
+  useEffect(() => connectWorktrees(), [connectWorktrees])
   useEffect(() => connectSettings(), [connectSettings])
   useEffect(() => connectLayout(), [connectLayout])
   useEffect(() => window.desktop.subscribeShowSettings(openSettings), [openSettings])
