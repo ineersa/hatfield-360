@@ -163,6 +163,70 @@ test('the empty Agents view opens a terminal in the first project with one click
   }
 })
 
+test('the system copy and paste keys copy and paste, and Ctrl+C still interrupts', async () => {
+  const { userData, cleanup } = await seedProject()
+  const modifier = process.platform === 'darwin' ? 'Meta' : 'Control'
+  try {
+    await withApp(
+      async (app, page) => {
+        await openProjectTerminal(page)
+        const pane = panes(page)
+        await panePid(pane)
+
+        await app.evaluate(({ clipboard }) => clipboard.writeText('pasted-77'))
+        await pane.click()
+        await page.keyboard.type('echo ')
+        await page.keyboard.press(`${modifier}+V`)
+        await page.keyboard.press('Enter')
+        // Pasted once, as text: the command line and its output, no ^V and no second paste.
+        await expect(screenText(pane)).toContainText('echo pasted-77')
+        await expect
+          .poll(
+            async () => ((await screenText(pane).textContent()) ?? '').split('pasted-77').length - 1
+          )
+          .toBe(2)
+
+        // With no text on the clipboard (an image), Ctrl+V reaches the program as ^V, as does
+        // Ctrl+Shift+V always: `od` shows the byte (026 octal).
+        if (!isWindows) {
+          await app.evaluate(({ clipboard }) => clipboard.clear())
+          // -iexten: the tty would otherwise take the first ^V as "insert the next key literally".
+          await run(page, pane, 'stty -iexten; od -c')
+          await page.keyboard.press('Control+V')
+          await expect(screenText(pane)).toContainText('od -c^V')
+          await page.keyboard.press('Control+Shift+V')
+          await expect(screenText(pane)).toContainText('od -c^V^V')
+          await page.keyboard.press('Enter')
+          await page.keyboard.press('Control+D')
+          await expect(screenText(pane)).toContainText(/026\s+026/)
+        }
+
+        await run(page, pane, 'echo copy-me-42')
+        const output = screenText(pane).getByText('copy-me-42', { exact: true })
+        // xterm's screen layer takes the mouse above its text rows: double-click where the word shows.
+        const word = await output.boundingBox()
+        if (!word) throw new Error('copy-me-42 is not on screen')
+        await page.mouse.dblclick(word.x + word.width / 2, word.y + word.height / 2)
+        await page.keyboard.press(`${modifier}+C`)
+        await expect
+          .poll(() => app.evaluate(({ clipboard }) => clipboard.readText()))
+          .toBe('copy-me-42')
+
+        // With nothing selected, Ctrl+C is the shell's interrupt.
+        await run(page, pane, 'sleep 30')
+        await page.keyboard.press('Control+C')
+        await run(page, pane, 'echo after-interrupt')
+        await expect(screenText(pane).getByText('after-interrupt', { exact: true })).toBeVisible({
+          timeout: 10_000
+        })
+      },
+      { userDataDir: userData }
+    )
+  } finally {
+    await cleanup()
+  }
+})
+
 test('splits give each pane its own shell; panes close, take focus and resize', async () => {
   const { userData, cleanup } = await seedProject()
   try {

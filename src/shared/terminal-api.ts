@@ -27,6 +27,8 @@ export const TERMINAL_CHANNELS = {
   resize: 'terminal:resize',
   kill: 'terminal:kill',
   openLink: 'terminal:open-link',
+  readClipboard: 'terminal:read-clipboard',
+  writeClipboard: 'terminal:write-clipboard',
   data: 'terminal:data',
   exit: 'terminal:exit',
   command: 'terminal:command'
@@ -39,6 +41,10 @@ export type TerminalApi = {
   killTerminal: (id: string) => Promise<void>
   /** Opens an http(s) link printed in a terminal in the default browser. */
   openTerminalLink: (url: string) => Promise<void>
+  /** The clipboard's text for a terminal paste; '' when it holds none (an image, say). */
+  readTerminalClipboard: () => Promise<string>
+  /** Puts a terminal selection on the clipboard. */
+  writeTerminalClipboard: (text: string) => Promise<void>
   subscribeTerminalData: (callback: (id: string, data: string) => void) => () => void
   subscribeTerminalExit: (callback: (exit: TerminalExit) => void) => () => void
   subscribeTerminalCommand: (callback: (command: TerminalCommand) => void) => () => void

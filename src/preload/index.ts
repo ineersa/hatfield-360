@@ -33,6 +33,8 @@ const desktopApi: DesktopApi = {
   resizeTerminal: (id, cols, rows) => ipcRenderer.invoke(TERMINAL_CHANNELS.resize, id, cols, rows),
   killTerminal: (id) => ipcRenderer.invoke(TERMINAL_CHANNELS.kill, id),
   openTerminalLink: (url) => ipcRenderer.invoke(TERMINAL_CHANNELS.openLink, url),
+  readTerminalClipboard: () => ipcRenderer.invoke(TERMINAL_CHANNELS.readClipboard),
+  writeTerminalClipboard: (text) => ipcRenderer.invoke(TERMINAL_CHANNELS.writeClipboard, text),
   subscribeTerminalData: (callback) => {
     const listener = (_event: unknown, id: string, data: string): void => callback(id, data)
     ipcRenderer.on(TERMINAL_CHANNELS.data, listener)

@@ -5,6 +5,7 @@ import { terminalTheme } from '@/lib/terminal-theme'
 import { useSettingsStore } from '@/state/settings-store'
 import { useTerminalStore, type TerminalTab } from '@/state/terminal-store'
 import { startPaneShell, type PaneShell } from './pane-shell'
+import { bindClipboardKeys } from './terminal-clipboard'
 import { terminalTabControllers } from './terminal-tab-controllers'
 
 function currentTerminalOptions(): { fontFamily: string; fontSize: number } {
@@ -34,11 +35,13 @@ export function TerminalTabBody({
     const panes = new PaneManager(element, {
       terminalOptions: () => ({ ...currentTerminalOptions(), theme: terminalTheme() }),
       gpuAcceleration: () => useSettingsStore.getState().values['terminal.gpuAcceleration'],
-      onPaneCreated: (pane) =>
+      onPaneCreated: (pane) => {
+        bindClipboardKeys(pane.terminal)
         shells.set(
           pane.id,
           startPaneShell(pane, tab.cwd, () => panes.closePane(pane.id))
-        ),
+        )
+      },
       onPaneClosed: (paneId) => {
         shells.get(paneId)?.dispose()
         shells.delete(paneId)

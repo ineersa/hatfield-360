@@ -1,4 +1,4 @@
-import { app, shell, type BrowserWindow } from 'electron'
+import { app, clipboard, shell, type BrowserWindow } from 'electron'
 import { stat } from 'node:fs/promises'
 import { isAbsolute } from 'node:path'
 import { TERMINAL_CHANNELS, type TerminalCommand } from '../../shared/terminal-api'
@@ -47,6 +47,13 @@ export function registerTerminalIpc(): void {
     const url = webLinkUrl(value)
     if (!url) throw new Error('Only http and https links can be opened.')
     return shell.openExternal(url)
+  })
+
+  handleTrusted(TERMINAL_CHANNELS.readClipboard, () => clipboard.readText())
+
+  handleTrusted(TERMINAL_CHANNELS.writeClipboard, (_event, text) => {
+    if (!isTerminalInput(text)) throw new Error('Invalid clipboard text.')
+    return clipboard.writeText(text)
   })
 }
 
