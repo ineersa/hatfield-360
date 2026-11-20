@@ -75,6 +75,7 @@ test('a terminal opens in the project, runs commands and closes when its shell e
           .click()
         await expect(page.getByRole('tab', { name: 'pty-project', selected: true })).toBeVisible()
         const pane = panes(page)
+        await panePid(pane)
         await run(page, pane, 'pwd')
         await expect(screenText(pane)).toContainText(project)
         await run(page, pane, printTermProgram)
@@ -86,6 +87,8 @@ test('a terminal opens in the project, runs commands and closes when its shell e
 
         // Open Terminal Here does the same from the project's menu, and has the keys at once.
         await openProjectTerminal(page)
+        // Keys typed before the shell exists have nowhere to go.
+        await panePid(panes(page))
         await page.keyboard.type('echo straight-from-menu')
         await page.keyboard.press('Enter')
         await expect(screenText(panes(page))).toContainText('straight-from-menu')
@@ -145,6 +148,7 @@ test('the system keys paste into the terminal and copy its selection', async () 
         try {
           await openProjectTerminal(page)
           const pane = panes(page)
+          await panePid(pane)
           await app.evaluate(({ clipboard }) => clipboard.writeText('pasted-77'))
           await page.keyboard.type('echo ')
           await page.keyboard.press(`${modifier}+V`)

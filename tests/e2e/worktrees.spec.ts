@@ -76,8 +76,8 @@ test('projects list their git worktrees and follow git as worktrees come and go'
         await page.getByRole('listitem', { name: 'renamed worktree' }).click({ button: 'right' })
         await page.getByRole('menuitem', { name: 'Open Terminal Here' }).click()
         const pane = page.getByTestId('terminal-pane')
-        await expect(pane).toHaveCount(1)
-        // The terminal has the keys straight away, as with a project's Open Terminal Here.
+        // The terminal has the keys once its shell is up, without a click.
+        await expect(pane).toHaveAttribute('data-pid', /^\d+$/)
         await page.keyboard.type('pwd')
         await page.keyboard.press('Enter')
         await expect(pane.locator('.xterm-rows')).toContainText(feature)
