@@ -13,6 +13,29 @@ describe('placeWindow', () => {
     expect(placeWindow(onMonitor, [laptop, monitorLeft], laptop)).toEqual(onMonitor)
   })
 
+  it('fits a window that no longer fits onto the display showing most of it', () => {
+    // Saved on a big monitor, reopened on a smaller one: shrunk to the work area.
+    expect(placeWindow({ x: 0, y: 0, width: 2400, height: 1300 }, [laptop], laptop)).toEqual(laptop)
+    // Hanging off the right and bottom edges: moved fully on, size kept.
+    expect(placeWindow({ x: 1500, y: 700, width: 900, height: 600 }, [laptop], laptop)).toEqual({
+      x: 1020,
+      y: 450,
+      width: 900,
+      height: 600
+    })
+    // Title bar above the top edge: moved down so it can be grabbed.
+    expect(placeWindow({ x: 100, y: -300, width: 900, height: 600 }, [laptop], laptop)).toEqual({
+      x: 100,
+      y: 0,
+      width: 900,
+      height: 600
+    })
+    // Straddling two displays: goes to the one with more of it.
+    expect(
+      placeWindow({ x: -300, y: 100, width: 1000, height: 600 }, [laptop, monitorLeft], laptop)
+    ).toEqual({ x: 0, y: 100, width: 1000, height: 600 })
+  })
+
   it('centres the default size on the primary display when the saved window is off every display', () => {
     const centred = { x: 360, y: 125, width: 1200, height: 800 }
     // The monitor it was on is unplugged.

@@ -77,15 +77,30 @@ function centredBounds(workArea: Bounds): Bounds {
   }
 }
 
+/** Shrinks the bounds to the work area if they're bigger, then moves them fully onto it. */
+function fitInto(bounds: Bounds, area: Bounds): Bounds {
+  const width = Math.min(bounds.width, area.width)
+  const height = Math.min(bounds.height, area.height)
+  return {
+    x: Math.min(Math.max(bounds.x, area.x), area.x + area.width - width),
+    y: Math.min(Math.max(bounds.y, area.y), area.y + area.height - height),
+    width,
+    height
+  }
+}
+
 /**
- * Where to open the window: the saved bounds while enough of them is on some display (displays
- * change between runs), otherwise the default size centred on the primary display.
+ * Where to open the window. Displays change between runs (a new or unplugged monitor, another
+ * resolution), so the saved bounds are fitted onto the display showing most of them; if barely any
+ * of the window is on a display, it opens at the default size centred on the primary display.
  */
 export function placeWindow(saved: Bounds | null, workAreas: Bounds[], primary: Bounds): Bounds {
   if (!saved) return centredBounds(primary)
-  const reachable = workAreas.some((area) => {
-    const visible = overlap(saved, area)
-    return visible.width >= MIN_VISIBLE.width && visible.height >= MIN_VISIBLE.height
-  })
-  return reachable ? saved : centredBounds(primary)
+  let best: { area: Bounds; visible: number } | null = null
+  for (const area of workAreas) {
+    const { width, height } = overlap(saved, area)
+    if (width < MIN_VISIBLE.width || height < MIN_VISIBLE.height) continue
+    if (!best || width * height > best.visible) best = { area, visible: width * height }
+  }
+  return best ? fitInto(saved, best.area) : centredBounds(primary)
 }
