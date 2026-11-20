@@ -1,6 +1,6 @@
 import type { TerminalPalette } from './terminal-palette'
 
-/** Terminal themes: the console colours of each editor scheme, and two GNOME Terminal profiles. */
+/** Terminal themes: the console colours of each editor scheme, and the user's GNOME Terminal profile. */
 export const TERMINAL_THEMES = [
   {
     id: 'catppuccin-frappe',
@@ -339,33 +339,6 @@ export const TERMINAL_THEMES = [
       brightMagenta: '#e617e6',
       brightCyan: '#15c1c1',
       brightWhite: '#c9c9c9'
-    }
-  },
-  {
-    // GNOME Terminal profile "Solarized Darcula"; it sets no selection colour, so this is Darcula's.
-    id: 'solarized-darcula',
-    label: 'Solarized Darcula',
-    palette: {
-      background: '#3d3f41',
-      foreground: '#d2d8d9',
-      cursor: '#d2d8d9',
-      selection: '#214283',
-      black: '#25292a',
-      red: '#f24840',
-      green: '#629655',
-      yellow: '#b68800',
-      blue: '#2075c7',
-      magenta: '#797fd4',
-      cyan: '#15968d',
-      white: '#d2d8d9',
-      brightBlack: '#25292a',
-      brightRed: '#f24840',
-      brightGreen: '#629655',
-      brightYellow: '#b68800',
-      brightBlue: '#2075c7',
-      brightMagenta: '#797fd4',
-      brightCyan: '#15968d',
-      brightWhite: '#d2d8d9'
     }
   }
 ] as const satisfies readonly {
