@@ -63,6 +63,13 @@ test('app, editor and terminal themes come from settings.json and switch live fr
         await expect(page.locator('html')).toHaveAttribute('data-theme', 'islands-dark')
         await expect(page.locator('body')).toHaveCSS('background-color', 'rgb(38, 40, 44)')
         await expect(keyword).toHaveCSS('color', 'rgb(207, 142, 109)')
+        // Islands Dark clears the gutter colour, so the gutter is the editor background, as in the IDE.
+        await expect(
+          settingsPage
+            .getByRole('img', { name: 'Editor theme preview' })
+            .getByText('1', { exact: true })
+            .first()
+        ).toHaveCSS('background-color', 'rgb(25, 26, 28)')
         await expect.poll(() => windowBackground(app)).toBe('#26282c')
         // These are the three defaults, so their keys leave settings.json.
         await expect

@@ -178,9 +178,9 @@ function ProjectRow({ folder }: { folder: WorkspaceFolder }): React.JSX.Element 
                 <span className="size-5 shrink-0" aria-hidden />
               )}
               {folder.missing ? (
-                <FolderX className="size-[18px] shrink-0 text-error" aria-hidden />
+                <FolderX className="size-4.5 shrink-0 text-error" aria-hidden />
               ) : (
-                <RootFolderIcon className="size-[18px] shrink-0" />
+                <RootFolderIcon className="size-4.5 shrink-0" />
               )}
               <span
                 className={cn(
@@ -235,7 +235,7 @@ export function WorkspacePanel(): React.JSX.Element {
               onClick={() => void addFolder()}
               className="flex size-icon-button items-center justify-center rounded-button text-muted-foreground hover:bg-hover hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
             >
-              <FolderPlus className="size-[18px]" strokeWidth={1.75} aria-hidden />
+              <FolderPlus className="size-4.5" strokeWidth={1.75} aria-hidden />
             </button>
           </TooltipTrigger>
           <TooltipContent side="bottom">Add Folder to Workspace</TooltipContent>

@@ -264,6 +264,17 @@ test('the largest app font in the smallest window keeps the status bar and Setti
         const footerBox = await page.locator('footer').boundingBox()
         if (!gearBox || !footerBox) throw new Error('layout is not rendered')
         expect(gearBox.y + gearBox.height).toBeLessThanOrEqual(footerBox.y)
+        // The activity bar widens with its buttons, so none is cut off by the window or the panel.
+        const bar = page.getByRole('navigation', { name: 'Views' })
+        const barBox = await bar.boundingBox()
+        if (!barBox) throw new Error('activity bar is not rendered')
+        expect(barBox.x).toBeGreaterThanOrEqual(0)
+        for (const button of await bar.getByRole('button').all()) {
+          const box = await button.boundingBox()
+          if (!box) throw new Error('activity button is not rendered')
+          expect(box.x).toBeGreaterThanOrEqual(barBox.x)
+          expect(box.x + box.width).toBeLessThanOrEqual(barBox.x + barBox.width)
+        }
         // Text line heights are fractional; allow under a pixel of rounding at the window edge.
         expect(footerBox.y + footerBox.height).toBeLessThan(
           Number(await page.evaluate('window.innerHeight')) + 1

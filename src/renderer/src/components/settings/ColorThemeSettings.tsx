@@ -235,7 +235,8 @@ function EditorThemePreview(): React.JSX.Element | null {
   if (!scheme) return null
   const { colors } = scheme
   const text = scheme.attributes.TEXT ?? {}
-  const gutter = colors.GUTTER_BACKGROUND ?? text.background
+  // The New UI's gutter: EDITOR_GUTTER_BACKGROUND, else the editor's (GUTTER_BACKGROUND is the classic UI's).
+  const gutter = colors.EDITOR_GUTTER_BACKGROUND ?? text.background
   return (
     <div
       role="img"

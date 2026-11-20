@@ -64,7 +64,7 @@ function IconThemeSetting(): React.JSX.Element {
                 onChange={() => void update('workbench.iconTheme', theme)}
                 className="sr-only"
               />
-              <Icon className="size-[18px] shrink-0" />
+              <Icon className="size-4.5 shrink-0" />
               {name}
             </label>
           ))}

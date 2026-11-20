@@ -5,7 +5,7 @@ import { useWorkspaceStore } from '@/state/workspace-store'
 import type { RecentEntry } from '../../../../shared/workspace-api'
 
 function RecentIcon({ entry }: { entry: RecentEntry }): React.JSX.Element {
-  const className = 'size-[18px] shrink-0'
+  const className = 'size-4.5 shrink-0'
   if (entry.missing) {
     const Missing = entry.kind === 'folder' ? FolderX : FileX
     return <Missing className={cn(className, 'text-error')} aria-hidden />
@@ -85,7 +85,7 @@ export function WelcomeScreen(): React.JSX.Element | null {
           </h2>
           <div className="flex flex-col items-start">
             <button type="button" onClick={() => void addFolder()} className={startActionClass}>
-              <FolderOpen className="size-[18px]" aria-hidden />
+              <FolderOpen className="size-4.5" aria-hidden />
               Open Folder…
             </button>
             <button
@@ -93,7 +93,7 @@ export function WelcomeScreen(): React.JSX.Element | null {
               onClick={() => void openWorkspaceFile()}
               className={startActionClass}
             >
-              <Layers className="size-[18px]" aria-hidden />
+              <Layers className="size-4.5" aria-hidden />
               Open Workspace…
             </button>
           </div>

@@ -95,6 +95,7 @@
   --spacing-control: var(--control-height);
   --spacing-icon-button: var(--icon-button-size);
   --spacing-activity-button: var(--activity-button-size);
+  --spacing-activity-bar: var(--activity-bar-width);
   --spacing-small-icon-button: var(--small-icon-button-size);
   --spacing-panel-header: var(--panel-header-height);
   --spacing-tab-bar: var(--tab-bar-height);
