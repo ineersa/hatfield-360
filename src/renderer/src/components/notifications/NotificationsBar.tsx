@@ -21,16 +21,16 @@ export function NotificationsBar(): React.JSX.Element {
             aria-pressed={panelOpen}
             onClick={togglePanel}
             className={cn(
-              'relative flex size-icon-button items-center justify-center rounded-button text-muted-foreground transition-colors hover:bg-hover hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none',
+              'relative flex size-activity-button items-center justify-center rounded-button text-muted-foreground transition-colors hover:bg-hover hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none',
               panelOpen &&
                 'bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground'
             )}
           >
-            <Bell className="size-4.5" strokeWidth={1.75} aria-hidden />
+            <Bell className="size-5.5" strokeWidth={1.75} aria-hidden />
             {count > 0 ? (
               <span
                 aria-hidden
-                className="type-badge absolute -top-1 -right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1"
+                className="type-badge absolute top-0 right-0 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1"
               >
                 {count > 99 ? '99+' : count}
               </span>
