@@ -228,6 +228,6 @@
       }
     }
   ],
-  "ignorePatterns": ["out/**", "release/**", ".claude/skills/**"],
+  "ignorePatterns": ["out/**", "release/**", ".claude/skills/**", ".agents/skills/impeccable/**"],
   "jsPlugins": ["./config/oxlint/ipc-boundary-plugin.mjs", "./config/oxlint/theme-roles-plugin.mjs"]
 }
