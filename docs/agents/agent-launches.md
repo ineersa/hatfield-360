@@ -2,7 +2,7 @@
 
 Right-click a workspace project or linked worktree and choose **Launch Hatfield** or **Launch Claude** to use that directory in a new terminal tab. In an existing terminal, **Launch Hatfield in New Split** and **Launch Claude in New Split** start a separate process in the pane's original launch directory. The app does not inspect the shell's current directory after `cd`, send launch text to it, or replace the existing process. Commands typed in an ordinary shell are not tracked.
 
-In **Settings → Agent launch profiles**, configure an executable and a JSON array of arguments for each provider. Defaults are `hatfield` and `claude` with no arguments. Use an executable on the app's `PATH` or give its absolute path. Arguments are passed directly, not expanded by a shell. To use a sandbox wrapper, set that wrapper as the executable; Hatfield 360 does not fall back to the unwrapped agent.
+In **Settings → Agent launch profiles**, configure an executable and a JSON array of arguments for each provider. Defaults are `hatfield` and `claude` with no arguments. Use an executable on the app's `PATH` or give its absolute path. Relative paths containing a path separator, such as `./bin/hatfield`, resolve from the launch working directory. Arguments are passed directly, not expanded by a shell. To use a sandbox wrapper, set that wrapper as the executable; Hatfield 360 does not fall back to the unwrapped agent.
 
 ```json
 {
@@ -11,7 +11,7 @@ In **Settings → Agent launch profiles**, configure an executable and a JSON ar
 }
 ```
 
-The app starts each agent in its own PTY. On Linux and macOS, that process receives `H360_STATUS_ENDPOINT`, `H360_STATUS_LAUNCH_ID` and `H360_STATUS_TOKEN` for the [local status socket](agent-status-protocol.md). These are child-process environment variables, not settings, command-line arguments or renderer data. Report the registered profile's provider (`hatfield` or `claude`); a different reported provider cannot change the row's identity. Windows launches do not get reporting credentials because v1 does not implement a Windows transport.
+The app starts each agent in its own PTY. On Linux and macOS, that process receives `H360_STATUS_ENDPOINT`, `H360_STATUS_LAUNCH_ID` and `H360_STATUS_TOKEN` for the [local status socket](agent-status-protocol.md). These are child-process environment variables, not settings, command-line arguments or renderer data. Report the registered profile's provider (`hatfield` or `claude`); a different reported provider cannot change the row's identity. Windows launches do not get reporting credentials because v1 does not implement a Windows transport. On Windows only native `.exe` launches are supported (including a bare native executable name). `.cmd`, `.bat`, and `.ps1` profiles, including npm command shims, are not supported. For a Node-based agent, configure native `node.exe` as the executable and pass the actual script path as the first argument.
 
 A process without a compatible reporter shows **Running · status unavailable**. The sidebar shows the last reported activity, wait category and turn outcome, not the actual question or an invented conversation title. Click a session or attention row to select its terminal if still open. Exit is separate from turn completion; exited records are held in memory only. Provider adapters (#25), restart restoration and resume (#37), and Librarian search (#38) are separate work.
 

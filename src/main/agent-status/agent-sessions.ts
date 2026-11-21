@@ -58,6 +58,11 @@ export function trackAgentSessions(publish: (owner: WebContents) => void) {
     project: string | null,
     request: { cwd: string; cols: number; rows: number }
   ) => {
+    if (process.platform === 'win32' && /\.(cmd|bat|ps1)[. ]*$/i.test(profile.executable)) {
+      throw new Error(
+        'Windows agent profiles require a native .exe. In Settings, choose node.exe with the script path in its arguments instead of a command or PowerShell shim.'
+      )
+    }
     const terminalId = randomUUID()
     const endpoint = await agentStatusServer.start().catch(() => undefined)
     const credential = endpoint
@@ -119,9 +124,7 @@ export function trackAgentSessions(publish: (owner: WebContents) => void) {
       return terminal
     } catch {
       release()
-      throw new Error(
-        `Could not start ${profile.executable}. Check the agent executable in Settings.`
-      )
+      throw new Error('Could not start the agent. Check the agent executable in Settings.')
     }
   }
 }

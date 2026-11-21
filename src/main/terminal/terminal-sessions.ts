@@ -68,7 +68,8 @@ async function agentExecutable(
   cwd: string,
   path: string | undefined
 ): Promise<string> {
-  if (process.platform === 'win32') return file
+  if (process.platform === 'win32')
+    return !isAbsolute(file) && /[\\/]/.test(file) ? resolvePath(cwd, file) : file
   const candidates = isAbsolute(file)
     ? [file]
     : file.includes('/')

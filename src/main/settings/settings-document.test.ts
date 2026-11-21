@@ -25,15 +25,69 @@ describe('parseSettings', () => {
     })
   })
 
+  it('reads every setting, with comments and trailing commas', () => {
+    const text = `{
+      // Like VS Code
+      "app.fontFamily": " Noto Sans ",
+      "app.fontSize": 12.5,
+      "terminal.fontFamily": "'Iosevka Term', monospace",
+      "terminal.fontSize": 14,
+      "terminal.lineHeight": 1.5,
+      "terminal.gpuAcceleration": false,
+      "editor.fontFamily": "Fira Code",
+      "editor.fontSize": 15,
+      "editor.lineHeight": 1.4,
+      "workbench.iconTheme": "lucide",
+      "workbench.colorTheme": "islands-catppuccin-mocha",
+      "editor.colorTheme": "catppuccin-mocha-no-italics",
+      "terminal.colorTheme": "catppuccin-mocha",
+    }`
+    expect(parseSettings(text, DEFAULT_SETTINGS)).toEqual({
+      values: {
+        ...DEFAULT_SETTINGS,
+        'app.fontFamily': 'Noto Sans',
+        'app.fontSize': 12.5,
+        'terminal.fontFamily': "'Iosevka Term', monospace",
+        'terminal.fontSize': 14,
+        'terminal.lineHeight': 1.5,
+        'terminal.gpuAcceleration': false,
+        'editor.fontFamily': 'Fira Code',
+        'editor.fontSize': 15,
+        'editor.lineHeight': 1.4,
+        'workbench.iconTheme': 'lucide',
+        'workbench.colorTheme': 'islands-catppuccin-mocha',
+        'editor.colorTheme': 'catppuccin-mocha-no-italics',
+        'terminal.colorTheme': 'catppuccin-mocha'
+      },
+      customized: [
+        'app.fontFamily',
+        'app.fontSize',
+        'terminal.fontFamily',
+        'terminal.fontSize',
+        'terminal.lineHeight',
+        'terminal.gpuAcceleration',
+        'editor.fontFamily',
+        'editor.fontSize',
+        'editor.lineHeight',
+        'workbench.iconTheme',
+        'workbench.colorTheme',
+        'editor.colorTheme',
+        'terminal.colorTheme'
+      ],
+      editable: true,
+      problems: []
+    })
+  })
+
   it('reads a launch profile from JSON with comments and trailing commas', () => {
     const text = `{
       // Keep launches wrapped by the sandbox.
-      "agents.hatfield": { "executable": "hatfield-safe", "args": ["--label", "local dev"], },
+      "agents.hatfield": { "executable": "  hatfield-safe  ", "args": ["--label", " local dev "], },
     }`
     const parsed = parseSettings(text, lastGood)
     expect(parsed.values['agents.hatfield']).toEqual({
       executable: 'hatfield-safe',
-      args: ['--label', 'local dev']
+      args: ['--label', ' local dev ']
     })
     expect(parsed.problems).toEqual([])
   })
@@ -127,6 +181,24 @@ describe('withSetting', () => {
   "app.fontSize": 16,
 }
 `
+
+  it('removes a saved profile when independently entered values match the default', () => {
+    const custom = '{ "agents.hatfield": { "executable": "hatfield-safe", "args": [] } }'
+    const updated = withSetting(custom, 'agents.hatfield', { executable: 'hatfield', args: [] })
+    expect(updated).not.toContain('agents.hatfield')
+  })
+
+  it('keeps literal arguments, in order, when saving the default executable', () => {
+    const updated = withSetting('{}', 'agents.claude', {
+      executable: 'claude',
+      args: ['--flag', ' literal ']
+    })
+    expect(updated).toContain('"agents.claude"')
+    expect(parseSettings(updated, lastGood).values['agents.claude']).toEqual({
+      executable: 'claude',
+      args: ['--flag', ' literal ']
+    })
+  })
 
   it('changes one setting and keeps comments and the other settings', () => {
     expect(withSetting(file, 'app.fontSize', 18)).toBe(`{
