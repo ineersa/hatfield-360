@@ -150,7 +150,7 @@ function TreeRow({
       aria-selected={selected}
       data-ignored={dimmed || undefined}
       className={cn(
-        'type-tree-row flex h-tree-row cursor-default items-center gap-1 rounded-component pr-2.5 outline-none select-none hover:bg-row-hover focus-visible:bg-selection-inactive data-[state=open]:bg-selection-inactive',
+        'type-tree-row flex h-tree-row shrink-0 cursor-default items-center gap-1 rounded-component pr-2.5 outline-none select-none hover:bg-row-hover focus-visible:bg-selection-inactive data-[state=open]:bg-selection-inactive',
         selected && 'bg-selection-inactive',
         dimmed && 'text-muted-foreground'
       )}
@@ -420,7 +420,7 @@ export function FilesPanel(): React.JSX.Element {
               <div
                 key={row.key}
                 role="alert"
-                className="type-hint flex items-center gap-2 py-1 pr-2.5"
+                className="type-hint flex shrink-0 items-center gap-2 py-1 pr-2.5"
                 style={{
                   paddingLeft: `calc(${row.depth} * var(--file-tree-indent) + var(--spacing))`
                 }}

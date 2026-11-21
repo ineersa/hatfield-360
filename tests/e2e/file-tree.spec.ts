@@ -253,6 +253,38 @@ test('the file tree follows the disk and git ignore rules in expanded folders', 
   }
 })
 
+test('a long tree scrolls instead of squeezing its rows', async () => {
+  const [projects, cleanProjects] = await makeProjectsDir()
+  const root = join(projects, 'many')
+  await mkdir(root)
+  for (let index = 0; index < 80; index += 1) {
+    await writeFile(join(root, `file-${index}.txt`), '')
+  }
+  const [userData, cleanUserData] = await seedWorkspace([{ path: root, kind: 'folder' }])
+  try {
+    await withApp(
+      async (_app, page) => {
+        await showView(page, 'Files')
+        await item(page, 'many').click()
+        await expect(item(page, 'file-79.txt')).toBeAttached()
+        const rootBox = await item(page, 'many').boundingBox()
+        const fileBox = await item(page, 'file-0.txt').boundingBox()
+        expect(fileBox?.height).toBe(rootBox?.height)
+        expect(
+          await tree(page).evaluate(
+            (element: { scrollHeight: number; clientHeight: number }) =>
+              element.scrollHeight > element.clientHeight
+          )
+        ).toBe(true)
+      },
+      { userDataDir: userData }
+    )
+  } finally {
+    await cleanUserData()
+    await cleanProjects()
+  }
+})
+
 test('the renderer can list only inside the workspace folders', async () => {
   const [projects, cleanProjects] = await makeProjectsDir()
   const root = join(projects, 'root')
