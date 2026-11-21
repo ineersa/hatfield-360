@@ -36,7 +36,20 @@ const COLOUR_UTILITY =
 const THEMED_STYLE =
   /colou?r|background|fill|stroke|shadow|outline|border|font|radius|lineHeight|letterSpacing/i
 
+// The same properties in CSS spelling, as written in an arbitrary-property class (`[color:red]`).
+const THEMED_PROPERTY =
+  /^(colou?r|background|fill|stroke|box-shadow|text-shadow|outline|border|font|line-height|letter-spacing|accent-color|caret-color|text-decoration)/
+
 const CHECKS = [
+  {
+    // `[color:red]` sets a property directly; custom properties (`[--x:...]`) and values from variables pass.
+    test: (name) => {
+      const match = /^\[([a-z-]+):(.+)\]$/.exec(name)
+      if (match === null || !THEMED_PROPERTY.test(match[1] ?? '')) return false
+      return (match[2] ?? '').replace(/var\([^)]*\)/g, '').replace(/[\s_,]/g, '') !== ''
+    },
+    message: 'a raw value in an arbitrary property; use a role (bg-island, type-body, ...)'
+  },
   {
     pattern: /^#[0-9a-f]{3,8}$|\[(#|rgba?\(|hsla?\(|oklch\()/i,
     message: 'a raw colour; use a colour role (bg-island, text-error, ...)'
@@ -100,7 +113,14 @@ function utility(token) {
     else if (char === ']') depth -= 1
     else if (char === ':' && depth === 0) start = index + 1
   }
-  return token.slice(start).replace(/^!?-?/, '').replace(/!$/, '')
+  return (
+    token
+      .slice(start)
+      .replace(/^!?-?/, '')
+      .replace(/!$/, '')
+      // An opacity modifier (`bg-[red]/50`, `/[.5]`) doesn't change which colour is used.
+      .replace(/(?<=\])\/(?:\d+|\[[^\]]*\])$/, '')
+  )
 }
 
 const themeRolesOnly = {
