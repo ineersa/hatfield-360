@@ -19,22 +19,26 @@ export async function makeTempDir(prefix: string): Promise<[string, () => Promis
   return [dir, () => rm(dir, { recursive: true, force: true })]
 }
 
+/** Whether the app under test is the packaged executable (release smoke tests) rather than the build. */
+export const testingPackagedApp = packagedExecutable !== undefined
+
 /**
  * Launches the app with a hidden window, runs `body`, and always closes the app. Each launch gets its
  * own app data folder (so tests never touch the user's), unless `userDataDir` is passed to share one
- * across restarts.
+ * across restarts, or is null to let the app choose its own (with `env` redirecting where that is).
  */
 export async function withApp(
   body: (app: ElectronApplication, page: Page) => Promise<void>,
-  options: { userDataDir?: string } = {}
+  options: { userDataDir?: string | null; env?: Record<string, string> } = {}
 ): Promise<void> {
-  const [ownDir, cleanup] = options.userDataDir
-    ? [options.userDataDir, async () => {}]
-    : await makeTempDir('user-data')
+  const [ownDir, cleanup] =
+    options.userDataDir === undefined
+      ? await makeTempDir('user-data')
+      : [options.userDataDir, async () => {}]
   const app = await electron.launch({
     ...launchTarget,
-    args: [...(launchTarget.args ?? []), `--user-data-dir=${ownDir}`],
-    env: { ...process.env, APP_BACKGROUND_LAUNCH: '1' }
+    args: [...(launchTarget.args ?? []), ...(ownDir === null ? [] : [`--user-data-dir=${ownDir}`])],
+    env: { ...process.env, ...options.env, APP_BACKGROUND_LAUNCH: '1' }
   })
   try {
     await body(app, await app.firstWindow())
