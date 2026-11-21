@@ -202,6 +202,16 @@ test('the file tree follows the disk and git ignore rules in expanded folders', 
         await expect(icon('a.ts')).toHaveAttribute('data-icon', 'typescript')
         await expect(icon('README.md')).toHaveAttribute('data-icon', 'readme')
         await expect(icon('notes.txt')).toHaveAttribute('data-icon', 'text')
+        // Lucide has one icon per category of file and folder.
+        await writeFile(join(userData, 'settings.json'), '{ "workbench.iconTheme": "lucide" }')
+        await expect(icon('src')).toHaveAttribute('data-icon', 'folder-code')
+        await expect(icon('dist')).toHaveAttribute('data-icon', 'folder-build')
+        await expect(icon('a.ts')).toHaveAttribute('data-icon', 'file-code')
+        await expect(icon('README.md')).toHaveAttribute('data-icon', 'file-text')
+        await expect(icon('.gitignore')).toHaveAttribute('data-icon', 'file-config')
+        await saveScreenshot(page, 'file-tree-lucide')
+        await rm(join(userData, 'settings.json'))
+        await expect(icon('a.ts')).toHaveAttribute('data-icon', 'typescript')
 
         // Changes on disk show up in expanded folders.
         await writeFile(join(repo, 'src', 'b.ts'), '')
