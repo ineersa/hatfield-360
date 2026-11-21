@@ -20,10 +20,19 @@ async function expectSavedFolders(userDataDir: string, paths: string[]): Promise
 /** The OS folder picker can't be driven by Playwright (user-authorized for #8): answer it from the test. */
 async function answerFolderPicker(app: ElectronApplication, folder: string | null): Promise<void> {
   await app.evaluate(({ dialog }, chosen) => {
-    dialog.showOpenDialog = () =>
-      Promise.resolve({ canceled: chosen === null, filePaths: chosen === null ? [] : [chosen] })
+    dialog.showOpenDialog = (...args: unknown[]) => {
+      Reflect.set(globalThis, 'folderPickerOptions', args.at(-1))
+      return Promise.resolve({
+        canceled: chosen === null,
+        filePaths: chosen === null ? [] : [chosen]
+      })
+    }
   }, folder)
 }
+
+/** The options the app opened the folder picker with last. */
+const folderPickerOptions = (app: ElectronApplication): Promise<unknown> =>
+  app.evaluate((): unknown => Reflect.get(globalThis, 'folderPickerOptions'))
 
 const folderList = (page: Page) => page.getByRole('list', { name: 'Workspace folders' })
 
@@ -65,8 +74,12 @@ test('folders added from the empty state and the File menu are listed and saved 
         await page.getByRole('button', { name: 'Open Folder', exact: true }).click()
         await expect(folderList(page).getByRole('listitem', { name: 'api' })).toBeVisible()
 
+        expect(await folderPickerOptions(app)).not.toHaveProperty('defaultPath')
+
+        // The picker starts where the last folder was added from.
         await answerFolderPicker(app, web)
         await clickMenuItem(app, 'add-folder-to-workspace')
+        expect(await folderPickerOptions(app)).toMatchObject({ defaultPath: projects })
         await expect(folderList(page).getByRole('listitem')).toHaveText(['apimain', 'webmain'])
 
         // Adding a folder already in the workspace and cancelling the picker change nothing.

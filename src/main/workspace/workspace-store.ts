@@ -278,6 +278,15 @@ class WorkspaceStore {
     })
   }
 
+  /** Where the folder picker starts: the folder holding the last folder added, while it exists. */
+  async folderPickerStart(): Promise<string | undefined> {
+    const { state } = await this.ready()
+    const last = state.recent.find((item) => item.kind === 'folder')
+    if (!last) return undefined
+    const parent = dirname(last.path)
+    return (await isDirectory(parent)) ? parent : undefined
+  }
+
   /** Hatfield's own workspaces folder: the default workspace and where Save As suggests saving. */
   workspacesFolder(): string {
     return join(this.dataDir(), 'workspaces')
