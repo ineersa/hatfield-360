@@ -1,6 +1,7 @@
 import type { ManagedPane } from '@/lib/pane-manager/pane-manager-types'
 import { listenToSession } from '@/lib/terminal-output-router'
 import type { TerminalExit } from '../../../../shared/terminal-api'
+import { mainErrorMessage } from '@/lib/main-error-message'
 
 /** A shell resizes once the size settles, not on every frame of a window or divider drag. */
 const RESIZE_SETTLE_MS = 60
@@ -9,12 +10,6 @@ export type PaneShell = {
   /** Ends the shell (if it still runs) and stops listening. */
   dispose: () => void
 }
-
-const mainErrorMessage = (error: unknown): string =>
-  (error instanceof Error ? error.message : String(error)).replace(
-    /^Error invoking remote method '[^']*': (?:Error: )?/,
-    ''
-  )
 
 function showExited(pane: ManagedPane, exit: TerminalExit): void {
   pane.container.dataset.exited = 'true'

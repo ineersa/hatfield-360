@@ -138,7 +138,7 @@ class SettingsStore {
     this.values = values
     this.customized = customized
     this.editable = editable
-    if (problems.length > 0) this.setNotice(`Settings: ${problems.join(' ')}`)
+    if (problems.length > 0) this.setNotice(problems.join(' '))
     else this.notice = null
     this.publish()
   }

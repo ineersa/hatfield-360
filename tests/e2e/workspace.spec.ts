@@ -165,9 +165,11 @@ test('a workspace file from a newer app version is reported and left untouched',
         await expect(panelAlert).toContainText('newer version of Hatfield 360')
         await answerFolderPicker(app, userData)
         await page.getByRole('button', { name: 'Add Folder to Workspace' }).click()
-        await expect(page.getByRole('alert', { name: 'Workspace message' })).toContainText(
-          'newer version of Hatfield 360'
-        )
+        await expect(
+          page
+            .getByRole('region', { name: 'Notification toasts' })
+            .getByRole('alert', { name: 'Workspace' })
+        ).toContainText('newer version of Hatfield 360')
         await expect(panelAlert).toContainText('newer version of Hatfield 360')
         expect(await readFile(workspaceFile(userData), 'utf8')).toBe(newer)
       },

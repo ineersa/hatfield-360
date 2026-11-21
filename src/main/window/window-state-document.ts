@@ -1,5 +1,6 @@
 import { isPlainObject } from '../../shared/plain-object'
 import {
+  DEFAULT_SHELL_LAYOUT,
   SHELL_VIEW_IDS,
   type ShellLayout,
   type ShellViewId,
@@ -24,12 +25,16 @@ function isShellViewId(value: unknown): value is ShellViewId {
   return SHELL_VIEW_IDS.some((id) => id === value)
 }
 
+function panelWidth(value: unknown): number | null {
+  if (!isFiniteNumber(value)) return null
+  if (value < SIDE_PANEL_WIDTH_RANGE.min || value > SIDE_PANEL_WIDTH_RANGE.max) return null
+  return Math.round(value)
+}
+
 function sidePanel(value: unknown): SidePanelLayout | null {
   if (!isPlainObject(value) || typeof value.collapsed !== 'boolean') return null
-  const { width } = value
-  if (!isFiniteNumber(width)) return null
-  if (width < SIDE_PANEL_WIDTH_RANGE.min || width > SIDE_PANEL_WIDTH_RANGE.max) return null
-  return { width: Math.round(width), collapsed: value.collapsed }
+  const width = panelWidth(value.width)
+  return width === null ? null : { width, collapsed: value.collapsed }
 }
 
 /** A layout from the renderer or the state file, or null when any part of it is wrong. */
@@ -39,7 +44,13 @@ export function parseShellLayout(value: unknown): ShellLayout | null {
   if (!isPlainObject(panels)) return null
   const [agents, files, git] = SHELL_VIEW_IDS.map((id) => sidePanel(panels[id]))
   if (!agents || !files || !git) return null
-  return { activeView: value.activeView, panels: { agents, files, git } }
+  return {
+    activeView: value.activeView,
+    panels: { agents, files, git },
+    // Layouts saved before the panel existed lack it, and shouldn't lose their side panels for it.
+    notificationsWidth:
+      panelWidth(value.notificationsWidth) ?? DEFAULT_SHELL_LAYOUT.notificationsWidth
+  }
 }
 
 /** Saved window placement from the state file, or null when it is missing or wrong. */

@@ -10,6 +10,13 @@
   --icon-button-size: calc(var(--app-font-size) * 28 / 13);
   --activity-button-size: calc(var(--app-font-size) * 36 / 13);
   --activity-bar-width: calc(var(--app-font-size) * 56 / 13);
+  /* Balloons, about 400px wide as in JetBrains IDEs, but never wider than the main area's span. */
+  --toast-width: min(
+    calc(var(--app-font-size) * 380 / 13),
+    calc(100vw - var(--activity-bar-width) - var(--tool-stripe-width) - 2 * var(--island-gap))
+  );
+  /* The right edge only holds the bell, so it is narrower than the activity bar. */
+  --tool-stripe-width: calc(var(--app-font-size) * 48 / 13);
   --small-icon-button-size: calc(var(--app-font-size) * 22 / 13);
   --panel-header-height: calc(var(--app-font-size) * 38 / 13);
   --tab-bar-height: calc(var(--app-font-size) * 36 / 13);
@@ -69,6 +76,9 @@
   --type-status-size: calc(var(--app-font-size) - 2px);
   --type-status-weight: 400;
   --type-status-color: var(--status-foreground);
+  --type-badge-size: calc(var(--app-font-size) - 3px);
+  --type-badge-weight: 600;
+  --type-badge-color: var(--primary-foreground);
 }
 
 /*
@@ -160,5 +170,13 @@
     font-size: var(--type-status-size);
     font-weight: var(--type-status-weight);
     color: var(--type-status-color);
+  }
+  /* A count in a pill: line-height 1 so the digits sit in its middle. */
+  .type-badge {
+    font-size: var(--type-badge-size);
+    font-weight: var(--type-badge-weight);
+    color: var(--type-badge-color);
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
   }
 }
