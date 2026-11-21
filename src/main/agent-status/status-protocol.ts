@@ -52,7 +52,8 @@ const envelope = {
 type Kind = keyof typeof events
 type Envelope = Validated<typeof envelope> & { version: 1; at?: string }
 type Request = {
-  [K in Kind]: Envelope & { kind: K } & Validated<(typeof events)[K]> & { tool?: string }
+  [K in Kind]: Envelope & { kind: K } & Validated<(typeof events)[K]> &
+    (K extends 'activity.changed' ? { tool?: string } : object)
 }[Kind]
 export type StatusEvent = { [K in Kind]: Omit<Extract<Request, { kind: K }>, 'token'> }[Kind]
 export type StatusReply =
