@@ -1,4 +1,5 @@
 import { app, BrowserWindow } from 'electron'
+import { agentStatusServer } from './agent-status/status-server'
 import { registerAppInfoIpc } from './ipc/app-info-ipc'
 import { registerSettingsIpc } from './ipc/settings-ipc'
 import { registerShellLayoutIpc } from './ipc/shell-layout-ipc'
@@ -15,6 +16,10 @@ import { chosenAppTheme, followAppTheme } from './window/window-theme'
 app.enableSandbox()
 
 void app.whenReady().then(async () => {
+  if (quitting) return
+  void agentStatusServer.start().catch((error: unknown) => {
+    console.error('Starting agent status server failed:', error)
+  })
   installPermissionPolicy()
   registerAppInfoIpc()
   registerWorkspaceIpc()
@@ -38,10 +43,16 @@ void app.whenReady().then(async () => {
 // Quitting waits for the window state to be written and for every terminal's shell to end,
 // so the last size and layout survive and no shell outlives the app.
 let readyToQuit = false
+let quitting = false
 app.on('before-quit', (event) => {
   if (readyToQuit) return
   event.preventDefault()
+  if (quitting) return
+  quitting = true
   void Promise.allSettled([
+    agentStatusServer.stop().catch((error: unknown) => {
+      console.error('Stopping agent status server failed:', error)
+    }),
     windowStateStore
       .flush()
       .catch((error: unknown) => console.error('Saving window state failed:', error)),
