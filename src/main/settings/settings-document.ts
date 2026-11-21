@@ -74,7 +74,27 @@ function flag(value: unknown): Checked<boolean> {
   return typeof value === 'boolean' ? { value } : { problem: 'must be true or false' }
 }
 
+function agentProfile(raw: unknown): Checked<Settings['agents.hatfield']> {
+  if (
+    !isPlainObject(raw) ||
+    typeof raw.executable !== 'string' ||
+    !raw.executable.trim() ||
+    raw.executable.length > 4096 ||
+    Array.from(raw.executable).some((character) => character.charCodeAt(0) < 32) ||
+    !Array.isArray(raw.args) ||
+    raw.args.length > 64 ||
+    !raw.args.every(
+      (arg: unknown): arg is string =>
+        typeof arg === 'string' && arg.length <= 4096 && !arg.includes('\0')
+    )
+  )
+    return { problem: 'must contain an executable and an array of string arguments' }
+  return { value: { executable: raw.executable, args: raw.args } }
+}
+
 const CHECKS: { [K in SettingKey]: (value: unknown) => Checked<Settings[K]> } = {
+  'agents.hatfield': agentProfile,
+  'agents.claude': agentProfile,
   'app.fontFamily': fontFamily,
   'app.fontSize': fontSize,
   'terminal.fontFamily': fontFamily,

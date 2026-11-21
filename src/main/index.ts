@@ -1,3 +1,4 @@
+import { registerAgentIpc } from './ipc/agent-ipc'
 import { app, BrowserWindow } from 'electron'
 import { agentStatusServer } from './agent-status/status-server'
 import { separateDevAppData } from './app-data-folder'
@@ -32,6 +33,7 @@ void app.whenReady().then(async () => {
   registerSettingsIpc()
   registerShellLayoutIpc()
   registerTerminalIpc()
+  registerAgentIpc()
   installAppMenu()
   followAppTheme()
   // The window opens where it was left and in the chosen theme, so both are read first.

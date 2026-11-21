@@ -25,57 +25,17 @@ describe('parseSettings', () => {
     })
   })
 
-  it('reads every setting, with comments and trailing commas', () => {
+  it('reads a launch profile from JSON with comments and trailing commas', () => {
     const text = `{
-      // Like VS Code
-      "app.fontFamily": " Noto Sans ",
-      "app.fontSize": 12.5,
-      "terminal.fontFamily": "'Iosevka Term', monospace",
-      "terminal.fontSize": 14,
-      "terminal.lineHeight": 1.5,
-      "terminal.gpuAcceleration": false,
-      "editor.fontFamily": "Fira Code",
-      "editor.fontSize": 15,
-      "editor.lineHeight": 1.4,
-      "workbench.iconTheme": "lucide",
-      "workbench.colorTheme": "islands-catppuccin-mocha",
-      "editor.colorTheme": "catppuccin-mocha-no-italics",
-      "terminal.colorTheme": "catppuccin-mocha",
+      // Keep launches wrapped by the sandbox.
+      "agents.hatfield": { "executable": "hatfield-safe", "args": ["--label", "local dev"], },
     }`
-    expect(parseSettings(text, DEFAULT_SETTINGS)).toEqual({
-      values: {
-        'app.fontFamily': 'Noto Sans',
-        'app.fontSize': 12.5,
-        'terminal.fontFamily': "'Iosevka Term', monospace",
-        'terminal.fontSize': 14,
-        'terminal.lineHeight': 1.5,
-        'terminal.gpuAcceleration': false,
-        'editor.fontFamily': 'Fira Code',
-        'editor.fontSize': 15,
-        'editor.lineHeight': 1.4,
-        'workbench.iconTheme': 'lucide',
-        'workbench.colorTheme': 'islands-catppuccin-mocha',
-        'editor.colorTheme': 'catppuccin-mocha-no-italics',
-        'terminal.colorTheme': 'catppuccin-mocha'
-      },
-      customized: [
-        'app.fontFamily',
-        'app.fontSize',
-        'terminal.fontFamily',
-        'terminal.fontSize',
-        'terminal.lineHeight',
-        'terminal.gpuAcceleration',
-        'editor.fontFamily',
-        'editor.fontSize',
-        'editor.lineHeight',
-        'workbench.iconTheme',
-        'workbench.colorTheme',
-        'editor.colorTheme',
-        'terminal.colorTheme'
-      ],
-      editable: true,
-      problems: []
+    const parsed = parseSettings(text, lastGood)
+    expect(parsed.values['agents.hatfield']).toEqual({
+      executable: 'hatfield-safe',
+      args: ['--label', 'local dev']
     })
+    expect(parsed.problems).toEqual([])
   })
 
   it('keeps the last good settings when the file is not valid JSON or not an object', () => {

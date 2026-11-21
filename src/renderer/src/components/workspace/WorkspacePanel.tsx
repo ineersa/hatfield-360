@@ -1,3 +1,5 @@
+import { AgentSessionRows, useAgentSessions } from './AgentSessionRows'
+import { AGENT_PROVIDERS, type AgentSession } from '../../../../shared/agent-api'
 import {
   ChevronRight,
   CircleAlert,
@@ -5,10 +7,16 @@ import {
   FolderPlus,
   FolderX,
   GitBranch,
-  Lock
+  Lock,
+  SquareTerminal
 } from 'lucide-react'
 import { RootFolderIcon } from '@/components/icons/RootFolderIcon'
-import { ContextMenu, ContextMenuItem, ContextMenuTrigger } from '@/components/ui/context-menu'
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger
+} from '@/components/ui/context-menu'
 import {
   PATH_TOOLTIP_DELAY_MS,
   Tooltip,
@@ -17,8 +25,9 @@ import {
   usePointerTooltip
 } from '@/components/ui/tooltip'
 import { cn } from '@/lib/class-names'
-import { Fragment } from 'react'
-import { OpenTerminalMenuContent } from '@/components/terminal/OpenTerminalMenuContent'
+import { Fragment, type ReactNode, useRef, useState } from 'react'
+import { focusActiveTerminal } from '@/components/terminal/use-terminal-commands'
+import { useTerminalStore } from '@/state/terminal-store'
 import {
   OpenFolderEmptyState,
   WorkspaceProblemBanner
@@ -28,10 +37,67 @@ import { useWorktreeStore } from '@/state/worktree-store'
 import type { WorkspaceFolder } from '../../../../shared/workspace-api'
 import type { ProjectWorktrees, Worktree } from '../../../../shared/worktree-api'
 
+/** A tree row's right-click menu: Open Terminal Here first, then the row's own items. */
+function RowMenuContent({
+  cwd,
+  project,
+  disabled,
+  children
+}: {
+  cwd: string
+  project: string
+  disabled: boolean
+  children?: ReactNode
+}): React.JSX.Element {
+  const openTerminal = useTerminalStore((state) => state.openTerminal)
+  const openedTerminal = useRef(false)
+  return (
+    <ContextMenuContent
+      onCloseAutoFocus={(event) => {
+        if (!openedTerminal.current) return
+        // The new terminal gets the keys, not the row the menu would return them to.
+        event.preventDefault()
+        openedTerminal.current = false
+        setTimeout(focusActiveTerminal, 0)
+      }}
+    >
+      <ContextMenuItem
+        disabled={disabled}
+        onSelect={() => {
+          openedTerminal.current = true
+          openTerminal(cwd)
+        }}
+      >
+        <SquareTerminal aria-hidden />
+        Open Terminal Here
+      </ContextMenuItem>
+      {(['hatfield', 'claude'] as const).map((provider) => (
+        <ContextMenuItem
+          key={provider}
+          disabled={disabled}
+          onSelect={() => {
+            openedTerminal.current = true
+            openTerminal(cwd, { provider, target: { project, cwd } })
+          }}
+        >
+          Launch {AGENT_PROVIDERS[provider]}
+        </ContextMenuItem>
+      ))}
+      {children}
+    </ContextMenuContent>
+  )
+}
+
 const worktreeLabel = (worktree: Worktree): string =>
   worktree.branch ?? `detached ${worktree.head.slice(0, 7)}`
 
-function WorktreeRow({ worktree }: { worktree: Worktree }): React.JSX.Element {
+function WorktreeRow({
+  worktree,
+  project
+}: {
+  worktree: Worktree
+  project: string
+}): React.JSX.Element {
   const label = worktreeLabel(worktree)
   const pathTip = usePointerTooltip()
   return (
@@ -65,7 +131,7 @@ function WorktreeRow({ worktree }: { worktree: Worktree }): React.JSX.Element {
         </ContextMenuTrigger>
         <TooltipContent {...pathTip.placement}>{worktree.path}</TooltipContent>
       </Tooltip>
-      <OpenTerminalMenuContent cwd={worktree.path} disabled={worktree.prunable} />
+      <RowMenuContent cwd={worktree.path} project={project} disabled={worktree.prunable} />
     </ContextMenu>
   )
 }
@@ -76,8 +142,13 @@ function hasChildRows(project: ProjectWorktrees | undefined): boolean {
   return project?.status === 'git' && project.worktrees.some((worktree) => !worktree.project)
 }
 
-/** The project's worktrees under its row; nothing for a folder outside git. */
-function ProjectWorktreeRows({ folder }: { folder: string }): React.JSX.Element | null {
+function ProjectWorktreeRows({
+  folder,
+  sessions
+}: {
+  folder: string
+  sessions: AgentSession[]
+}): React.JSX.Element | null {
   const project = useWorktreeStore((state) => state.projects[folder])
   const collapsed = useWorktreeStore((state) => state.collapsed[folder] === true)
   if (collapsed) return null
@@ -89,19 +160,38 @@ function ProjectWorktreeRows({ folder }: { folder: string }): React.JSX.Element 
       </li>
     )
   }
-  if (project?.status !== 'git') return null
   return (
     <>
-      {project.worktrees
-        .filter((worktree) => !worktree.project)
-        .map((worktree) => (
-          <WorktreeRow key={worktree.path} worktree={worktree} />
-        ))}
+      <AgentSessionRows
+        sessions={sessions.filter(
+          (session) =>
+            session.cwd === folder ||
+            project?.status !== 'git' ||
+            !project.worktrees.some((tree) => !tree.project && tree.path === session.cwd)
+        )}
+      />
+      {project?.status === 'git' &&
+        project.worktrees
+          .filter((worktree) => !worktree.project)
+          .map((worktree) => (
+            <Fragment key={worktree.path}>
+              <WorktreeRow worktree={worktree} project={folder} />
+              <AgentSessionRows
+                sessions={sessions.filter((session) => session.cwd === worktree.path)}
+              />
+            </Fragment>
+          ))}
     </>
   )
 }
 
-function ProjectRow({ folder }: { folder: WorkspaceFolder }): React.JSX.Element {
+function ProjectRow({
+  folder,
+  hasSessions
+}: {
+  folder: WorkspaceFolder
+  hasSessions: boolean
+}): React.JSX.Element {
   const removeFolder = useWorkspaceStore((state) => state.removeFolder)
   const setFolderKind = useWorkspaceStore((state) => state.setFolderKind)
   const pathTip = usePointerTooltip()
@@ -110,7 +200,7 @@ function ProjectRow({ folder }: { folder: WorkspaceFolder }): React.JSX.Element 
   const toggleCollapsed = useWorktreeStore((state) => state.toggleCollapsed)
   const checkout =
     project?.status === 'git' ? project.worktrees.find((worktree) => worktree.project) : undefined
-  const foldable = !folder.missing && hasChildRows(project)
+  const foldable = !folder.missing && (hasChildRows(project) || hasSessions)
   return (
     <ContextMenu>
       <Tooltip delayDuration={PATH_TOOLTIP_DELAY_MS} onOpenChange={pathTip.onOpenChange}>
@@ -169,7 +259,7 @@ function ProjectRow({ folder }: { folder: WorkspaceFolder }): React.JSX.Element 
         </ContextMenuTrigger>
         <TooltipContent {...pathTip.placement}>{folder.path}</TooltipContent>
       </Tooltip>
-      <OpenTerminalMenuContent cwd={folder.path} disabled={folder.missing}>
+      <RowMenuContent cwd={folder.path} project={folder.path} disabled={folder.missing}>
         <ContextMenuItem onSelect={() => void setFolderKind(folder.path, 'folder')}>
           <FolderMinus aria-hidden />
           Hide from Projects
@@ -178,7 +268,7 @@ function ProjectRow({ folder }: { folder: WorkspaceFolder }): React.JSX.Element 
           <FolderX aria-hidden />
           Remove from Workspace
         </ContextMenuItem>
-      </OpenTerminalMenuContent>
+      </RowMenuContent>
     </ContextMenu>
   )
 }
@@ -190,6 +280,25 @@ export function WorkspacePanel(): React.JSX.Element {
 
   const allFolders = workspace?.folders ?? []
   const folders = allFolders.filter((folder) => folder.kind === 'project')
+  const { sessions, error } = useAgentSessions()
+  const [filter, setFilter] = useState('all')
+  const visible = sessions.filter(
+    (session) =>
+      filter === 'all' ||
+      (filter === 'attention'
+        ? !!session.wait
+        : filter === 'working'
+          ? session.activity === 'working' && !session.wait
+          : filter === 'idle'
+            ? session.activity === 'idle' && !session.wait
+            : filter === 'unknown'
+              ? session.process === 'running' && session.activity === 'unknown' && !session.wait
+              : session.process === 'exited')
+  )
+  const attention = sessions.filter((session) => session.wait)
+  const ungrouped = visible.filter(
+    (session) => !folders.some((folder) => !folder.missing && folder.path === session.project)
+  )
   // Action errors and notices show in the shell's workspace message; the panel shows why the workspace is read-only.
   const problem = workspace?.problem ?? null
 
@@ -211,8 +320,13 @@ export function WorkspacePanel(): React.JSX.Element {
           <TooltipContent side="bottom">Add Folder to Workspace</TooltipContent>
         </Tooltip>
       </div>
+      {error ? (
+        <p role="alert" className="type-hint px-4 text-error">
+          Agent status unavailable: {error}
+        </p>
+      ) : null}
       {problem ? <WorkspaceProblemBanner problem={problem} /> : null}
-      {workspace && folders.length === 0 && !workspace.problem ? (
+      {workspace && folders.length === 0 && sessions.length === 0 && !workspace.problem ? (
         <OpenFolderEmptyState
           message={
             allFolders.length === 0
@@ -221,17 +335,62 @@ export function WorkspacePanel(): React.JSX.Element {
           }
         />
       ) : (
-        <ul
-          aria-label="Workspace folders"
-          className="flex min-h-0 flex-col gap-0.5 overflow-y-auto px-2"
-        >
-          {folders.map((folder) => (
-            <Fragment key={folder.path}>
-              <ProjectRow folder={folder} />
-              {folder.missing ? null : <ProjectWorktreeRows folder={folder.path} />}
-            </Fragment>
-          ))}
-        </ul>
+        <div className="min-h-0 overflow-y-auto">
+          {sessions.length > 0 && (
+            <div className="px-2 pb-2">
+              <select
+                aria-label="Filter sessions by status"
+                value={filter}
+                onChange={(event) => setFilter(event.target.value)}
+                className="type-body h-control w-full rounded-component border border-separator bg-island px-2 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+              >
+                <option value="all">All sessions</option>
+                <option value="attention">Needs input</option>
+                <option value="working">Working</option>
+                <option value="idle">Idle</option>
+                <option value="unknown">Status unavailable</option>
+                <option value="exited">Exited</option>
+              </select>
+              {attention.length > 0 && (
+                <details open className="mt-2 rounded-component bg-hover">
+                  <summary className="type-section-title cursor-pointer px-2 py-1.5">
+                    Needs input · {attention.length}
+                  </summary>
+                  <ul aria-label="Sessions needing input">
+                    <AgentSessionRows sessions={attention} />
+                  </ul>
+                </details>
+              )}
+              {visible.length === 0 && (
+                <p className="type-hint px-2 pt-2">No sessions match this filter.</p>
+              )}
+            </div>
+          )}
+          <ul aria-label="Workspace folders" className="flex min-h-0 flex-col gap-0.5 px-2">
+            {folders.map((folder) => (
+              <Fragment key={folder.path}>
+                <ProjectRow
+                  folder={folder}
+                  hasSessions={sessions.some((session) => session.project === folder.path)}
+                />
+                {folder.missing ? null : (
+                  <ProjectWorktreeRows
+                    folder={folder.path}
+                    sessions={visible.filter((session) => session.project === folder.path)}
+                  />
+                )}
+              </Fragment>
+            ))}
+          </ul>
+          {ungrouped.length > 0 && (
+            <div className="px-2 py-2">
+              <h3 className="type-section-title px-2">Other terminals</h3>
+              <ul>
+                <AgentSessionRows sessions={ungrouped} />
+              </ul>
+            </div>
+          )}
+        </div>
       )}
     </>
   )

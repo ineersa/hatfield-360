@@ -1,3 +1,4 @@
+import type { AgentLaunch } from '../../../../shared/agent-api'
 import type { ITerminalOptions } from '@xterm/xterm'
 import { useEffect, useRef } from 'react'
 import { PaneManager } from '@/lib/pane-manager/pane-manager'
@@ -46,14 +47,17 @@ export function TerminalTabBody({
     if (!element) return undefined
     const shells = new Map<number, PaneShell>()
     const closeTab = useTerminalStore.getState().closeTab
+    let nextLaunch = tab.agent
     const panes = new PaneManager(element, {
       terminalOptions: currentTerminalOptions,
       gpuAcceleration: () => useSettingsStore.getState().values['terminal.gpuAcceleration'],
       onPaneCreated: (pane) => {
+        const agent = nextLaunch
+        nextLaunch = undefined
         bindClipboardKeys(pane.terminal)
         shells.set(
           pane.id,
-          startPaneShell(pane, tab.cwd, () => panes.closePane(pane.id))
+          startPaneShell(pane, tab.cwd, () => panes.closePane(pane.id), agent)
         )
       },
       onPaneClosed: (paneId) => {
@@ -80,6 +84,23 @@ export function TerminalTabBody({
         else if (command === 'split-down') panes.splitPane(activePane.id, 'horizontal')
         else panes.closePane(activePane.id)
       },
+      selectTerminal: (id) => {
+        const pane = panes.getPanes().find((item) => item.container.dataset.terminalId === id)
+        if (!pane) return false
+        panes.setActivePane(pane.id, isShown.current)
+        return true
+      },
+      launchSplit: (provider) => {
+        const pane = panes.getActivePane()
+        const sourceTerminalId = pane?.container.dataset.terminalId
+        if (!pane || !sourceTerminalId || pane.container.dataset.exited) return
+        nextLaunch = { provider, target: { sourceTerminalId } } satisfies AgentLaunch
+        try {
+          panes.splitPane(pane.id, 'vertical')
+        } finally {
+          nextLaunch = undefined
+        }
+      },
       focus: () => panes.getActivePane()?.terminal.focus(),
       isShown: () => isShown.current
     })
@@ -90,7 +111,7 @@ export function TerminalTabBody({
       panes.destroy()
       manager.current = null
     }
-  }, [tab.id, tab.cwd])
+  }, [tab.id, tab.cwd, tab.agent])
 
   useEffect(() => {
     manager.current?.setTerminalOptions({ fontFamily, fontSize, lineHeight })
@@ -116,6 +137,11 @@ export function TerminalTabBody({
   return (
     <TerminalContextMenu
       activeTerminal={() => manager.current?.getActivePane()?.terminal ?? null}
+      launchSplit={(provider) => terminalTabControllers.get(tab.id)?.launchSplit(provider)}
+      canLaunch={() => {
+        const pane = manager.current?.getActivePane()
+        return Boolean(pane?.container.dataset.terminalId && !pane.container.dataset.exited)
+      }}
       runCommand={(command) => terminalTabControllers.get(tab.id)?.run(command)}
     >
       <div

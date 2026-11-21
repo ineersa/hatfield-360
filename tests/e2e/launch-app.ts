@@ -29,7 +29,11 @@ export const testingPackagedApp = packagedExecutable !== undefined
  */
 export async function withApp(
   body: (app: ElectronApplication, page: Page) => Promise<void>,
-  options: { userDataDir?: string | null; env?: Record<string, string> } = {}
+  options: {
+    userDataDir?: string | null
+    env?: Record<string, string>
+    recordVideo?: { dir: string; size: { width: number; height: number } }
+  } = {}
 ): Promise<void> {
   const [ownDir, cleanup] =
     options.userDataDir === undefined
@@ -37,6 +41,7 @@ export async function withApp(
       : [options.userDataDir, async () => {}]
   const app = await electron.launch({
     ...launchTarget,
+    ...(options.recordVideo ? { recordVideo: options.recordVideo } : {}),
     args: [...(launchTarget.args ?? []), ...(ownDir === null ? [] : [`--user-data-dir=${ownDir}`])],
     env: { ...process.env, ...options.env, APP_BACKGROUND_LAUNCH: '1' }
   })
