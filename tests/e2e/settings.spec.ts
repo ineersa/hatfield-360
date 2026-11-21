@@ -302,6 +302,21 @@ test('the largest app font in the smallest window keeps the status bar and Setti
         expect(footerBox.y + footerBox.height).toBeLessThan(
           Number(await page.evaluate('window.innerHeight')) + 1
         )
+        // A toast narrows to fit beside the activity bar instead of running off the window.
+        await writeFile(
+          join(userData, 'settings.json'),
+          '{ "app.fontSize": 32, "editor.lineHeight": 5 }'
+        )
+        await expect(message(page)).toBeVisible()
+        const toastBox = await message(page).boundingBox()
+        if (!toastBox) throw new Error('toast is not rendered')
+        expect(toastBox.x).toBeGreaterThanOrEqual(barBox.x + barBox.width)
+        expect(toastBox.x + toastBox.width).toBeLessThanOrEqual(
+          Number(await page.evaluate('window.innerWidth'))
+        )
+        await saveScreenshot(page, 'toast-font-32-small-window')
+        await message(page).getByRole('button', { name: 'Close' }).click()
+
         await gear.click()
         await expect(settingsMain(page)).toBeVisible()
         // Nothing on the Settings page makes the whole window scroll sideways.

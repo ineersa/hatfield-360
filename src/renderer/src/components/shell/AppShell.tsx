@@ -69,7 +69,15 @@ export function AppShell(): React.JSX.Element {
       <div className="type-body flex h-screen flex-col bg-frame">
         <div className="flex min-h-0 flex-1 pt-island-gap">
           <ActivityBar />
-          <div className="flex min-w-0 flex-1">
+          <div
+            className="flex min-w-0 flex-1"
+            // Keeps the side panel's minimum and a sliver of main area; the notifications panel gives way first.
+            style={{
+              minWidth:
+                (panel.collapsed ? 0 : SIDE_PANEL_MIN_WIDTH + SIDE_PANEL_HANDLE_WIDTH) +
+                MAIN_AREA_MIN_WIDTH
+            }}
+          >
             {panel.collapsed ? null : (
               <>
                 <aside

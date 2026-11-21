@@ -291,6 +291,13 @@ test('changes whose app state cannot be saved leave main and the window in agree
         await expect(message(page)).toHaveCount(2)
         await expect(page.getByText('Default Workspace has no folders yet.')).toBeVisible()
 
+        // A burst shows the three newest; the panel keeps them all. Enter, since the stacked toasts cover the row.
+        await recentList(page).getByRole('button', { name: 'api', exact: true }).press('Enter')
+        await expect(bell(page)).toHaveAccessibleName('Notifications (3)')
+        await recentList(page).getByRole('button', { name: 'api', exact: true }).press('Enter')
+        await expect(bell(page)).toHaveAccessibleName('Notifications (4)')
+        await expect(message(page)).toHaveCount(3)
+
         // A reloaded window asks main afresh, so it shows what main really has open.
         await page.reload()
         await expect(page).toHaveTitle('Default Workspace — Hatfield 360')

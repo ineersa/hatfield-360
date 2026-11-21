@@ -136,6 +136,32 @@ test('a narrow window shrinks the side panel so the main area stays on screen', 
   })
 })
 
+test('in a narrow window the notifications panel gives way, so the side panel and main area keep their room', async () => {
+  await withApp(async (app, page) => {
+    await bell(page).click()
+    await resizeHandle(page, 'Notifications').focus()
+    await page.keyboard.press('End')
+    await app.evaluate(({ BrowserWindow }) => {
+      const window = BrowserWindow.getAllWindows()[0]
+      if (!window) throw new Error('no window')
+      window.setContentSize(600, 800)
+    })
+    await expect.poll(() => page.evaluate('window.innerWidth')).toBeLessThan(620)
+    const viewportWidth = Number(await page.evaluate('window.innerWidth'))
+    const main = await page.getByRole('main', { name: 'Agents' }).boundingBox()
+    const notifications = await sidePanel(page, 'Notifications').boundingBox()
+    const bellBox = await bell(page).boundingBox()
+    if (!main || !notifications || !bellBox) throw new Error('layout is not rendered')
+    expect(await panelWidth(page, 'Agents')).toBe(180)
+    expect(main.width).toBeGreaterThanOrEqual(120)
+    expect(notifications.x).toBeGreaterThan(main.x + main.width)
+    expect(notifications.width).toBeGreaterThan(0)
+    expect(bellBox.x + bellBox.width).toBeLessThanOrEqual(viewportWidth)
+    expect(await page.evaluate('document.documentElement.scrollWidth')).toBe(viewportWidth)
+    await saveScreenshot(page, 'notifications-narrow-window')
+  })
+})
+
 test('each view keeps its own side panel width and collapsed state', async () => {
   await withApp(async (_app, page) => {
     await viewButton(page, 'Files').click()

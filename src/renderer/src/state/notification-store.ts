@@ -32,6 +32,9 @@ type NotificationState = {
 
 let lastId = 0
 
+/** More would cover the window; older ones stay in the panel. */
+const MAX_TOASTS = 3
+
 export const useNotificationStore = create<NotificationState>((set) => ({
   notifications: [],
   toasts: [],
@@ -42,7 +45,7 @@ export const useNotificationStore = create<NotificationState>((set) => ({
     set((state) => ({
       notifications: [{ ...input, id, time: Date.now() }, ...state.notifications],
       // The open panel already shows it.
-      toasts: state.panelOpen ? state.toasts : [...state.toasts, id]
+      toasts: state.panelOpen ? state.toasts : [...state.toasts, id].slice(-MAX_TOASTS)
     }))
     return id
   },

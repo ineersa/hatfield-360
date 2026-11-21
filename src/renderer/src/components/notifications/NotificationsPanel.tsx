@@ -50,13 +50,10 @@ export function NotificationsPanel(): React.JSX.Element {
       <aside
         ref={aside}
         aria-label="Notifications panel"
-        // CSS caps it when the window narrows; the chosen width returns when there is room.
-        style={{
-          width,
-          minWidth: SIDE_PANEL_MIN_WIDTH,
-          maxWidth: `calc(50% - ${SIDE_PANEL_HANDLE_WIDTH}px)`
-        }}
-        className="flex shrink-0 flex-col overflow-hidden rounded-island bg-island"
+        // It shrinks below its minimum only when the window is too narrow for the side panel and main area too;
+        // the chosen width returns when there is room.
+        style={{ width, maxWidth: `calc(50% - ${SIDE_PANEL_HANDLE_WIDTH}px)` }}
+        className="flex min-w-0 flex-col overflow-hidden rounded-island bg-island"
       >
         <div className="flex h-panel-header shrink-0 items-center gap-2 pr-2 pl-4">
           <h2 className="type-panel-title flex-1">Notifications</h2>

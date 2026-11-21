@@ -48,17 +48,21 @@ function Toast({ notification }: { notification: AppNotification }): React.JSX.E
   )
 }
 
-/** Toasts in the bottom-right corner of the main area, over the layout so nothing moves. */
+/**
+ * Toasts in the bottom-right corner of the main area, over the layout so nothing moves. Newest
+ * first in the DOM, reversed on screen: should large ones outgrow the window, the stack scrolls
+ * from the newest instead of running off its top.
+ */
 export function Toaster(): React.JSX.Element {
   const toasts = useNotificationStore((state) => state.toasts)
   const notifications = useNotificationStore((state) => state.notifications)
-  const shown = toasts.flatMap((id) =>
-    notifications.filter((notification) => notification.id === id)
-  )
+  const shown = toasts
+    .toReversed()
+    .flatMap((id) => notifications.filter((notification) => notification.id === id))
   return (
     <section
       aria-label="Notification toasts"
-      className="pointer-events-none fixed right-[calc(var(--tool-stripe-width)+var(--island-gap))] bottom-[calc(var(--status-bar-height)+var(--island-gap))] z-50 flex flex-col gap-2"
+      className="pointer-events-none fixed top-island-gap right-tool-stripe bottom-status-bar z-50 flex flex-col-reverse gap-2 overflow-y-auto p-island-gap [scrollbar-width:none]"
     >
       {shown.map((notification) => (
         <Toast key={notification.id} notification={notification} />
