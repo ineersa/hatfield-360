@@ -4,7 +4,7 @@ export type DirectoryEntry = {
   path: string
   kind: 'directory' | 'file'
   symlink: boolean
-  /** Ignored by git (or the `.git` folder itself); always false in plain folders. */
+  /** Ignored by git; always false in plain folders. */
   ignored: boolean
 }
 
@@ -15,8 +15,13 @@ export type DirectoryListing =
 export const FILE_TREE_CHANNELS = {
   list: 'file-tree:list',
   watch: 'file-tree:watch',
-  changed: 'file-tree:changed'
+  changed: 'file-tree:changed',
+  copyPath: 'file-tree:copy-path',
+  reveal: 'file-tree:reveal'
 } as const
+
+/** How Copy Path writes a path: as is, or from the root folder it is under. */
+export type PathForm = 'absolute' | 'relative'
 
 export type FileTreeApi = {
   /** Lists a folder inside the workspace's folders or worktrees: folders first, then files, by name. */
@@ -25,4 +30,8 @@ export type FileTreeApi = {
   watchDirectories: (paths: string[]) => Promise<void>
   /** A watched folder changed (an entry or the ignore rules over it); list it again. */
   subscribeDirectoryChanges: (callback: (paths: string[]) => void) => () => void
+  /** Puts a path inside the workspace on the clipboard; `relative` is from its root folder. */
+  copyPath: (path: string, form: PathForm) => Promise<void>
+  /** Shows a file or folder inside the workspace in the system file manager. */
+  revealPath: (path: string) => Promise<void>
 }

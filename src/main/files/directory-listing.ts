@@ -54,6 +54,8 @@ export async function listDirectory(path: string, roots: FileRoot[]): Promise<Di
   } catch (error) {
     return { path, status: 'error', message: message(error) }
   }
+  // Repository metadata, never project content: hidden as IDEs do, whatever the ignore rules say.
+  dirents = dirents.filter((entry) => entry.name !== '.git')
   const names = dirents.map((entry) => entry.name)
   const [kinds, ignored] = await Promise.all([
     Promise.all(dirents.map((entry) => entryKind(real, entry))),
@@ -64,7 +66,7 @@ export async function listDirectory(path: string, roots: FileRoot[]): Promise<Di
     path: join(path, entry.name),
     kind: kinds[index] ?? 'file',
     symlink: entry.isSymbolicLink(),
-    ignored: ignored !== null && (entry.name === '.git' || ignored.has(entry.name))
+    ignored: ignored?.has(entry.name) === true
   }))
   entries.sort((a, b) =>
     a.kind === b.kind ? byName.compare(a.name, b.name) : a.kind === 'directory' ? -1 : 1

@@ -30,6 +30,8 @@ const desktopApi: DesktopApi = {
   },
   listDirectory: (path) => ipcRenderer.invoke(FILE_TREE_CHANNELS.list, path),
   watchDirectories: (paths) => ipcRenderer.invoke(FILE_TREE_CHANNELS.watch, paths),
+  copyPath: (path, form) => ipcRenderer.invoke(FILE_TREE_CHANNELS.copyPath, path, form),
+  revealPath: (path) => ipcRenderer.invoke(FILE_TREE_CHANNELS.reveal, path),
   subscribeDirectoryChanges: (callback) => {
     const listener = (_event: unknown, paths: string[]): void => callback(paths)
     ipcRenderer.on(FILE_TREE_CHANNELS.changed, listener)

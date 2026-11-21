@@ -33,13 +33,12 @@ describe('listDirectory', () => {
 
   afterEach(() => rm(dir, { recursive: true, force: true }))
 
-  it('lists folders first, by name with numbers in order, and marks what git ignores in a project', async () => {
+  it('lists folders first, by name with numbers in order, marks what git ignores and hides .git', async () => {
     const repo = join(dir, 'repo')
     await mkdir(repo)
     execFileSync('git', ['init', '-q'], { cwd: repo })
     await fill(repo)
     expect(shape(await listDirectory(repo, [{ path: repo, git: true }]))).toEqual([
-      'd .git (ignored)',
       'd node_modules (ignored)',
       'd src',
       'f .gitignore',

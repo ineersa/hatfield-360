@@ -60,6 +60,9 @@ type PointerPlacement = Pick<
  * Opens a tooltip just under the mouse pointer instead of beside its trigger:
  * spread `track` on the trigger, `onOpenChange` on the Tooltip and `placement` on the content.
  */
+/** Long enough that moving through a tree doesn't flash a path at every row; the path shows under the pointer. */
+export const PATH_TOOLTIP_DELAY_MS = 700
+
 export function usePointerTooltip(): {
   track: (event: PointerEvent<HTMLElement>) => void
   onOpenChange: (open: boolean) => void

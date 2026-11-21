@@ -79,8 +79,9 @@ test('folders added from the empty state and the File menu are listed and saved 
         // The picker starts where the last folder was added from.
         await answerFolderPicker(app, web)
         await clickMenuItem(app, 'add-folder-to-workspace')
-        expect(await folderPickerOptions(app)).toMatchObject({ defaultPath: projects })
+        // The menu opens the picker asynchronously: its options are read once it has answered.
         await expect(folderList(page).getByRole('listitem')).toHaveText(['apimain', 'webmain'])
+        expect(await folderPickerOptions(app)).toMatchObject({ defaultPath: projects })
 
         // Adding a folder already in the workspace and cancelling the picker change nothing.
         await answerFolderPicker(app, api)

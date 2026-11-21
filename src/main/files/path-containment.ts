@@ -31,3 +31,17 @@ export async function resolveInsideRoots(path: string, roots: string[]): Promise
   if (real === null || real === undefined) return null
   return realRoots.some((root) => root !== null && isPathInside(real, root)) ? real : null
 }
+
+/** `path` from the innermost root it is under, by path alone; null for a root itself or outside them all. */
+export function rootRelativePath(
+  path: string,
+  roots: string[],
+  paths: PlatformPath = platformPath
+): string | null {
+  const root = roots
+    .filter((candidate) => isPathInside(path, candidate, paths))
+    .toSorted((a, b) => b.length - a.length)[0]
+  if (root === undefined) return null
+  const relative = paths.relative(root, path)
+  return relative === '' ? null : relative
+}

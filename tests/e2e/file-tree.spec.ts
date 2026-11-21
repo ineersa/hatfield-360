@@ -2,6 +2,7 @@ import { expect, test, type ElectronApplication, type Page } from '@playwright/t
 import { execFileSync } from 'node:child_process'
 import {
   appendFile,
+  chmod,
   mkdir,
   readFile,
   realpath,
@@ -99,13 +100,16 @@ test('folders added to the workspace become projects or plain folders, and can b
         await expect(projectRows(page)).toHaveText(['appmain', 'featureapp-feature'])
         await expectSavedKinds(['project', 'folder'])
 
+        // The worktree sits under its project, as in Projects.
         await showView(page, 'Files')
+        await expect(tree(page).getByRole('treeitem')).toHaveText(['appmain', 'notes'])
+        await item(page, 'app main').click()
         await expect(tree(page).getByRole('treeitem')).toHaveText([
           'appmain',
-          'appfeature',
+          'featureapp-feature',
           'notes'
         ])
-        await expect(item(page, 'app feature worktree')).toBeVisible()
+        await expect(item(page, 'feature worktree app-feature')).toHaveAttribute('aria-level', '2')
 
         // A folder that becomes a repository later stays a plain folder.
         git(notes, 'init', '-q', '-b', 'trunk')
@@ -130,11 +134,7 @@ test('folders added to the workspace become projects or plain folders, and can b
         // Adding a plain folder again brings it back into Projects.
         await answerFolderPicker(electronApp, app)
         await page.getByRole('button', { name: 'Add Folder to Workspace' }).click()
-        await expect(tree(page).getByRole('treeitem')).toHaveText([
-          'appmain',
-          'appfeature',
-          'notestrunk'
-        ])
+        await expect(tree(page).getByRole('treeitem')).toHaveText(['appmain', 'notestrunk'])
         await showView(page, 'Agents')
         await expect(projectRows(page)).toHaveText(['appmain', 'featureapp-feature', 'notestrunk'])
       },
@@ -173,11 +173,11 @@ test('the file tree follows the disk and git ignore rules in expanded folders', 
       async (_app, shown) => {
         page = shown
         await showView(page, 'Files')
-        await item(page, 'app').click()
+        await item(page, 'app main').click()
         await item(page, 'src').click()
+        // `.git` is never listed: it is git's, not the project's.
         await expect(tree(page).getByRole('treeitem')).toHaveText([
           'appmain',
-          '.git',
           'dist',
           'src',
           'a.ts',
@@ -187,7 +187,6 @@ test('the file tree follows the disk and git ignore rules in expanded folders', 
           'logs'
         ])
         await ignored('dist')
-        await ignored('.git')
         await notIgnored('src')
         await notIgnored('README.md')
 
@@ -213,14 +212,14 @@ test('the file tree follows the disk and git ignore rules in expanded folders', 
         // `.git/info/exclude` isn't watched; Reload from Disk reads it.
         await mkdir(join(repo, '.git', 'info'), { recursive: true })
         await appendFile(join(repo, '.git', 'info', 'exclude'), 'notes.txt\n')
-        await contextMenu(page, item(page, 'app'), 'Reload from Disk')
+        await contextMenu(page, item(page, 'app main'), 'Reload from Disk')
         await ignored('notes.txt')
 
         // A plain folder has nothing dimmed, even with ignore rules of its own.
         await item(page, 'logs').click()
         await expect(item(page, '.gitignore').last()).toBeVisible()
         await expect(tree(page).getByRole('treeitem').last()).toHaveText('.gitignore')
-        await expect(tree(page).locator('[data-ignored]')).toHaveCount(3)
+        await expect(tree(page).locator('[data-ignored]')).toHaveCount(2)
         await saveScreenshot(page, 'file-tree')
 
         await page.getByRole('button', { name: 'Hide Ignored Files' }).click()
@@ -248,6 +247,116 @@ test('the file tree follows the disk and git ignore rules in expanded folders', 
       { userDataDir: userData }
     )
   } finally {
+    await cleanUserData()
+    await cleanProjects()
+  }
+})
+
+const clipboardText = (app: ElectronApplication) =>
+  app.evaluate(({ clipboard }) => clipboard.readText())
+
+test('the file tree is driven from the keyboard and copies paths', async () => {
+  const [projects, cleanProjects] = await makeProjectsDir()
+  const repo = makeRepo(projects, 'app')
+  await mkdir(join(repo, 'docs'))
+  await mkdir(join(repo, 'src'))
+  await writeFile(join(repo, 'src', 'a.ts'), '')
+  await writeFile(join(repo, 'package.json'), '{}')
+  await writeFile(join(repo, 'README.md'), '')
+  const [userData, cleanUserData] = await seedWorkspace([{ path: repo, kind: 'project' }])
+  try {
+    await withApp(
+      async (electronApp, page) => {
+        await showView(page, 'Files')
+        const root = item(page, 'app main')
+        await root.click()
+        await expect(root).toBeFocused()
+        await expect(tree(page).getByRole('treeitem')).toHaveText([
+          'appmain',
+          'docs',
+          'src',
+          'package.json',
+          'README.md'
+        ])
+        await expect(item(page, 'src')).toHaveAttribute('aria-posinset', '2')
+        await expect(item(page, 'src')).toHaveAttribute('aria-setsize', '4')
+
+        // Right goes into an open folder and opens a closed one; Left closes it, then goes up.
+        await page.keyboard.press('ArrowRight')
+        await expect(item(page, 'docs')).toBeFocused()
+        await page.keyboard.press('ArrowRight')
+        await expect(item(page, 'Empty')).toBeVisible()
+        await page.keyboard.press('ArrowLeft')
+        await expect(item(page, 'Empty')).toHaveCount(0)
+        await page.keyboard.press('ArrowLeft')
+        await expect(root).toBeFocused()
+
+        await page.keyboard.press('End')
+        await expect(item(page, 'README.md')).toBeFocused()
+        await page.keyboard.press('Home')
+        await expect(root).toBeFocused()
+        await page.keyboard.type('pa')
+        await expect(item(page, 'package.json')).toBeFocused()
+        await expect(item(page, 'package.json')).toHaveAttribute('aria-selected', 'true')
+
+        await page.keyboard.press('ControlOrMeta+Shift+KeyC')
+        await expect.poll(() => clipboardText(electronApp)).toBe(join(repo, 'package.json'))
+
+        // `*` opens the folder's siblings too.
+        await page.keyboard.press('ArrowUp')
+        await page.keyboard.press('*')
+        await expect(item(page, 'a.ts')).toBeVisible()
+        await item(page, 'a.ts').click()
+        await page.keyboard.press('ControlOrMeta+Alt+Shift+KeyC')
+        await expect.poll(() => clipboardText(electronApp)).toBe(join('src', 'a.ts'))
+        await contextMenu(page, root, 'Copy Path')
+        await expect.poll(() => clipboardText(electronApp)).toBe(repo)
+        await contextMenu(page, item(page, 'src'), 'Copy Relative Path')
+        await expect.poll(() => clipboardText(electronApp)).toBe('src')
+        await saveScreenshot(page, 'file-tree-keyboard')
+
+        await page.getByRole('button', { name: 'Collapse All' }).click()
+        await expect(tree(page).getByRole('treeitem')).toHaveText(['appmain'])
+      },
+      { userDataDir: userData }
+    )
+  } finally {
+    await cleanUserData()
+    await cleanProjects()
+  }
+})
+
+test("a folder that can't be listed says why and can be retried", async () => {
+  test.skip(
+    process.platform === 'win32' || process.getuid?.() === 0,
+    'unreadable folders need POSIX permissions, which root ignores'
+  )
+  const [projects, cleanProjects] = await makeProjectsDir()
+  const root = join(projects, 'notes')
+  const locked = join(root, 'locked')
+  await mkdir(locked, { recursive: true })
+  await chmod(locked, 0o000)
+  const [userData, cleanUserData] = await seedWorkspace([{ path: root, kind: 'folder' }])
+  try {
+    await withApp(
+      async (_app, page) => {
+        await showView(page, 'Files')
+        await item(page, 'notes').click()
+        await item(page, 'locked').click()
+        const error = tree(page).getByRole('treeitem', { name: /^Couldn't list this folder: / })
+        await expect(error).toBeVisible()
+        await expect(error).toHaveAttribute('aria-level', '3')
+
+        await chmod(locked, 0o755)
+        await writeFile(join(locked, 'todo.md'), '')
+        await tree(page).getByRole('button', { name: 'Retry' }).click()
+        await expect(item(page, 'todo.md')).toBeVisible()
+        await expect(error).toHaveCount(0)
+      },
+      { userDataDir: userData }
+    )
+  } finally {
+    await chmod(locked, 0o755).catch(() => undefined)
     await cleanUserData()
     await cleanProjects()
   }

@@ -5,65 +5,28 @@ import {
   FolderPlus,
   FolderX,
   GitBranch,
-  Lock,
-  SquareTerminal
+  Lock
 } from 'lucide-react'
 import { RootFolderIcon } from '@/components/icons/RootFolderIcon'
+import { ContextMenu, ContextMenuItem, ContextMenuTrigger } from '@/components/ui/context-menu'
 import {
-  ContextMenu,
-  ContextMenuContent,
-  ContextMenuItem,
-  ContextMenuTrigger
-} from '@/components/ui/context-menu'
-import { Tooltip, TooltipContent, TooltipTrigger, usePointerTooltip } from '@/components/ui/tooltip'
+  PATH_TOOLTIP_DELAY_MS,
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+  usePointerTooltip
+} from '@/components/ui/tooltip'
 import { cn } from '@/lib/class-names'
-import { Fragment, type ReactNode, useRef } from 'react'
-import { focusActiveTerminal } from '@/components/terminal/use-terminal-commands'
-import { useTerminalStore } from '@/state/terminal-store'
+import { Fragment } from 'react'
+import { OpenTerminalMenuContent } from '@/components/terminal/OpenTerminalMenuContent'
+import {
+  OpenFolderEmptyState,
+  WorkspaceProblemBanner
+} from '@/components/workspace/WorkspaceNotices'
 import { useWorkspaceStore } from '@/state/workspace-store'
 import { useWorktreeStore } from '@/state/worktree-store'
 import type { WorkspaceFolder } from '../../../../shared/workspace-api'
 import type { ProjectWorktrees, Worktree } from '../../../../shared/worktree-api'
-
-/** A tree row's right-click menu: Open Terminal Here first, then the row's own items. */
-function RowMenuContent({
-  cwd,
-  disabled,
-  children
-}: {
-  cwd: string
-  disabled: boolean
-  children?: ReactNode
-}): React.JSX.Element {
-  const openTerminal = useTerminalStore((state) => state.openTerminal)
-  const openedTerminal = useRef(false)
-  return (
-    <ContextMenuContent
-      onCloseAutoFocus={(event) => {
-        if (!openedTerminal.current) return
-        // The new terminal gets the keys, not the row the menu would return them to.
-        event.preventDefault()
-        openedTerminal.current = false
-        setTimeout(focusActiveTerminal, 0)
-      }}
-    >
-      <ContextMenuItem
-        disabled={disabled}
-        onSelect={() => {
-          openedTerminal.current = true
-          openTerminal(cwd)
-        }}
-      >
-        <SquareTerminal aria-hidden />
-        Open Terminal Here
-      </ContextMenuItem>
-      {children}
-    </ContextMenuContent>
-  )
-}
-
-/** Long enough that moving through the tree doesn't flash a path at every row; the path shows under the pointer. */
-const PATH_TOOLTIP_DELAY_MS = 700
 
 const worktreeLabel = (worktree: Worktree): string =>
   worktree.branch ?? `detached ${worktree.head.slice(0, 7)}`
@@ -102,18 +65,18 @@ function WorktreeRow({ worktree }: { worktree: Worktree }): React.JSX.Element {
         </ContextMenuTrigger>
         <TooltipContent {...pathTip.placement}>{worktree.path}</TooltipContent>
       </Tooltip>
-      <RowMenuContent cwd={worktree.path} disabled={worktree.prunable} />
+      <OpenTerminalMenuContent cwd={worktree.path} disabled={worktree.prunable} />
     </ContextMenu>
   )
 }
 
-/** The project's worktrees under its row; nothing for a folder outside git. */
 /** Rows a project can fold away: its linked worktrees, or why git can't list them. */
 function hasChildRows(project: ProjectWorktrees | undefined): boolean {
   if (project?.status === 'error') return true
   return project?.status === 'git' && project.worktrees.some((worktree) => !worktree.project)
 }
 
+/** The project's worktrees under its row; nothing for a folder outside git. */
 function ProjectWorktreeRows({ folder }: { folder: string }): React.JSX.Element | null {
   const project = useWorktreeStore((state) => state.projects[folder])
   const collapsed = useWorktreeStore((state) => state.collapsed[folder] === true)
@@ -206,7 +169,7 @@ function ProjectRow({ folder }: { folder: WorkspaceFolder }): React.JSX.Element 
         </ContextMenuTrigger>
         <TooltipContent {...pathTip.placement}>{folder.path}</TooltipContent>
       </Tooltip>
-      <RowMenuContent cwd={folder.path} disabled={folder.missing}>
+      <OpenTerminalMenuContent cwd={folder.path} disabled={folder.missing}>
         <ContextMenuItem onSelect={() => void setFolderKind(folder.path, 'folder')}>
           <FolderMinus aria-hidden />
           Hide from Projects
@@ -215,7 +178,7 @@ function ProjectRow({ folder }: { folder: WorkspaceFolder }): React.JSX.Element 
           <FolderX aria-hidden />
           Remove from Workspace
         </ContextMenuItem>
-      </RowMenuContent>
+      </OpenTerminalMenuContent>
     </ContextMenu>
   )
 }
@@ -248,31 +211,15 @@ export function WorkspacePanel(): React.JSX.Element {
           <TooltipContent side="bottom">Add Folder to Workspace</TooltipContent>
         </Tooltip>
       </div>
-      {problem ? (
-        <p
-          role="alert"
-          className="mx-2 mb-2 flex gap-2 rounded-banner border border-error-border bg-error-background px-2 py-1.5"
-        >
-          <CircleAlert className="mt-0.5 size-4 shrink-0 text-error" aria-hidden />
-          {problem}
-        </p>
-      ) : null}
+      {problem ? <WorkspaceProblemBanner problem={problem} /> : null}
       {workspace && folders.length === 0 && !workspace.problem ? (
-        <div className="flex flex-col items-start gap-3 px-4 pt-1">
-          <p className="type-description">
-            {allFolders.length === 0
+        <OpenFolderEmptyState
+          message={
+            allFolders.length === 0
               ? 'No folders in this workspace yet.'
-              : 'No projects in this workspace. Its other folders are in the Files view.'}
-          </p>
-          <button
-            type="button"
-            onClick={() => void addFolder()}
-            className="type-button flex h-control items-center gap-2 rounded-button bg-primary px-3.5 text-primary-foreground hover:bg-primary/90 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-          >
-            <FolderPlus className="size-4" aria-hidden />
-            Open Folder
-          </button>
-        </div>
+              : 'No projects in this workspace. Its other folders are in the Files view.'
+          }
+        />
       ) : (
         <ul
           aria-label="Workspace folders"
