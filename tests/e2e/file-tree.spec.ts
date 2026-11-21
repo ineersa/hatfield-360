@@ -149,6 +149,38 @@ test('folders added to the workspace become projects or plain folders, and can b
   }
 })
 
+test('a project and its linked worktree can both be roots', async () => {
+  const [projects, cleanProjects] = await makeProjectsDir()
+  const app = makeRepo(projects, 'app')
+  const feature = join(projects, 'app-feature')
+  git(app, 'worktree', 'add', '-q', '-b', 'feature', feature)
+  await writeFile(join(feature, 'feature.txt'), '')
+  const [userData, cleanUserData] = await seedWorkspace([
+    { path: app, kind: 'project' },
+    { path: feature, kind: 'project' }
+  ])
+  try {
+    await withApp(
+      async (_app, page) => {
+        await showView(page, 'Files')
+        await item(page, 'app main').click()
+        // Each lists the other as a worktree; opening one under the other must not loop.
+        // The worktree's folder is open both under the project and as its own root.
+        await item(page, 'feature worktree app-feature').click()
+        await expect(item(page, 'feature.txt')).toHaveCount(2)
+        await expect(tree(page).getByRole('treeitem', { name: 'Loading…' })).toHaveCount(0)
+        await item(page, 'app main').click()
+        await item(page, 'app main').click()
+        await expect(item(page, 'feature.txt')).toHaveCount(2)
+      },
+      { userDataDir: userData }
+    )
+  } finally {
+    await cleanUserData()
+    await cleanProjects()
+  }
+})
+
 test('the file tree follows the disk and git ignore rules in expanded folders', async () => {
   const [projects, cleanProjects] = await makeProjectsDir()
   const repo = makeRepo(projects, 'app')

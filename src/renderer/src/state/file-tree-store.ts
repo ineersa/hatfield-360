@@ -28,20 +28,24 @@ type FileTreeState = {
   connect: () => () => void
 }
 
-/** Expanded folders the tree shows, from `from` down through expanded worktrees and subfolders. */
+/**
+ * Expanded folders the tree shows, from `from` down through expanded subfolders and, for a root,
+ * its expanded worktrees. As in the tree, worktrees hang only under a root: a project and its own
+ * linked worktree can both be roots, each listing the other as a worktree.
+ */
 function openFolders(state: FileTreeState, from: string[]): string[] {
   const worktrees = new Map(state.roots.map((root) => [root.path, root.worktrees]))
-  const open: string[] = []
-  const visit = (path: string): void => {
-    if (!state.expanded[path]) return
-    open.push(path)
-    for (const worktree of worktrees.get(path) ?? []) visit(worktree)
+  const open = new Set<string>()
+  const visit = (path: string, linked: string[]): void => {
+    if (!state.expanded[path] || open.has(path)) return
+    open.add(path)
+    for (const worktree of linked) visit(worktree, [])
     const listing = state.listings[path]
     if (listing?.status !== 'ok') return
-    for (const entry of listing.entries) if (entry.kind === 'directory') visit(entry.path)
+    for (const entry of listing.entries) if (entry.kind === 'directory') visit(entry.path, [])
   }
-  for (const path of from) visit(path)
-  return [...new Set(open)]
+  for (const path of from) visit(path, worktrees.get(path) ?? [])
+  return [...open]
 }
 
 const failed = (error: unknown): void => {
