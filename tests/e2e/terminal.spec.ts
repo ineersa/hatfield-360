@@ -172,6 +172,8 @@ test('the system keys paste into the terminal and copy its selection', async () 
           await app.evaluate(({ clipboard }) => clipboard.writeText('pasted-77'))
           await page.keyboard.type('echo ')
           await page.keyboard.press(`${modifier}+V`)
+          // The paste reads main's clipboard first; Enter before it lands would run a bare `echo`.
+          await expect(screenText(pane)).toContainText('echo pasted-77')
           await page.keyboard.press('Enter')
           await expect(screenText(pane).getByText('pasted-77', { exact: true })).toBeVisible()
 

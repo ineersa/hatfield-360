@@ -143,9 +143,11 @@ test('the Settings page applies each change as it is made and writes it into set
         const family = (await installed.locator('span').first().textContent()) ?? ''
         await installed.click()
         await expect(fonts).toHaveCount(0)
+        // Chromium drops the quotes around a name that is a single CSS identifier (Arial, C059).
+        const name = family.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
         await expect(page.locator('body')).toHaveCSS(
           'font-family',
-          `"${family}", "Inter Variable", system-ui, sans-serif`
+          new RegExp(`^"?${name}"?, "Inter Variable", system-ui, sans-serif$`)
         )
         await expect.poll(readSettings).toMatchObject({ 'app.fontFamily': family })
         await saveScreenshot(page, 'settings-page')
