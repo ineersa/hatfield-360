@@ -1,12 +1,15 @@
 import { BrowserWindow } from 'electron'
+import type { WorkspaceFolder } from '../../shared/workspace-api'
 import { WORKTREE_CHANNELS } from '../../shared/worktree-api'
 import { worktreeStore } from '../git/worktree-store'
 import { workspaceStore } from '../workspace/workspace-store'
 import { handleTrusted } from './trusted-ipc'
 
-/** Folders git can look into: missing ones stay listed in the workspace but have nothing to show. */
-const presentFolders = (folders: { path: string; missing: boolean }[]): string[] =>
-  folders.filter((folder) => !folder.missing).map((folder) => folder.path)
+/** Projects git can look into: missing ones stay listed in the workspace but have nothing to show. */
+const presentFolders = (folders: WorkspaceFolder[]): string[] =>
+  folders
+    .filter((folder) => folder.kind === 'project' && !folder.missing)
+    .map((folder) => folder.path)
 
 export function registerWorktreeIpc(): void {
   const loaded = workspaceStore

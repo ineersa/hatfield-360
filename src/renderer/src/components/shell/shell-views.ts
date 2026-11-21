@@ -1,5 +1,6 @@
 import { FolderTree, GitCommitHorizontal, TerminalSquare, type LucideIcon } from 'lucide-react'
 import type { ComponentType } from 'react'
+import { FilesPanel } from '@/components/files/FilesPanel'
 import { TerminalEmptyState } from '@/components/terminal/TerminalEmptyState'
 import { WorkspacePanel } from '@/components/workspace/WorkspacePanel'
 import type { ShellViewId } from '../../../../shared/shell-layout-api'
@@ -32,8 +33,7 @@ export const SHELL_VIEWS: readonly ShellView[] = [
     label: 'Files',
     description: 'Project file tree and editor',
     Icon: FolderTree,
-    panelTitle: 'Project',
-    panelPlaceholder: 'The file tree of the selected project will appear here.',
+    Panel: FilesPanel,
     mainPlaceholder: 'Opened files will appear here in editor tabs.'
   },
   {

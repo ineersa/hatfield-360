@@ -17,3 +17,48 @@ export function CatppuccinRootFolderIcon(props: SVGProps<SVGSVGElement>): React.
     </svg>
   )
 }
+
+/** `_folder.svg`: a closed folder in the file tree. */
+export function CatppuccinFolderIcon(props: SVGProps<SVGSVGElement>): React.JSX.Element {
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden {...props}>
+      <path
+        className="stroke-icon-text"
+        fill="none"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M4.5 4.5H12c.83 0 1.5.67 1.5 1.5v6c0 .83-.67 1.5-1.5 1.5H2A1.5 1.5 0 01.5 12V3.5a1 1 0 011-1h5a1 1 0 011 1v1"
+      />
+    </svg>
+  )
+}
+
+/** `_folder_open.svg`: an expanded folder in the file tree. */
+export function CatppuccinFolderOpenIcon(props: SVGProps<SVGSVGElement>): React.JSX.Element {
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden {...props}>
+      <path
+        className="stroke-icon-text"
+        fill="none"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="m1.87 8 .7-2.74a1 1 0 01.96-.76h10.94a1 1 0 01.97 1.24l-1.75 7a1 1 0 01-.97.76H2A1.5 1.5 0 01.5 12V3.5a1 1 0 011-1h5a1 1 0 011 1v1"
+      />
+    </svg>
+  )
+}
+
+/** `_file.svg`: a file in the file tree. */
+export function CatppuccinFileIcon(props: SVGProps<SVGSVGElement>): React.JSX.Element {
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden {...props}>
+      <path
+        className="stroke-icon-text"
+        fill="none"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M13.5 6.5v6a2 2 0 01-2 2h-7a2 2 0 01-2-2v-9c0-1.1.9-2 2-2h4.01m-.01 0 5 5h-4a1 1 0 01-1-1z"
+      />
+    </svg>
+  )
+}

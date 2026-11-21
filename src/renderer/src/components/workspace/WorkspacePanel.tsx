@@ -1,6 +1,7 @@
 import {
   ChevronRight,
   CircleAlert,
+  FolderMinus,
   FolderPlus,
   FolderX,
   GitBranch,
@@ -139,6 +140,7 @@ function ProjectWorktreeRows({ folder }: { folder: string }): React.JSX.Element 
 
 function ProjectRow({ folder }: { folder: WorkspaceFolder }): React.JSX.Element {
   const removeFolder = useWorkspaceStore((state) => state.removeFolder)
+  const setFolderKind = useWorkspaceStore((state) => state.setFolderKind)
   const pathTip = usePointerTooltip()
   const project = useWorktreeStore((state) => state.projects[folder.path])
   const collapsed = useWorktreeStore((state) => state.collapsed[folder.path] === true)
@@ -205,6 +207,10 @@ function ProjectRow({ folder }: { folder: WorkspaceFolder }): React.JSX.Element 
         <TooltipContent {...pathTip.placement}>{folder.path}</TooltipContent>
       </Tooltip>
       <RowMenuContent cwd={folder.path} disabled={folder.missing}>
+        <ContextMenuItem onSelect={() => void setFolderKind(folder.path, 'folder')}>
+          <FolderMinus aria-hidden />
+          Hide from Projects
+        </ContextMenuItem>
         <ContextMenuItem onSelect={() => void removeFolder(folder.path)}>
           <FolderX aria-hidden />
           Remove from Workspace
@@ -214,12 +220,13 @@ function ProjectRow({ folder }: { folder: WorkspaceFolder }): React.JSX.Element 
   )
 }
 
-/** Agents side panel: the open workspace's project folders. */
+/** Agents side panel: the open workspace's projects; plain folders show only in the Files view. */
 export function WorkspacePanel(): React.JSX.Element {
   const workspace = useWorkspaceStore((state) => state.workspace)
   const addFolder = useWorkspaceStore((state) => state.addFolder)
 
-  const folders = workspace?.folders ?? []
+  const allFolders = workspace?.folders ?? []
+  const folders = allFolders.filter((folder) => folder.kind === 'project')
   // Action errors and notices show in the shell's workspace message; the panel shows why the workspace is read-only.
   const problem = workspace?.problem ?? null
 
@@ -252,7 +259,11 @@ export function WorkspacePanel(): React.JSX.Element {
       ) : null}
       {workspace && folders.length === 0 && !workspace.problem ? (
         <div className="flex flex-col items-start gap-3 px-4 pt-1">
-          <p className="type-description">No folders in this workspace yet.</p>
+          <p className="type-description">
+            {allFolders.length === 0
+              ? 'No folders in this workspace yet.'
+              : 'No projects in this workspace. Its other folders are in the Files view.'}
+          </p>
           <button
             type="button"
             onClick={() => void addFolder()}

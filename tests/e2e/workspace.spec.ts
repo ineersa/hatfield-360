@@ -1,4 +1,5 @@
 import { expect, test, type ElectronApplication, type Page } from '@playwright/test'
+import { execFileSync } from 'node:child_process'
 import { mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { clickMenuItem } from './app-menu'
@@ -7,9 +8,13 @@ import { makeTempDir, saveScreenshot, withApp } from './launch-app'
 const workspaceFile = (userDataDir: string) =>
   join(userDataDir, 'workspaces', 'default.hatfield-workspace')
 
+/** Checks the saved workspace holds `paths`, all of them projects. */
 async function expectSavedFolders(userDataDir: string, paths: string[]): Promise<void> {
   const document: unknown = JSON.parse(await readFile(workspaceFile(userDataDir), 'utf8'))
-  expect(document).toEqual({ version: 1, folders: paths.map((path) => ({ path })) })
+  expect(document).toEqual({
+    version: 1,
+    folders: paths.map((path) => ({ path, kind: 'project' }))
+  })
 }
 
 /** The OS folder picker can't be driven by Playwright (user-authorized for #8): answer it from the test. */
@@ -48,8 +53,8 @@ test('folders added from the empty state and the File menu are listed and saved 
   const [projects, cleanProjects] = await makeTempDir('projects')
   const api = join(projects, 'api')
   const web = join(projects, 'web')
-  await mkdir(api)
-  await mkdir(web)
+  // Repositories, so they are added as projects.
+  for (const folder of [api, web]) execFileSync('git', ['init', '-q', '-b', 'main', folder])
   try {
     await withApp(
       async (app, page) => {
@@ -62,14 +67,14 @@ test('folders added from the empty state and the File menu are listed and saved 
 
         await answerFolderPicker(app, web)
         await clickMenuItem(app, 'add-folder-to-workspace')
-        await expect(folderList(page).getByRole('listitem')).toHaveText(['api', 'web'])
+        await expect(folderList(page).getByRole('listitem')).toHaveText(['apimain', 'webmain'])
 
         // Adding a folder already in the workspace and cancelling the picker change nothing.
         await answerFolderPicker(app, api)
         await clickMenuItem(app, 'open-folder')
         await answerFolderPicker(app, null)
         await page.getByRole('button', { name: 'Add Folder to Workspace' }).click()
-        await expect(folderList(page).getByRole('listitem')).toHaveText(['api', 'web'])
+        await expect(folderList(page).getByRole('listitem')).toHaveText(['apimain', 'webmain'])
         await expectSavedFolders(userData, [api, web])
 
         await folderList(page).getByRole('listitem', { name: 'web' }).hover()
