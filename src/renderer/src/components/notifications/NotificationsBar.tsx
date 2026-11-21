@@ -30,7 +30,7 @@ export function NotificationsBar(): React.JSX.Element {
             {count > 0 ? (
               <span
                 aria-hidden
-                className="type-badge absolute top-0 right-0 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1"
+                className="type-badge absolute -top-0.5 -right-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 ring-2 ring-frame"
               >
                 {count > 99 ? '99+' : count}
               </span>

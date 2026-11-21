@@ -13,7 +13,7 @@
   /* Balloons and the notifications tool window, about 400px wide as in JetBrains IDEs. */
   --toast-width: calc(var(--app-font-size) * 380 / 13);
   /* The right edge only holds the bell, so it is narrower than the activity bar. */
-  --tool-stripe-width: calc(var(--app-font-size) * 40 / 13);
+  --tool-stripe-width: calc(var(--app-font-size) * 48 / 13);
   --small-icon-button-size: calc(var(--app-font-size) * 22 / 13);
   --panel-header-height: calc(var(--app-font-size) * 38 / 13);
   --tab-bar-height: calc(var(--app-font-size) * 36 / 13);
