@@ -1,5 +1,6 @@
 import { app, BrowserWindow } from 'electron'
 import { agentStatusServer } from './agent-status/status-server'
+import { separateDevAppData } from './app-data-folder'
 import { registerAppInfoIpc } from './ipc/app-info-ipc'
 import { registerSettingsIpc } from './ipc/settings-ipc'
 import { registerShellLayoutIpc } from './ipc/shell-layout-ipc'
@@ -13,6 +14,8 @@ import { installPermissionPolicy } from './window/permission-policy'
 import { windowStateStore } from './window/window-state-store'
 import { chosenAppTheme, followAppTheme } from './window/window-theme'
 
+// Before anything reads userData, and before ready so Chromium's profile follows.
+separateDevAppData()
 app.enableSandbox()
 
 void app.whenReady().then(async () => {
