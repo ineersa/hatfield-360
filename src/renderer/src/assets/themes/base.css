@@ -73,6 +73,9 @@
   --type-status-size: calc(var(--app-font-size) - 2px);
   --type-status-weight: 400;
   --type-status-color: var(--status-foreground);
+  --type-badge-size: calc(var(--app-font-size) - 3px);
+  --type-badge-weight: 600;
+  --type-badge-color: var(--primary-foreground);
 }
 
 /*
@@ -164,5 +167,13 @@
     font-size: var(--type-status-size);
     font-weight: var(--type-status-weight);
     color: var(--type-status-color);
+  }
+  /* A count in a pill: line-height 1 so the digits sit in its middle. */
+  .type-badge {
+    font-size: var(--type-badge-size);
+    font-weight: var(--type-badge-weight);
+    color: var(--type-badge-color);
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
   }
 }
