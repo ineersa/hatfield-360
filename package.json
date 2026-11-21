@@ -10,6 +10,7 @@
     "build": "electron-vite build",
     "start": "electron-vite preview",
     "package": "electron-vite build && electron-builder --publish never",
+    "package:local": "node scripts/install-locally.mjs",
     "format": "oxfmt --write .",
     "format:check": "oxfmt --check .",
     "lint": "oxlint --type-aware --deny-warnings",
