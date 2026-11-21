@@ -37,7 +37,7 @@ export function TooltipContent({
         data-slot="tooltip-content"
         sideOffset={sideOffset}
         className={cn(
-          'z-50 w-fit max-w-[min(36rem,var(--radix-tooltip-content-available-width))] rounded-md bg-tooltip px-2.5 py-1.5 text-ui-sm break-words text-tooltip-foreground shadow-lg',
+          'type-tooltip z-50 w-fit max-w-[min(36rem,var(--radix-tooltip-content-available-width))] rounded-popup border border-tooltip-border bg-tooltip px-2.5 py-1.5 break-words shadow-lg',
           className
         )}
         {...props}

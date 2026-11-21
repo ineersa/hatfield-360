@@ -82,6 +82,17 @@ test('a terminal opens in the project, runs commands and closes when its shell e
         await expect(screenText(pane)).toContainText('Hatfield360')
         await saveScreenshot(page, 'terminal-single')
 
+        // terminal.lineHeight spaces out the rows of an open terminal as soon as it is saved.
+        const rowHeight = async (): Promise<number> =>
+          (await screenText(pane).locator(':scope > div').first().boundingBox())?.height ?? 0
+        const single = await rowHeight()
+        expect(single).toBeGreaterThan(0)
+        await writeFile(
+          join(userData, 'settings.json'),
+          '{ "terminal.gpuAcceleration": false, "terminal.lineHeight": 2 }'
+        )
+        await expect.poll(rowHeight).toBeGreaterThanOrEqual(single * 2 - 1)
+
         await run(page, pane, 'exit')
         await expect(page.getByRole('tab')).toHaveCount(0)
 
@@ -172,6 +183,8 @@ test('the system keys paste into the terminal and copy its selection', async () 
           await app.evaluate(({ clipboard }) => clipboard.writeText('pasted-77'))
           await page.keyboard.type('echo ')
           await page.keyboard.press(`${modifier}+V`)
+          // The paste reads main's clipboard first; Enter before it lands would run a bare `echo`.
+          await expect(screenText(pane)).toContainText('echo pasted-77')
           await page.keyboard.press('Enter')
           await expect(screenText(pane).getByText('pasted-77', { exact: true })).toBeVisible()
 

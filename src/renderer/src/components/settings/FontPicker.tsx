@@ -103,7 +103,7 @@ export function FontPicker({
           aria-label={label}
           aria-haspopup="listbox"
           disabled={disabled}
-          className="flex h-9 min-w-0 flex-1 items-center gap-2 rounded-lg border border-border bg-background px-2.5 text-left outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+          className="flex h-control min-w-0 flex-1 items-center gap-2 rounded-component border border-input-border bg-input px-2.5 text-left text-input-foreground outline-none hover:bg-hover focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
         >
           <span className="min-w-0 flex-1 truncate" style={{ fontFamily: cssFontFamily(value) }}>
             {customized ? value : `Default (${value})`}
@@ -139,9 +139,9 @@ export function FontPicker({
             setSearch(event.target.value)
             setActive(0)
           }}
-          className="h-9 rounded-md border border-border bg-background px-2.5 outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="h-control rounded-component border border-input-border bg-input px-2.5 text-input-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
         />
-        <label className="flex items-center gap-2 px-1 text-muted-foreground">
+        <label className="type-description flex items-center gap-2 px-1">
           <input
             type="checkbox"
             checked={monospaceOnly}
@@ -181,8 +181,8 @@ export function FontPicker({
                 onMouseEnter={() => setActive(index)}
                 onClick={() => pick(choice)}
                 className={cn(
-                  'flex h-8 shrink-0 cursor-default items-center gap-2 rounded-md px-2',
-                  index === active && 'bg-accent'
+                  'flex h-list-row shrink-0 cursor-default items-center gap-2 rounded-component px-2',
+                  index === active && 'bg-popover-selection text-popover-selection-foreground'
                 )}
               >
                 <span className="min-w-0 flex-1 truncate">{choiceLabel(choice)}</span>

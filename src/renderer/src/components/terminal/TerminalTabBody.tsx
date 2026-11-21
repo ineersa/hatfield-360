@@ -1,3 +1,4 @@
+import type { ITerminalOptions } from '@xterm/xterm'
 import { useEffect, useRef } from 'react'
 import { PaneManager } from '@/lib/pane-manager/pane-manager'
 import { terminalShortcutLabel } from '@/lib/terminal-shortcut-label'
@@ -9,9 +10,14 @@ import { bindClipboardKeys } from './terminal-clipboard'
 import { TerminalContextMenu } from './TerminalContextMenu'
 import { terminalTabControllers } from './terminal-tab-controllers'
 
-function currentTerminalOptions(): { fontFamily: string; fontSize: number } {
+function currentTerminalOptions(): ITerminalOptions {
   const { values } = useSettingsStore.getState()
-  return { fontFamily: values['terminal.fontFamily'], fontSize: values['terminal.fontSize'] }
+  return {
+    fontFamily: values['terminal.fontFamily'],
+    fontSize: values['terminal.fontSize'],
+    lineHeight: values['terminal.lineHeight'],
+    theme: terminalTheme(values['terminal.colorTheme'])
+  }
 }
 
 /** One tab's split panes; mounted while the tab is open, so its shells live while it is hidden. */
@@ -31,7 +37,9 @@ export function TerminalTabBody({
   const manager = useRef<PaneManager | null>(null)
   const fontFamily = useSettingsStore((state) => state.values['terminal.fontFamily'])
   const fontSize = useSettingsStore((state) => state.values['terminal.fontSize'])
+  const lineHeight = useSettingsStore((state) => state.values['terminal.lineHeight'])
   const gpuAcceleration = useSettingsStore((state) => state.values['terminal.gpuAcceleration'])
+  const colorTheme = useSettingsStore((state) => state.values['terminal.colorTheme'])
 
   useEffect(() => {
     const element = root.current
@@ -39,7 +47,7 @@ export function TerminalTabBody({
     const shells = new Map<number, PaneShell>()
     const closeTab = useTerminalStore.getState().closeTab
     const panes = new PaneManager(element, {
-      terminalOptions: () => ({ ...currentTerminalOptions(), theme: terminalTheme() }),
+      terminalOptions: currentTerminalOptions,
       gpuAcceleration: () => useSettingsStore.getState().values['terminal.gpuAcceleration'],
       onPaneCreated: (pane) => {
         bindClipboardKeys(pane.terminal)
@@ -85,8 +93,12 @@ export function TerminalTabBody({
   }, [tab.id, tab.cwd])
 
   useEffect(() => {
-    manager.current?.setTerminalOptions({ fontFamily, fontSize })
-  }, [fontFamily, fontSize])
+    manager.current?.setTerminalOptions({ fontFamily, fontSize, lineHeight })
+  }, [fontFamily, fontSize, lineHeight])
+
+  useEffect(() => {
+    manager.current?.setTerminalOptions({ theme: terminalTheme(colorTheme) })
+  }, [colorTheme])
 
   useEffect(() => {
     manager.current?.setGpuAcceleration(gpuAcceleration)
@@ -111,7 +123,7 @@ export function TerminalTabBody({
         role="tabpanel"
         aria-label={tab.title}
         data-testid="terminal-tab-panel"
-        className="min-h-0 flex-1 rounded-b-xl"
+        className="min-h-0 flex-1 rounded-b-island"
         hidden={!active}
       />
     </TerminalContextMenu>

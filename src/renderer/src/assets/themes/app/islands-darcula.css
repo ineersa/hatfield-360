@@ -1,0 +1,77 @@
+/*
+ * App theme "Islands Darcula", ported from the JetBrains UI theme and its parents:
+ *   IntelliJ Platform: themes/darcula.theme.json
+ *   IntelliJ Platform: themes/expUI/expUI_dark.theme.json
+ *   IntelliJ Platform: themes/islands/ManyIslandsDarcula.theme.json
+ * Every app theme sets the same roles (checked by app-theme-css.test.ts).
+ */
+:root[data-theme='islands-darcula'] {
+  color-scheme: dark;
+  --frame: #3c3f41;
+  --island: #2b2b2b;
+  --foreground: #bbbbbb;
+  --muted-foreground: #828282;
+  --disabled-foreground: #5a5d63;
+  --status-foreground: #9da0a8;
+  --link: #589df6;
+  --icon-text: #bbbbbb;
+  --hover: #ffffff12;
+  --pressed: #ffffff26;
+  --row-hover: #393b40;
+  --selection: #304c80;
+  --selection-foreground: #dfe1e5;
+  --selection-inactive: #474a4d;
+  --ring: #3574f0;
+  --border: #5c5c5c;
+  --separator: #404040;
+  --input: #2b2b2b;
+  --input-foreground: #bbbbbb;
+  --input-border: #5c5c5c;
+  --primary: #365880;
+  --primary-foreground: #bbbbbb;
+  --button: #4c5052;
+  --button-foreground: #bbbbbb;
+  --button-border: #5e6060;
+  --tab-selected: #2b405a;
+  --tab-underline: #385475;
+  --tab-hover: #35393b;
+  --tooltip: #4b4d4d;
+  --tooltip-foreground: #bfbfbf;
+  --tooltip-muted-foreground: #9da0a8;
+  --tooltip-border: #616161;
+  --popover: #333333;
+  --popover-foreground: #bbbbbb;
+  --popover-border: #474747;
+  --popover-selection: #304c80;
+  --popover-selection-foreground: #dfe1e5;
+  --popover-shortcut: #6f737a;
+  --dialog: #333333;
+  --dialog-border: #474747;
+  --toast: #4b4d4d;
+  --toast-foreground: #d9d9d9;
+  --toast-border: #525454;
+  --counter: #868a91;
+  --counter-foreground: #000000;
+  --error: #db5c5c;
+  --error-background: #5e3838;
+  --error-border: #bd5757;
+  --warning: #ba9752;
+  --warning-background: #5e4d33;
+  --warning-border: #ba9752;
+  --success: #5fad65;
+  --success-background: #253627;
+  --success-border: #4e8052;
+  --info: #589df6;
+  --info-background: #393b40;
+  --info-border: #43454a;
+  --scrollbar-thumb: #80808059;
+  --scrollbar-thumb-hover: #8080808c;
+  --island-radius: 10px;
+  --island-gap: 6px;
+  --component-radius: 4px;
+  --button-radius: 4px;
+  --popup-radius: 8px;
+  --banner-radius: 4px;
+  --tree-row-height: calc(var(--app-font-size) * 24 / 13);
+  --list-row-height: calc(var(--app-font-size) * 24 / 13);
+}

@@ -131,6 +131,22 @@ test('the Settings page applies each change as it is made and writes it into set
             '{\n  // my terminal\n  "terminal.fontSize": 16,\n  "app.fontFamily": "Noto Sans",\n  "app.fontSize": 16\n}\n'
           )
 
+        // Line height steps by 0.1 and shows on the font preview: 1.3 × 13px.
+        await settingsPage.getByRole('button', { name: 'Increase Editor line height' }).click()
+        await expect(settingsPage.getByLabel('Editor line height', { exact: true })).toHaveValue(
+          '1.3'
+        )
+        await expect(settingsPage.getByLabel('Editor font preview')).toHaveCSS(
+          'line-height',
+          '16.9px'
+        )
+        await expect.poll(readSettings).toMatchObject({ 'editor.lineHeight': 1.3 })
+        await settingsPage.getByRole('button', { name: 'Reset Editor line height' }).click()
+        await expect(settingsPage.getByLabel('Editor line height', { exact: true })).toHaveValue(
+          '1.2'
+        )
+        await expect.poll(readSettings).not.toHaveProperty(['editor.lineHeight'])
+
         await settingsPage.getByText('Lucide', { exact: true }).click()
         await expect(projectIcon(page, folderName)).toHaveAttribute('data-icon-theme', 'lucide')
 
@@ -143,9 +159,11 @@ test('the Settings page applies each change as it is made and writes it into set
         const family = (await installed.locator('span').first().textContent()) ?? ''
         await installed.click()
         await expect(fonts).toHaveCount(0)
+        // Chromium drops the quotes around a name that is a single CSS identifier (Arial, C059).
+        const name = family.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
         await expect(page.locator('body')).toHaveCSS(
           'font-family',
-          `"${family}", "Inter Variable", system-ui, sans-serif`
+          new RegExp(`^"?${name}"?, "Inter Variable", system-ui, sans-serif$`)
         )
         await expect.poll(readSettings).toMatchObject({ 'app.fontFamily': family })
         await saveScreenshot(page, 'settings-page')
@@ -264,6 +282,17 @@ test('the largest app font in the smallest window keeps the status bar and Setti
         const footerBox = await page.locator('footer').boundingBox()
         if (!gearBox || !footerBox) throw new Error('layout is not rendered')
         expect(gearBox.y + gearBox.height).toBeLessThanOrEqual(footerBox.y)
+        // The activity bar widens with its buttons, so none is cut off by the window or the panel.
+        const bar = page.getByRole('navigation', { name: 'Views' })
+        const barBox = await bar.boundingBox()
+        if (!barBox) throw new Error('activity bar is not rendered')
+        expect(barBox.x).toBeGreaterThanOrEqual(0)
+        for (const button of await bar.getByRole('button').all()) {
+          const box = await button.boundingBox()
+          if (!box) throw new Error('activity button is not rendered')
+          expect(box.x).toBeGreaterThanOrEqual(barBox.x)
+          expect(box.x + box.width).toBeLessThanOrEqual(barBox.x + barBox.width)
+        }
         // Text line heights are fractional; allow under a pixel of rounding at the window edge.
         expect(footerBox.y + footerBox.height).toBeLessThan(
           Number(await page.evaluate('window.innerHeight')) + 1

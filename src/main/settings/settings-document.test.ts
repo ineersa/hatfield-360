@@ -32,10 +32,15 @@ describe('parseSettings', () => {
       "app.fontSize": 12.5,
       "terminal.fontFamily": "'Iosevka Term', monospace",
       "terminal.fontSize": 14,
+      "terminal.lineHeight": 1.5,
       "terminal.gpuAcceleration": false,
       "editor.fontFamily": "Fira Code",
       "editor.fontSize": 15,
+      "editor.lineHeight": 1.4,
       "workbench.iconTheme": "lucide",
+      "workbench.colorTheme": "islands-catppuccin-mocha",
+      "editor.colorTheme": "catppuccin-mocha-no-italics",
+      "terminal.colorTheme": "catppuccin-mocha",
     }`
     expect(parseSettings(text, DEFAULT_SETTINGS)).toEqual({
       values: {
@@ -43,20 +48,30 @@ describe('parseSettings', () => {
         'app.fontSize': 12.5,
         'terminal.fontFamily': "'Iosevka Term', monospace",
         'terminal.fontSize': 14,
+        'terminal.lineHeight': 1.5,
         'terminal.gpuAcceleration': false,
         'editor.fontFamily': 'Fira Code',
         'editor.fontSize': 15,
-        'workbench.iconTheme': 'lucide'
+        'editor.lineHeight': 1.4,
+        'workbench.iconTheme': 'lucide',
+        'workbench.colorTheme': 'islands-catppuccin-mocha',
+        'editor.colorTheme': 'catppuccin-mocha-no-italics',
+        'terminal.colorTheme': 'catppuccin-mocha'
       },
       customized: [
         'app.fontFamily',
         'app.fontSize',
         'terminal.fontFamily',
         'terminal.fontSize',
+        'terminal.lineHeight',
         'terminal.gpuAcceleration',
         'editor.fontFamily',
         'editor.fontSize',
-        'workbench.iconTheme'
+        'editor.lineHeight',
+        'workbench.iconTheme',
+        'workbench.colorTheme',
+        'editor.colorTheme',
+        'terminal.colorTheme'
       ],
       editable: true,
       problems: []
@@ -80,15 +95,18 @@ describe('parseSettings', () => {
     })
   })
 
-  it('clamps font sizes and keeps the last good value for wrong values, naming each problem', () => {
+  it('clamps font sizes and line heights and keeps the last good value for wrong values, naming each problem', () => {
     const text = JSON.stringify({
       'app.fontSize': 'big',
       'terminal.fontSize': 4,
       'editor.fontSize': 40,
+      'editor.lineHeight': 0.5,
+      'terminal.lineHeight': '1.5',
       'editor.fontFamily': '',
       'app.fontFamily': 'Inter; color: red',
       'workbench.iconTheme': 'material',
       'terminal.gpuAcceleration': 'off',
+      'workbench.colorTheme': 'Islands Dark',
       'app.fontsize': 15
     })
     expect(parseSettings(text, lastGood)).toEqual({
@@ -97,6 +115,7 @@ describe('parseSettings', () => {
         'app.fontSize': 16,
         'terminal.fontSize': 8,
         'editor.fontSize': 32,
+        'editor.lineHeight': 1,
         'editor.fontFamily': 'Fira Code',
         'workbench.iconTheme': 'lucide'
       },
@@ -104,20 +123,26 @@ describe('parseSettings', () => {
         'app.fontSize',
         'terminal.fontSize',
         'editor.fontSize',
+        'editor.lineHeight',
+        'terminal.lineHeight',
         'editor.fontFamily',
         'app.fontFamily',
         'workbench.iconTheme',
-        'terminal.gpuAcceleration'
+        'terminal.gpuAcceleration',
+        'workbench.colorTheme'
       ],
       editable: true,
       problems: [
         '"app.fontSize" must be a number.',
         '"terminal.fontSize" must be between 8 and 32; using 8.',
         '"editor.fontSize" must be between 8 and 32; using 32.',
+        '"editor.lineHeight" must be between 1 and 2; using 1.',
+        '"terminal.lineHeight" must be a number.',
         '"editor.fontFamily" must be a font name.',
         '"app.fontFamily" must not contain ; { or }.',
         '"workbench.iconTheme" must be one of "catppuccin", "lucide".',
         '"terminal.gpuAcceleration" must be true or false.',
+        '"workbench.colorTheme" must be one of "high-contrast", "islands-catppuccin-frappe", "islands-catppuccin-latte", "islands-catppuccin-macchiato", "islands-catppuccin-mocha", "islands-darcula", "islands-dark", "islands-light".',
         'Unknown setting "app.fontsize".'
       ]
     })

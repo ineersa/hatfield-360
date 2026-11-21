@@ -42,7 +42,7 @@
   content: '';
   position: absolute;
   pointer-events: none;
-  background: var(--border);
+  background: var(--separator);
 }
 
 .pane-divider.is-vertical::after {
@@ -76,12 +76,12 @@
   right: 10px;
   z-index: 20;
   display: none;
-  width: 22px;
-  height: 22px;
+  width: var(--small-icon-button-size);
+  height: var(--small-icon-button-size);
   align-items: center;
   justify-content: center;
-  border-radius: 6px;
-  background: var(--accent);
+  border-radius: var(--component-radius);
+  background: var(--hover);
   color: var(--muted-foreground);
   opacity: 0;
   transition: opacity 100ms linear;
@@ -119,11 +119,11 @@
   top: 8px;
   right: 16px;
   padding: 2px 8px;
-  border-radius: 6px;
-  background: var(--accent);
+  border-radius: var(--component-radius);
+  background: var(--hover);
   color: var(--muted-foreground);
   font-family: var(--font-sans);
-  font-size: calc(var(--app-font-size) - 2px);
+  font-size: var(--type-hint-size);
   pointer-events: none;
 }
 

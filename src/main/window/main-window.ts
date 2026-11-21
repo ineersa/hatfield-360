@@ -5,8 +5,11 @@ import { rendererEntryUrl } from './renderer-entry'
 import { MIN_WINDOW_SIZE } from './window-state-document'
 import { windowStateStore } from './window-state-store'
 import { isBackgroundLaunch } from './window-launch-mode'
+import { appThemeFrame } from './window-theme'
+import type { AppThemeId } from '../../shared/settings-api'
 
-export function createMainWindow(): BrowserWindow {
+/** Opens the app window in the given app theme, so it doesn't flash another theme's colours. */
+export function createMainWindow(theme: AppThemeId): BrowserWindow {
   const background = isBackgroundLaunch(process.env)
   const { bounds, maximized } = windowStateStore.initialPlacement()
   const window = new BrowserWindow({
@@ -17,8 +20,8 @@ export function createMainWindow(): BrowserWindow {
     show: false,
     // Menu bar hidden until Alt on Linux/Windows (user preference); macOS uses the top bar.
     autoHideMenuBar: true,
-    // Islands Dark frame colour, so the window doesn't flash white before the renderer paints.
-    backgroundColor: '#26282c',
+    // Shown until the renderer paints, so a light theme doesn't flash dark or a dark one white.
+    backgroundColor: appThemeFrame(theme),
     // Linux takes the window/taskbar icon from here; macOS and Windows use the packaged app icon.
     ...(process.platform === 'linux' ? { icon: appIcon } : {}),
     webPreferences: {
@@ -45,6 +48,9 @@ export function createMainWindow(): BrowserWindow {
   window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
   window.webContents.on('will-navigate', (event) => event.preventDefault())
 
-  void window.loadURL(rendererEntryUrl())
+  // The page applies the theme before its first render, from this query.
+  const url = new URL(rendererEntryUrl())
+  url.searchParams.set('theme', theme)
+  void window.loadURL(url.href)
   return window
 }

@@ -5,10 +5,10 @@ import { useWorkspaceStore } from '@/state/workspace-store'
 import type { RecentEntry } from '../../../../shared/workspace-api'
 
 function RecentIcon({ entry }: { entry: RecentEntry }): React.JSX.Element {
-  const className = 'size-[18px] shrink-0'
+  const className = 'size-4.5 shrink-0'
   if (entry.missing) {
     const Missing = entry.kind === 'folder' ? FolderX : FileX
-    return <Missing className={cn(className, 'text-destructive')} aria-hidden />
+    return <Missing className={cn(className, 'text-error')} aria-hidden />
   }
   if (entry.kind === 'folder') return <RootFolderIcon className={className} />
   const Icon = entry.kind === 'default' ? House : Layers
@@ -22,8 +22,8 @@ function RecentRow({ entry }: { entry: RecentEntry }): React.JSX.Element {
   return (
     <li
       className={cn(
-        'group flex items-center gap-1 rounded-lg',
-        !entry.current && 'hover:bg-accent focus-within:bg-accent'
+        'group flex items-center gap-1 rounded-component',
+        !entry.current && 'hover:bg-row-hover focus-within:bg-row-hover'
       )}
     >
       <button
@@ -31,29 +31,29 @@ function RecentRow({ entry }: { entry: RecentEntry }): React.JSX.Element {
         aria-label={name}
         disabled={entry.missing || entry.current}
         onClick={() => void openRecent(entry)}
-        className="flex h-10 min-w-0 flex-1 items-center gap-2.5 rounded-lg px-2.5 text-left outline-none disabled:cursor-default focus-visible:ring-2 focus-visible:ring-ring"
+        className="flex h-list-row min-w-0 flex-1 items-center gap-2.5 rounded-component px-2.5 text-left outline-none disabled:cursor-default focus-visible:ring-2 focus-visible:ring-ring"
       >
         <RecentIcon entry={entry} />
         <span
           className={cn(
-            'shrink-0 font-semibold',
-            entry.missing && 'font-medium text-muted-foreground line-through'
+            'type-section-title shrink-0',
+            entry.missing && 'text-muted-foreground line-through'
           )}
         >
           {entry.name}
         </span>
-        <span className="min-w-0 truncate text-muted-foreground">
+        <span className="type-description min-w-0 truncate">
           {entry.stored ? 'Saved in Hatfield' : entry.path}
         </span>
       </button>
-      {entry.current ? <span className="shrink-0 pr-3 text-muted-foreground">current</span> : null}
-      {entry.missing ? <span className="shrink-0 pr-1 text-destructive">missing</span> : null}
+      {entry.current ? <span className="type-description shrink-0 pr-3">current</span> : null}
+      {entry.missing ? <span className="shrink-0 pr-1 text-error">missing</span> : null}
       {entry.stored && !entry.missing ? null : (
         <button
           type="button"
           aria-label={`Remove ${entry.name} from Recent`}
           onClick={() => void removeRecent(entry)}
-          className="mr-1 flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground opacity-0 outline-none group-hover:opacity-100 hover:text-foreground focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring"
+          className="mr-1 flex size-icon-button shrink-0 items-center justify-center rounded-button text-muted-foreground opacity-0 outline-none group-hover:opacity-100 hover:text-foreground focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring"
         >
           <X className="size-4" aria-hidden />
         </button>
@@ -63,7 +63,7 @@ function RecentRow({ entry }: { entry: RecentEntry }): React.JSX.Element {
 }
 
 const startActionClass =
-  'flex h-9 items-center gap-2.5 rounded-lg px-2.5 font-medium text-primary hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none'
+  'type-button flex h-control items-center gap-2.5 rounded-button px-2.5 text-link hover:bg-hover focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none'
 
 /** Main area of an empty workspace: open a folder, open a workspace file, or pick something recent. */
 export function WelcomeScreen(): React.JSX.Element | null {
@@ -76,16 +76,16 @@ export function WelcomeScreen(): React.JSX.Element | null {
     <div className="flex min-h-0 w-full flex-1 justify-center overflow-y-auto px-8 py-12">
       <div className="flex w-full max-w-2xl flex-col gap-8">
         <header className="flex flex-col gap-1">
-          <h1 className="text-2xl font-semibold">Hatfield 360</h1>
-          <p className="text-muted-foreground">{workspace.name} has no folders yet.</p>
+          <h1 className="type-display">Hatfield 360</h1>
+          <p className="type-description">{workspace.name} has no folders yet.</p>
         </header>
         <section aria-labelledby="welcome-start" className="flex flex-col gap-1">
-          <h2 id="welcome-start" className="px-2.5 font-medium text-muted-foreground">
+          <h2 id="welcome-start" className="type-group-label px-2.5">
             Start
           </h2>
           <div className="flex flex-col items-start">
             <button type="button" onClick={() => void addFolder()} className={startActionClass}>
-              <FolderOpen className="size-[18px]" aria-hidden />
+              <FolderOpen className="size-4.5" aria-hidden />
               Open Folder…
             </button>
             <button
@@ -93,13 +93,13 @@ export function WelcomeScreen(): React.JSX.Element | null {
               onClick={() => void openWorkspaceFile()}
               className={startActionClass}
             >
-              <Layers className="size-[18px]" aria-hidden />
+              <Layers className="size-4.5" aria-hidden />
               Open Workspace…
             </button>
           </div>
         </section>
         <section aria-labelledby="welcome-recent" className="flex flex-col gap-1">
-          <h2 id="welcome-recent" className="px-2.5 font-medium text-muted-foreground">
+          <h2 id="welcome-recent" className="type-group-label px-2.5">
             Recent
           </h2>
           <ul aria-label="Recent" className="flex flex-col gap-0.5">

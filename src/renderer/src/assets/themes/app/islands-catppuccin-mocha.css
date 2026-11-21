@@ -1,0 +1,78 @@
+/*
+ * App theme "Islands Catppuccin Mocha", ported from the JetBrains UI theme and its parents:
+ *   IntelliJ Platform: themes/darcula.theme.json
+ *   IntelliJ Platform: themes/expUI/expUI_dark.theme.json
+ *   IntelliJ Platform: themes/islands/ManyIslandsDark.theme.json
+ *   Catppuccin JetBrains plugin: themes/mocha-islands.theme.json
+ * Every app theme sets the same roles (checked by app-theme-css.test.ts).
+ */
+:root[data-theme='islands-catppuccin-mocha'] {
+  color-scheme: dark;
+  --frame: #11111b;
+  --island: #181825;
+  --foreground: #cdd6f4;
+  --muted-foreground: #a6adc8;
+  --disabled-foreground: #4c4f56;
+  --status-foreground: #cdd6f4;
+  --link: #cba6f7;
+  --icon-text: #cdd6f4;
+  --hover: #414356;
+  --pressed: #414356;
+  --row-hover: #414356;
+  --selection: #353749;
+  --selection-foreground: #cdd6f4;
+  --selection-inactive: #353749;
+  --ring: #cba6f7;
+  --border: #1e1e2e;
+  --separator: #313244;
+  --input: #313244;
+  --input-foreground: #cdd6f4;
+  --input-border: #1e1e2e;
+  --primary: #cba6f7;
+  --primary-foreground: #11111b;
+  --button: #313244;
+  --button-foreground: #cdd6f4;
+  --button-border: #313244;
+  --tab-selected: #413956;
+  --tab-underline: #cba6f7;
+  --tab-hover: #353749;
+  --tooltip: #1e1e2e;
+  --tooltip-foreground: #cdd6f4;
+  --tooltip-muted-foreground: #a6adc8;
+  --tooltip-border: #1e1e2e;
+  --popover: #1e1e2e;
+  --popover-foreground: #cdd6f4;
+  --popover-border: #313244;
+  --popover-selection: #353749;
+  --popover-selection-foreground: #cdd6f4;
+  --popover-shortcut: #73767c;
+  --dialog: #1e1e2e;
+  --dialog-border: #313244;
+  --toast: #181825;
+  --toast-foreground: #cdd6f4;
+  --toast-border: #1e1e2e;
+  --counter: #cba6f7;
+  --counter-foreground: #1e1e2e;
+  --error: #f57e84;
+  --error-background: #f38ba81a;
+  --error-border: #f38ba826;
+  --warning: #d59637;
+  --warning-background: #fab3871a;
+  --warning-border: #fab3871a;
+  --success: #6db083;
+  --success-background: #203b2a;
+  --success-border: #29583c;
+  --info: #cba6f7;
+  --info-background: #233558;
+  --info-border: #2e4d89;
+  --scrollbar-thumb: #313244;
+  --scrollbar-thumb-hover: #45475a;
+  --island-radius: 10px;
+  --island-gap: 6px;
+  --component-radius: 4px;
+  --button-radius: 4px;
+  --popup-radius: 8px;
+  --banner-radius: 6px;
+  --tree-row-height: calc(var(--app-font-size) * 24 / 13);
+  --list-row-height: calc(var(--app-font-size) * 24 / 13);
+}

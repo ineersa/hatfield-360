@@ -11,10 +11,14 @@ import {
   DEFAULT_SETTINGS,
   FONT_SIZE_RANGE,
   ICON_THEMES,
-  type IconTheme,
+  LINE_HEIGHT_RANGE,
+  type NumberRange,
   type SettingKey,
   type Settings
 } from '../../shared/settings-api'
+import { APP_THEMES } from '../../shared/themes/app-theme-catalog'
+import { EDITOR_THEMES } from '../../shared/themes/editor-theme-catalog'
+import { TERMINAL_THEMES } from '../../shared/themes/terminal-theme-catalog'
 
 export type ParsedSettings = {
   values: Settings
@@ -40,21 +44,31 @@ function fontFamily(value: unknown): Checked<string> {
   return { value: value.trim() }
 }
 
-function fontSize(value: unknown): Checked<number> {
-  if (typeof value !== 'number' || !Number.isFinite(value)) return { problem: 'must be a number' }
-  const { min, max } = FONT_SIZE_RANGE
-  const clamped = Math.min(max, Math.max(min, value))
-  return clamped === value
-    ? { value }
-    : { value: clamped, problem: `must be between ${min} and ${max}; using ${clamped}` }
+/** Checks a number, clamping it into `range`. */
+function inRange({ min, max }: NumberRange): (value: unknown) => Checked<number> {
+  return (value) => {
+    if (typeof value !== 'number' || !Number.isFinite(value)) return { problem: 'must be a number' }
+    const clamped = Math.min(max, Math.max(min, value))
+    return clamped === value
+      ? { value }
+      : { value: clamped, problem: `must be between ${min} and ${max}; using ${clamped}` }
+  }
 }
 
-function iconTheme(value: unknown): Checked<IconTheme> {
-  const theme = ICON_THEMES.find((candidate) => candidate === value)
-  return theme
-    ? { value: theme }
-    : { problem: `must be one of ${ICON_THEMES.map((name) => `"${name}"`).join(', ')}` }
+const fontSize = inRange(FONT_SIZE_RANGE)
+const lineHeight = inRange(LINE_HEIGHT_RANGE)
+
+/** Checks a value is one of `choices`. */
+function oneOf<T extends string>(choices: readonly T[]): (value: unknown) => Checked<T> {
+  return (value) => {
+    const choice = choices.find((candidate) => candidate === value)
+    return choice
+      ? { value: choice }
+      : { problem: `must be one of ${choices.map((name) => `"${name}"`).join(', ')}` }
+  }
 }
+
+const ids = <T extends string>(themes: readonly { id: T }[]): T[] => themes.map(({ id }) => id)
 
 function flag(value: unknown): Checked<boolean> {
   return typeof value === 'boolean' ? { value } : { problem: 'must be true or false' }
@@ -65,10 +79,15 @@ const CHECKS: { [K in SettingKey]: (value: unknown) => Checked<Settings[K]> } = 
   'app.fontSize': fontSize,
   'terminal.fontFamily': fontFamily,
   'terminal.fontSize': fontSize,
+  'terminal.lineHeight': lineHeight,
   'terminal.gpuAcceleration': flag,
   'editor.fontFamily': fontFamily,
   'editor.fontSize': fontSize,
-  'workbench.iconTheme': iconTheme
+  'editor.lineHeight': lineHeight,
+  'workbench.iconTheme': oneOf(ICON_THEMES),
+  'workbench.colorTheme': oneOf(ids(APP_THEMES)),
+  'editor.colorTheme': oneOf(ids(EDITOR_THEMES)),
+  'terminal.colorTheme': oneOf(ids(TERMINAL_THEMES))
 }
 
 export const isSettingKey = (key: string): key is SettingKey => Object.hasOwn(CHECKS, key)

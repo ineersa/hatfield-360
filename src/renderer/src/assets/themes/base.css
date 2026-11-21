@@ -1,0 +1,164 @@
+/*
+ * What every app theme shares: text styles, control sizes and paddings, in terms of the theme's
+ * colour roles and `--app-font-size`. JetBrains UI themes don't carry these (the IDE sizes them in
+ * code), so they are set here once; an app theme file may override any of them.
+ */
+:root {
+  /* Sizes scale with the app font, from the IDE's layout at its 13px default. */
+  --project-row-height: calc(var(--tree-row-height) + var(--app-font-size) * 6 / 13);
+  --control-height: calc(var(--app-font-size) * 30 / 13);
+  --icon-button-size: calc(var(--app-font-size) * 28 / 13);
+  --activity-button-size: calc(var(--app-font-size) * 36 / 13);
+  --activity-bar-width: calc(var(--app-font-size) * 56 / 13);
+  --small-icon-button-size: calc(var(--app-font-size) * 22 / 13);
+  --panel-header-height: calc(var(--app-font-size) * 38 / 13);
+  --tab-bar-height: calc(var(--app-font-size) * 36 / 13);
+  --status-bar-height: calc(var(--app-font-size) * 26 / 13);
+  --tree-indent: calc(var(--app-font-size) * 40 / 13);
+  --empty-state-icon-size: calc(var(--app-font-size) * 40 / 13);
+
+  /* Text styles: size, weight and colour per kind of text. */
+  --type-display-size: calc(var(--app-font-size) + 10px);
+  --type-display-weight: 600;
+  --type-display-color: var(--foreground);
+  --type-page-title-size: calc(var(--app-font-size) + 1px);
+  --type-page-title-weight: 600;
+  --type-page-title-color: var(--foreground);
+  --type-section-title-size: var(--app-font-size);
+  --type-section-title-weight: 600;
+  --type-section-title-color: var(--foreground);
+  --type-panel-title-size: var(--app-font-size);
+  --type-panel-title-weight: 600;
+  --type-panel-title-color: var(--foreground);
+  --type-group-label-size: var(--app-font-size);
+  --type-group-label-weight: 500;
+  --type-group-label-color: var(--muted-foreground);
+  --type-body-size: var(--app-font-size);
+  --type-body-weight: 400;
+  --type-body-color: var(--foreground);
+  --type-description-size: var(--app-font-size);
+  --type-description-weight: 400;
+  --type-description-color: var(--muted-foreground);
+  --type-project-row-size: calc(var(--app-font-size) + 1px);
+  --type-project-row-weight: 600;
+  --type-project-row-color: var(--foreground);
+  --type-tree-row-size: var(--app-font-size);
+  --type-tree-row-weight: 400;
+  --type-tree-row-color: var(--foreground);
+  --type-hint-size: calc(var(--app-font-size) - 2px);
+  --type-hint-weight: 400;
+  --type-hint-color: var(--muted-foreground);
+  --type-tab-size: var(--app-font-size);
+  --type-tab-weight: 400;
+  --type-tab-color: var(--foreground);
+  --type-button-size: var(--app-font-size);
+  --type-button-weight: 500;
+  --type-button-color: var(--button-foreground);
+  --type-tooltip-size: calc(var(--app-font-size) - 2px);
+  --type-tooltip-weight: 400;
+  --type-tooltip-color: var(--tooltip-foreground);
+  --type-tooltip-title-size: calc(var(--app-font-size) - 2px);
+  --type-tooltip-title-weight: 500;
+  --type-tooltip-title-color: var(--tooltip-foreground);
+  --type-menu-item-size: var(--app-font-size);
+  --type-menu-item-weight: 400;
+  --type-menu-item-color: var(--popover-foreground);
+  --type-shortcut-size: calc(var(--app-font-size) - 2px);
+  --type-shortcut-weight: 400;
+  --type-shortcut-color: var(--popover-shortcut);
+  --type-status-size: calc(var(--app-font-size) - 2px);
+  --type-status-weight: 400;
+  --type-status-color: var(--status-foreground);
+}
+
+/*
+ * One class per text style. They sit in the components layer so a colour utility (text-error on a
+ * hint) still wins over the style's own colour.
+ */
+@layer components {
+  .type-display {
+    font-size: var(--type-display-size);
+    font-weight: var(--type-display-weight);
+    color: var(--type-display-color);
+  }
+  .type-page-title {
+    font-size: var(--type-page-title-size);
+    font-weight: var(--type-page-title-weight);
+    color: var(--type-page-title-color);
+  }
+  .type-section-title {
+    font-size: var(--type-section-title-size);
+    font-weight: var(--type-section-title-weight);
+    color: var(--type-section-title-color);
+  }
+  .type-panel-title {
+    font-size: var(--type-panel-title-size);
+    font-weight: var(--type-panel-title-weight);
+    color: var(--type-panel-title-color);
+  }
+  .type-group-label {
+    font-size: var(--type-group-label-size);
+    font-weight: var(--type-group-label-weight);
+    color: var(--type-group-label-color);
+  }
+  .type-body {
+    font-size: var(--type-body-size);
+    font-weight: var(--type-body-weight);
+    color: var(--type-body-color);
+  }
+  .type-description {
+    font-size: var(--type-description-size);
+    font-weight: var(--type-description-weight);
+    color: var(--type-description-color);
+  }
+  .type-project-row {
+    font-size: var(--type-project-row-size);
+    font-weight: var(--type-project-row-weight);
+    color: var(--type-project-row-color);
+  }
+  .type-tree-row {
+    font-size: var(--type-tree-row-size);
+    font-weight: var(--type-tree-row-weight);
+    color: var(--type-tree-row-color);
+  }
+  .type-hint {
+    font-size: var(--type-hint-size);
+    font-weight: var(--type-hint-weight);
+    color: var(--type-hint-color);
+  }
+  .type-tab {
+    font-size: var(--type-tab-size);
+    font-weight: var(--type-tab-weight);
+    color: var(--type-tab-color);
+  }
+  .type-button {
+    font-size: var(--type-button-size);
+    font-weight: var(--type-button-weight);
+    color: var(--type-button-color);
+  }
+  .type-tooltip {
+    font-size: var(--type-tooltip-size);
+    font-weight: var(--type-tooltip-weight);
+    color: var(--type-tooltip-color);
+  }
+  .type-tooltip-title {
+    font-size: var(--type-tooltip-title-size);
+    font-weight: var(--type-tooltip-title-weight);
+    color: var(--type-tooltip-title-color);
+  }
+  .type-menu-item {
+    font-size: var(--type-menu-item-size);
+    font-weight: var(--type-menu-item-weight);
+    color: var(--type-menu-item-color);
+  }
+  .type-shortcut {
+    font-size: var(--type-shortcut-size);
+    font-weight: var(--type-shortcut-weight);
+    color: var(--type-shortcut-color);
+  }
+  .type-status {
+    font-size: var(--type-status-size);
+    font-weight: var(--type-status-weight);
+    color: var(--type-status-color);
+  }
+}

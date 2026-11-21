@@ -10,6 +10,7 @@ import { terminalSessions } from './terminal/terminal-sessions'
 import { createMainWindow } from './window/main-window'
 import { installPermissionPolicy } from './window/permission-policy'
 import { windowStateStore } from './window/window-state-store'
+import { chosenAppTheme, followAppTheme } from './window/window-theme'
 
 app.enableSandbox()
 
@@ -22,13 +23,14 @@ void app.whenReady().then(async () => {
   registerShellLayoutIpc()
   registerTerminalIpc()
   installAppMenu()
-  // The window opens where it was left, so the saved placement is read first.
-  await windowStateStore.load()
-  createMainWindow()
+  followAppTheme()
+  // The window opens where it was left and in the chosen theme, so both are read first.
+  const [, theme] = await Promise.all([windowStateStore.load(), chosenAppTheme()])
+  createMainWindow(theme)
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
-      createMainWindow()
+      void chosenAppTheme().then(createMainWindow)
     }
   })
 })

@@ -220,8 +220,14 @@
           }
         ]
       }
+    },
+    {
+      "files": ["src/renderer/src/**/*.ts", "src/renderer/src/**/*.tsx"],
+      "rules": {
+        "theme/roles-only": "error"
+      }
     }
   ],
   "ignorePatterns": ["out/**", "release/**", ".claude/skills/**"],
-  "jsPlugins": ["./config/oxlint/ipc-boundary-plugin.mjs"]
+  "jsPlugins": ["./config/oxlint/ipc-boundary-plugin.mjs", "./config/oxlint/theme-roles-plugin.mjs"]
 }
