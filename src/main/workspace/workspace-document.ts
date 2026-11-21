@@ -1,11 +1,12 @@
 import { isPlainObject } from '../../shared/plain-object'
+import type { WorkspaceFolderKind } from '../../shared/workspace-api'
 
 /** On-disk format of a `.hatfield-workspace` file. Bump the version when the shape changes. */
 const WORKSPACE_DOCUMENT_VERSION = 1
 
 export type WorkspaceDocument = {
   version: typeof WORKSPACE_DOCUMENT_VERSION
-  folders: { path: string }[]
+  folders: { path: string; kind: WorkspaceFolderKind }[]
 }
 
 export type ParsedWorkspaceDocument =
@@ -33,18 +34,20 @@ export function parseWorkspaceDocument(text: string): ParsedWorkspaceDocument {
   }
   if (version > WORKSPACE_DOCUMENT_VERSION) return { status: 'newer', version }
   if (!Array.isArray(folders)) return { status: 'corrupt', reason: 'folders is not a list' }
-  const paths: string[] = []
+  const read = new Map<string, WorkspaceFolderKind>()
   for (const folder of folders) {
     if (!isPlainObject(folder) || typeof folder.path !== 'string' || folder.path === '') {
       return { status: 'corrupt', reason: 'a folder entry has no path' }
     }
-    paths.push(folder.path)
+    // Folders saved before kinds existed, or with a kind this version doesn't know, are projects.
+    if (!read.has(folder.path))
+      read.set(folder.path, folder.kind === 'folder' ? 'folder' : 'project')
   }
   return {
     status: 'ok',
     document: {
       version: WORKSPACE_DOCUMENT_VERSION,
-      folders: [...new Set(paths)].map((path) => ({ path }))
+      folders: [...read].map(([path, kind]) => ({ path, kind }))
     }
   }
 }

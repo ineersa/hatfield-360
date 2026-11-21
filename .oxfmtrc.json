@@ -11,6 +11,7 @@
     "playwright-report/**",
     ".claude/skills/**",
     ".agents/skills/impeccable/**",
-    ".hatfield/**"
+    ".hatfield/**",
+    "src/renderer/src/assets/icons/catppuccin-icons.json"
   ]
 }

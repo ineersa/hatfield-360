@@ -2,10 +2,12 @@ import { app } from 'electron'
 import { readdir, rename, stat } from 'node:fs/promises'
 import { basename, dirname, join, resolve } from 'node:path'
 import type { Notice } from '../../shared/notice'
+import { isRepositoryRoot } from '../git/git-repository'
 import type {
   RecentEntry,
   RecentTarget,
   WorkspaceFolder,
+  WorkspaceFolderKind,
   WorkspaceView
 } from '../../shared/workspace-api'
 import {
@@ -17,6 +19,7 @@ import {
 } from './app-state'
 import {
   readWorkspaceFile,
+  type WorkspaceEntry,
   WORKSPACE_FILE_EXTENSION,
   withWorkspaceExtension,
   writeWorkspaceFile
@@ -27,8 +30,8 @@ type ChangeListener = (view: WorkspaceView) => void
 type OpenWorkspace = {
   file: string
   isDefault: boolean
-  /** Absolute paths, in the user's order. */
-  folders: string[]
+  /** By absolute path, in the user's order. */
+  folders: WorkspaceEntry[]
   problem: string | null
 }
 
@@ -113,9 +116,10 @@ class WorkspaceStore {
   async view(): Promise<WorkspaceView> {
     const { workspace, state } = await this.ready()
     const folders: WorkspaceFolder[] = await Promise.all(
-      workspace.folders.map(async (path) => ({
+      workspace.folders.map(async ({ path, kind }) => ({
         path,
         name: folderName(path),
+        kind,
         missing: !(await isDirectory(path))
       }))
     )
@@ -167,7 +171,10 @@ class WorkspaceStore {
     }
   }
 
-  /** Adds a folder to the open workspace and to Recent; returns false when it was already in the workspace. */
+  /**
+   * Adds a folder to the open workspace and to Recent, as a project when it is a git repository; a
+   * folder already there as a plain folder becomes a project. Returns false when nothing changed.
+   */
   addFolder(path: string): Promise<boolean> {
     return this.change((session) => this.addFolderTo(session, resolve(path)))
   }
@@ -175,8 +182,22 @@ class WorkspaceStore {
   removeFolder(path: string): Promise<boolean> {
     return this.change(async ({ workspace }) => {
       if (workspace.problem) throw new Error(workspace.problem)
-      const folders = workspace.folders.filter((folder) => folder !== path)
+      const folders = workspace.folders.filter((folder) => folder.path !== path)
       if (folders.length === workspace.folders.length) return false
+      await writeWorkspaceFile(workspace.file, folders)
+      workspace.folders = folders
+      return true
+    })
+  }
+
+  /** Moves a folder into or out of Projects; returns false when it isn't in the workspace. */
+  setFolderKind(path: string, kind: WorkspaceFolderKind): Promise<boolean> {
+    return this.change(async ({ workspace }) => {
+      if (workspace.problem) throw new Error(workspace.problem)
+      if (!workspace.folders.some((folder) => folder.path === path)) return false
+      const folders = workspace.folders.map((folder) =>
+        folder.path === path ? { path, kind } : folder
+      )
       await writeWorkspaceFile(workspace.file, folders)
       workspace.folders = folders
       return true
@@ -257,6 +278,15 @@ class WorkspaceStore {
     })
   }
 
+  /** Where the folder picker starts: the folder holding the last folder added, while it exists. */
+  async folderPickerStart(): Promise<string | undefined> {
+    const { state } = await this.ready()
+    const last = state.recent.find((item) => item.kind === 'folder')
+    if (!last) return undefined
+    const parent = dirname(last.path)
+    return (await isDirectory(parent)) ? parent : undefined
+  }
+
   /** Hatfield's own workspaces folder: the default workspace and where Save As suggests saving. */
   workspacesFolder(): string {
     return join(this.dataDir(), 'workspaces')
@@ -329,8 +359,16 @@ class WorkspaceStore {
     // Recent first: if it can't be saved, the folder isn't added either.
     const recent = withRecent(session.state.recent, { kind: 'folder', path: folder })
     await this.saveState(session, { ...session.state, recent })
-    if (workspace.folders.includes(folder)) return false
-    const folders = [...workspace.folders, folder]
+    const listed = workspace.folders.find((entry) => entry.path === folder)
+    if (listed?.kind === 'project') return false
+    const folders = listed
+      ? workspace.folders.map((entry) =>
+          entry.path === folder ? { path: folder, kind: 'project' as const } : entry
+        )
+      : [
+          ...workspace.folders,
+          { path: folder, kind: (await isRepositoryRoot(folder)) ? 'project' : 'folder' } as const
+        ]
     await writeWorkspaceFile(workspace.file, folders)
     workspace.folders = folders
     return true

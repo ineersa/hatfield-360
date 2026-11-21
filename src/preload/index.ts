@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { type DesktopApi, IPC_CHANNELS } from '../shared/desktop-api'
+import { FILE_TREE_CHANNELS } from '../shared/file-tree-api'
 import { SETTINGS_CHANNELS, type SettingsView } from '../shared/settings-api'
 import { SHELL_LAYOUT_CHANNELS } from '../shared/shell-layout-api'
 import { TERMINAL_CHANNELS, type TerminalCommand, type TerminalExit } from '../shared/terminal-api'
@@ -11,6 +12,8 @@ const desktopApi: DesktopApi = {
   getWorkspace: () => ipcRenderer.invoke(WORKSPACE_CHANNELS.get),
   addWorkspaceFolder: () => ipcRenderer.invoke(WORKSPACE_CHANNELS.addFolder),
   removeWorkspaceFolder: (path) => ipcRenderer.invoke(WORKSPACE_CHANNELS.removeFolder, path),
+  setWorkspaceFolderKind: (path, kind) =>
+    ipcRenderer.invoke(WORKSPACE_CHANNELS.setFolderKind, path, kind),
   openWorkspaceFile: () => ipcRenderer.invoke(WORKSPACE_CHANNELS.openFile),
   openRecent: (target) => ipcRenderer.invoke(WORKSPACE_CHANNELS.openRecent, target),
   removeRecent: (target) => ipcRenderer.invoke(WORKSPACE_CHANNELS.removeRecent, target),
@@ -24,6 +27,15 @@ const desktopApi: DesktopApi = {
     const listener = (_event: unknown, projects: ProjectWorktrees[]): void => callback(projects)
     ipcRenderer.on(WORKTREE_CHANNELS.changed, listener)
     return () => ipcRenderer.removeListener(WORKTREE_CHANNELS.changed, listener)
+  },
+  listDirectory: (path) => ipcRenderer.invoke(FILE_TREE_CHANNELS.list, path),
+  watchDirectories: (paths) => ipcRenderer.invoke(FILE_TREE_CHANNELS.watch, paths),
+  copyPath: (path, form) => ipcRenderer.invoke(FILE_TREE_CHANNELS.copyPath, path, form),
+  revealPath: (path) => ipcRenderer.invoke(FILE_TREE_CHANNELS.reveal, path),
+  subscribeDirectoryChanges: (callback) => {
+    const listener = (_event: unknown, paths: string[]): void => callback(paths)
+    ipcRenderer.on(FILE_TREE_CHANNELS.changed, listener)
+    return () => ipcRenderer.removeListener(FILE_TREE_CHANNELS.changed, listener)
   },
   getSettings: () => ipcRenderer.invoke(SETTINGS_CHANNELS.get),
   updateSetting: (key, value) => ipcRenderer.invoke(SETTINGS_CHANNELS.update, key, value),

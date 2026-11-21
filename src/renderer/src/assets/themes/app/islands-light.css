@@ -17,6 +17,22 @@
   --status-foreground: #5f6269;
   --link: #2f5eb9;
   --icon-text: #000000;
+  /* Catppuccin icon colours, Latte palette. */
+  --icon-rosewater: #dc8a78;
+  --icon-flamingo: #dd7878;
+  --icon-pink: #ea76cb;
+  --icon-mauve: #8839ef;
+  --icon-red: #d20f39;
+  --icon-maroon: #e64553;
+  --icon-peach: #fe640b;
+  --icon-yellow: #df8e1d;
+  --icon-green: #40a02b;
+  --icon-teal: #179299;
+  --icon-sky: #04a5e5;
+  --icon-sapphire: #209fb5;
+  --icon-blue: #1e66f5;
+  --icon-lavender: #7287fd;
+  --icon-overlay1: #8c8fa1;
   --hover: #00000012;
   --pressed: #00000020;
   --row-hover: #00000008;
