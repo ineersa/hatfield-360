@@ -58,7 +58,7 @@ export function Toaster(): React.JSX.Element {
   return (
     <section
       aria-label="Notification toasts"
-      className="pointer-events-none fixed right-[calc(var(--activity-bar-width)+var(--island-gap))] bottom-[calc(var(--status-bar-height)+var(--island-gap))] z-50 flex flex-col gap-2"
+      className="pointer-events-none fixed right-[calc(var(--tool-stripe-width)+var(--island-gap))] bottom-[calc(var(--status-bar-height)+var(--island-gap))] z-50 flex flex-col gap-2"
     >
       {shown.map((notification) => (
         <Toast key={notification.id} notification={notification} />

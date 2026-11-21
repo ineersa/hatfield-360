@@ -12,6 +12,7 @@ export const SIDE_PANEL_MIN_WIDTH = SIDE_PANEL_WIDTH_RANGE.min
 type ShellLayoutState = {
   activeView: ShellViewId
   panels: Record<ShellViewId, SidePanelLayout>
+  notificationsWidth: number
   /** The saved layout has been applied; the shell waits for it so it doesn't jump after the first paint. */
   loaded: boolean
   /** The Settings page covers the main area until it is closed or a view is chosen. */
@@ -23,9 +24,17 @@ type ShellLayoutState = {
   /** Activating the current view toggles its side panel, like JetBrains tool window buttons. */
   activateView: (view: ShellViewId) => void
   setPanelWidth: (view: ShellViewId, width: number) => void
+  setNotificationsWidth: (width: number) => void
 }
 
-const savedPart = ({ activeView, panels }: ShellLayout): ShellLayout => ({ activeView, panels })
+const clampWidth = (width: number): number =>
+  Math.round(Math.min(SIDE_PANEL_WIDTH_RANGE.max, Math.max(SIDE_PANEL_WIDTH_RANGE.min, width)))
+
+const savedPart = ({ activeView, panels, notificationsWidth }: ShellLayout): ShellLayout => ({
+  activeView,
+  panels,
+  notificationsWidth
+})
 
 export const useShellLayoutStore = create<ShellLayoutState>((set, get) => ({
   ...DEFAULT_SHELL_LAYOUT,
@@ -37,7 +46,12 @@ export const useShellLayoutStore = create<ShellLayoutState>((set, get) => ({
     const follow = (): void => {
       // Main batches the writes, so every change can go straight there and survives a quick quit.
       unsubscribe = useShellLayoutStore.subscribe((state, previous) => {
-        if (state.activeView === previous.activeView && state.panels === previous.panels) return
+        if (
+          state.activeView === previous.activeView &&
+          state.panels === previous.panels &&
+          state.notificationsWidth === previous.notificationsWidth
+        )
+          return
         window.desktop.saveShellLayout(savedPart(state)).catch((error: unknown) => {
           console.error('Saving the layout failed:', error)
         })
@@ -74,10 +88,9 @@ export const useShellLayoutStore = create<ShellLayoutState>((set, get) => ({
     })
   },
   setPanelWidth: (view, width) => {
-    const { min, max } = SIDE_PANEL_WIDTH_RANGE
-    const clamped = Math.round(Math.min(max, Math.max(min, width)))
     set((state) => ({
-      panels: { ...state.panels, [view]: { ...state.panels[view], width: clamped } }
+      panels: { ...state.panels, [view]: { ...state.panels[view], width: clampWidth(width) } }
     }))
-  }
+  },
+  setNotificationsWidth: (width) => set({ notificationsWidth: clampWidth(width) })
 }))

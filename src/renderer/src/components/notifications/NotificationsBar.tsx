@@ -11,7 +11,7 @@ export function NotificationsBar(): React.JSX.Element {
   return (
     <nav
       aria-label="Tool windows"
-      className="flex w-activity-bar shrink-0 flex-col items-center gap-1.5 pt-0.5 pb-1.5"
+      className="flex w-tool-stripe shrink-0 flex-col items-center pt-0.5 pb-1.5"
     >
       <Tooltip>
         <TooltipTrigger asChild>
@@ -21,16 +21,16 @@ export function NotificationsBar(): React.JSX.Element {
             aria-pressed={panelOpen}
             onClick={togglePanel}
             className={cn(
-              'relative flex size-activity-button items-center justify-center rounded-button text-muted-foreground transition-colors hover:bg-hover hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none',
+              'relative flex size-icon-button items-center justify-center rounded-button text-muted-foreground transition-colors hover:bg-hover hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none',
               panelOpen &&
                 'bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground'
             )}
           >
-            <Bell className="size-5.5" strokeWidth={1.75} aria-hidden />
+            <Bell className="size-4.5" strokeWidth={1.75} aria-hidden />
             {count > 0 ? (
               <span
                 aria-hidden
-                className="type-shortcut absolute top-0.5 right-0.5 flex min-w-4 items-center justify-center rounded-full bg-counter px-1 text-counter-foreground"
+                className="type-shortcut absolute -top-1 -right-1 flex min-w-4 items-center justify-center rounded-full bg-counter px-1 text-counter-foreground"
               >
                 {count > 99 ? '99+' : count}
               </span>

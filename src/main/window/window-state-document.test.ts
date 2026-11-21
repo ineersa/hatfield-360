@@ -73,11 +73,13 @@ describe('parseShellLayout', () => {
         agents: { width: 250.6, collapsed: true },
         files: { width: 420, collapsed: false },
         git: { width: 180, collapsed: false }
-      }
+      },
+      notificationsWidth: 400.4
     }
     expect(parseShellLayout(layout)).toEqual({
       ...layout,
-      panels: { ...layout.panels, agents: { width: 251, collapsed: true } }
+      panels: { ...layout.panels, agents: { width: 251, collapsed: true } },
+      notificationsWidth: 400
     })
     expect(parseShellLayout({ ...layout, activeView: 'terminal' })).toBe(null)
     const withPanel = (panel: unknown) => ({ ...layout, panels: { ...layout.panels, git: panel } })
@@ -86,5 +88,14 @@ describe('parseShellLayout', () => {
     expect(parseShellLayout(withPanel({ width: 300, collapsed: 'yes' }))).toBe(null)
     expect(parseShellLayout(withPanel(undefined))).toBe(null)
     expect(parseShellLayout(DEFAULT_SHELL_LAYOUT)).toEqual(DEFAULT_SHELL_LAYOUT)
+  })
+
+  it('keeps the side panels of a layout without a valid notifications width, using the default', () => {
+    const { notificationsWidth: _unused, ...older } = DEFAULT_SHELL_LAYOUT
+    const files = { width: 420, collapsed: true }
+    const saved = { ...older, panels: { ...older.panels, files } }
+    const expected = { ...DEFAULT_SHELL_LAYOUT, panels: { ...DEFAULT_SHELL_LAYOUT.panels, files } }
+    expect(parseShellLayout(saved)).toEqual(expected)
+    expect(parseShellLayout({ ...saved, notificationsWidth: 50 })).toEqual(expected)
   })
 })

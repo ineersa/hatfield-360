@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
-import { saveScreenshot, withApp } from './launch-app'
+import { makeTempDir, saveScreenshot, withApp } from './launch-app'
 
 const viewButton = (page: Page, name: string) =>
   page.getByRole('navigation', { name: 'Views' }).getByRole('button', { name, exact: true })
@@ -7,6 +7,11 @@ const sidePanel = (page: Page, view: string) =>
   page.getByRole('complementary', { name: `${view} panel` })
 const resizeHandle = (page: Page, view: string) =>
   page.getByRole('separator', { name: `Resize ${view} panel` })
+
+const bell = (page: Page) =>
+  page
+    .getByRole('navigation', { name: 'Tool windows' })
+    .getByRole('button', { name: /^Notifications/ })
 
 async function panelWidth(page: Page, view: string): Promise<number> {
   const box = await sidePanel(page, view).boundingBox()
@@ -171,4 +176,50 @@ test('shell uses the Islands Dark app theme: islands on a darker-edged frame', a
       await saveScreenshot(page, `shell-${view.toLowerCase()}`)
     }
   })
+})
+
+test('the notifications panel resizes from its left edge and keeps its width after a restart', async () => {
+  const [userData, cleanUserData] = await makeTempDir('user-data')
+  try {
+    await withApp(
+      async (_app, page) => {
+        await bell(page).click()
+        expect(await panelWidth(page, 'Notifications')).toBe(380)
+
+        // Dragging the handle left widens the panel on its right.
+        const handle = resizeHandle(page, 'Notifications')
+        const box = await handle.boundingBox()
+        if (!box) throw new Error('resize handle is not rendered')
+        const y = box.y + box.height / 2
+        await page.mouse.move(box.x + box.width / 2, y)
+        await page.mouse.down()
+        await page.mouse.move(box.x + box.width / 2 - 100, y, { steps: 5 })
+        await page.mouse.up()
+        await expect(handle).toHaveAttribute('aria-valuenow', '480')
+        expect(await panelWidth(page, 'Notifications')).toBe(480)
+
+        await handle.focus()
+        await page.keyboard.press('ArrowLeft')
+        await expect(handle).toHaveAttribute('aria-valuenow', '496')
+        // At most half the row, so the side panel and the main area keep the rest.
+        await page.keyboard.press('End')
+        const row = Number(await page.evaluate('window.innerWidth'))
+        expect(await panelWidth(page, 'Notifications')).toBeLessThan(row / 2)
+        await page.keyboard.press('Home')
+        await expect(handle).toHaveAttribute('aria-valuenow', '180')
+        await page.keyboard.press('ArrowLeft')
+        await expect(handle).toHaveAttribute('aria-valuenow', '196')
+      },
+      { userDataDir: userData }
+    )
+    await withApp(
+      async (_app, page) => {
+        await bell(page).click()
+        expect(await panelWidth(page, 'Notifications')).toBe(196)
+      },
+      { userDataDir: userData }
+    )
+  } finally {
+    await cleanUserData()
+  }
 })

@@ -8,6 +8,8 @@ export type SidePanelLayout = { width: number; collapsed: boolean }
 export type ShellLayout = {
   activeView: ShellViewId
   panels: Record<ShellViewId, SidePanelLayout>
+  /** The notifications panel on the right; it shares the side panels' width range. */
+  notificationsWidth: number
 }
 
 /** Stored side panel widths; a narrow window still caps the panel on screen. */
@@ -17,7 +19,8 @@ const DEFAULT_PANEL: SidePanelLayout = { width: 300, collapsed: false }
 
 export const DEFAULT_SHELL_LAYOUT: ShellLayout = {
   activeView: 'agents',
-  panels: { agents: DEFAULT_PANEL, files: DEFAULT_PANEL, git: DEFAULT_PANEL }
+  panels: { agents: DEFAULT_PANEL, files: DEFAULT_PANEL, git: DEFAULT_PANEL },
+  notificationsWidth: 380
 }
 
 export const SHELL_LAYOUT_CHANNELS = {

@@ -97,7 +97,7 @@
   --spacing-activity-button: var(--activity-button-size);
   --spacing-activity-bar: var(--activity-bar-width);
   --spacing-toast: var(--toast-width);
-  --spacing-notifications-panel: var(--notifications-panel-width);
+  --spacing-tool-stripe: var(--tool-stripe-width);
   --spacing-small-icon-button: var(--small-icon-button-size);
   --spacing-panel-header: var(--panel-header-height);
   --spacing-tab-bar: var(--tab-bar-height);

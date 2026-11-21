@@ -12,6 +12,8 @@ type SidePanelResizeHandleProps = {
   /** Widest the panel can be in the current window. */
   maxWidth: () => number
   onWidthChange: (width: number) => void
+  /** Which side of the handle the panel is on; a panel on the right grows as the handle moves left. */
+  panelSide?: 'left' | 'right'
 }
 
 export function SidePanelResizeHandle({
@@ -20,8 +22,10 @@ export function SidePanelResizeHandle({
   renderedWidth,
   minWidth,
   maxWidth,
-  onWidthChange
+  onWidthChange,
+  panelSide = 'left'
 }: SidePanelResizeHandleProps): React.JSX.Element {
+  const grow = panelSide === 'left' ? 1 : -1
   const drag = useRef<{ startX: number; startWidth: number } | null>(null)
 
   const onPointerDown = (event: PointerEvent<HTMLDivElement>): void => {
@@ -32,7 +36,7 @@ export function SidePanelResizeHandle({
 
   const onPointerMove = (event: PointerEvent<HTMLDivElement>): void => {
     if (!drag.current) return
-    onWidthChange(drag.current.startWidth + event.clientX - drag.current.startX)
+    onWidthChange(drag.current.startWidth + grow * (event.clientX - drag.current.startX))
   }
 
   const endDrag = (event: PointerEvent<HTMLDivElement>): void => {
@@ -45,8 +49,8 @@ export function SidePanelResizeHandle({
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>): void => {
     const current = Math.round(renderedWidth())
     const next = {
-      ArrowLeft: current - KEYBOARD_STEP_PX,
-      ArrowRight: current + KEYBOARD_STEP_PX,
+      ArrowLeft: current - grow * KEYBOARD_STEP_PX,
+      ArrowRight: current + grow * KEYBOARD_STEP_PX,
       Home: minWidth,
       End: maxWidth()
     }[event.key]
