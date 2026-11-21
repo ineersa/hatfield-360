@@ -16,6 +16,7 @@ let last
 let turn
 let waitStart
 let childTurn
+let scriptStart
 let initial
 const main = { actorId: 'main', actorStart: 1 }
 const print = (message) => process.stdout.write(`${message}\n`)
@@ -64,7 +65,10 @@ for await (const command of input) {
     let reply
     switch (command) {
       case 'start':
-        await emit('session.started', { provider, capabilities: ['waits', 'actors'] })
+        await emit('session.started', {
+          provider,
+          capabilities: ['waits', 'actors', ...(provider === 'hatfield' ? ['scripts'] : [])]
+        })
         turn = { ...main, turnId: 'turn', turnStart: sequence + 1 }
         reply = await emit('turn.started', { ...main, turnId: turn.turnId })
         initial = last
@@ -83,12 +87,25 @@ for await (const command of input) {
       case 'resolve':
         reply = await emit('wait.resolved', { ...turn, waitId: 'permission', waitStart })
         break
+      case 'script':
+        scriptStart = sequence + 1
+        reply = await emit('script.started', { scriptId: 'background' })
+        break
+      case 'script-done':
+        reply = await emit('script.ended', { scriptId: 'background', scriptStart })
+        break
+      case 'child-working':
       case 'child': {
         const actor = { actorId: 'child', actorStart: sequence + 1 }
         await emit('actor.started', { actorId: actor.actorId, parentId: 'main', parentStart: 1 })
         childTurn = { ...actor, turnId: 'child-turn', turnStart: sequence + 1 }
-        await emit('turn.started', { ...actor, turnId: childTurn.turnId })
-        reply = await emit('wait.started', { ...childTurn, waitId: 'question', reason: 'question' })
+        reply = await emit('turn.started', { ...actor, turnId: childTurn.turnId })
+        if (command === 'child')
+          reply = await emit('wait.started', {
+            ...childTurn,
+            waitId: 'question',
+            reason: 'question'
+          })
         break
       }
       case 'child-done':

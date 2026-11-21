@@ -27,3 +27,5 @@ E2E_AGENT_DEMO=1 pnpm exec playwright test --config config/playwright.config.mts
 ```
 
 On Linux without a display, insert `xvfb-run -a` before `pnpm exec`. Recording is opt-in; Playwright's FFmpeg support must be installed (`pnpm exec playwright install ffmpeg`). The test saves the working, needs-input and outcome screenshots, `trace.zip`, and `agent-sessions.webm` under `test-results/agents-demo/`. Open the trace with `pnpm exec playwright show-trace test-results/agents-demo/trace.zip`. Screenshots and recording are evidence, not baselines. These scenarios prove app integration, not real provider hook behavior.
+
+The Working filter includes actively working child agents and reported background scripts. A blocked actor does not count as working, but a session can need input while other actors or scripts continue. Missing background telemetry is never represented as a reported zero. Use `child-working`/`child-done` and `script`/`script-done` in the Hatfield scenario to see the independent counters.

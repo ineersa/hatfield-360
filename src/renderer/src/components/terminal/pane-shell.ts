@@ -34,7 +34,8 @@ export function startPaneShell(
   pane: ManagedPane,
   cwd: string | null,
   onShellEnded: () => void,
-  agent?: AgentLaunch
+  agent?: AgentLaunch,
+  onStarted?: () => void
 ): PaneShell {
   const { terminal } = pane
   let sessionId: string | null = null
@@ -76,6 +77,7 @@ export function startPaneShell(
           sessionId = session.id
           pane.container.dataset.terminalId = session.id
           pane.container.dataset.pid = String(session.pid)
+          onStarted?.()
           stopListening = listenToSession(session.id, {
             // Acknowledged once xterm has parsed it, so main reads the shell only as fast as it draws.
             data: (data) =>

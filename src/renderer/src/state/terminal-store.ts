@@ -11,6 +11,8 @@ export type TerminalTab = {
 }
 
 type TerminalState = {
+  paneByTab: Record<string, string | null>
+  setActivePane: (tabId: string, id: string | null) => void
   tabs: TerminalTab[]
   activeTabId: string | null
   /** Opens a tab with one shell and shows it in the Agents view. */
@@ -28,6 +30,9 @@ function folderName(path: string): string {
 }
 
 export const useTerminalStore = create<TerminalState>((set, get) => ({
+  paneByTab: {},
+  setActivePane: (tabId, id) =>
+    set((state) => ({ paneByTab: { ...state.paneByTab, [tabId]: id } })),
   tabs: [],
   activeTabId: null,
   openTerminal: (cwd, agent) => {
@@ -48,7 +53,9 @@ export const useTerminalStore = create<TerminalState>((set, get) => ({
       // The neighbour to the left takes over, as in browsers and IDEs.
       const neighbour = tabs[Math.max(0, index - 1)]
       const activeTabId = state.activeTabId === id ? (neighbour?.id ?? null) : state.activeTabId
-      return { tabs, activeTabId }
+      const paneByTab = { ...state.paneByTab }
+      delete paneByTab[id]
+      return { tabs, activeTabId, paneByTab }
     })
   },
   activateTab: (id) => set({ activeTabId: id }),

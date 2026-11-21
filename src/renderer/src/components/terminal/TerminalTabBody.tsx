@@ -47,17 +47,22 @@ export function TerminalTabBody({
     if (!element) return undefined
     const shells = new Map<number, PaneShell>()
     const closeTab = useTerminalStore.getState().closeTab
+    const publishActivePane = () =>
+      useTerminalStore
+        .getState()
+        .setActivePane(tab.id, panes.getActivePane()?.container.dataset.terminalId ?? null)
     let nextLaunch = tab.agent
     const panes = new PaneManager(element, {
       terminalOptions: currentTerminalOptions,
       gpuAcceleration: () => useSettingsStore.getState().values['terminal.gpuAcceleration'],
+      onActivePaneChange: publishActivePane,
       onPaneCreated: (pane) => {
         const agent = nextLaunch
         nextLaunch = undefined
         bindClipboardKeys(pane.terminal)
         shells.set(
           pane.id,
-          startPaneShell(pane, tab.cwd, () => panes.closePane(pane.id), agent)
+          startPaneShell(pane, tab.cwd, () => panes.closePane(pane.id), agent, publishActivePane)
         )
       },
       onPaneClosed: (paneId) => {

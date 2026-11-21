@@ -14,6 +14,8 @@ export type AgentSession = {
   cwd: string
   process: 'running' | 'exited'
   activity: 'working' | 'idle' | 'unknown'
+  runningChildren: number | null
+  runningScripts: number | null
   tool: string | null
   wait: 'permission' | 'question' | 'external-input' | null
   outcome: 'completed' | 'failed' | 'cancelled' | 'unknown' | null

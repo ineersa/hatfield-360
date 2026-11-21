@@ -16,11 +16,11 @@ const oneOf =
   <const T extends string>(...values: T[]) =>
   (value: unknown): value is T =>
     values.some((candidate) => candidate === value)
-const capability = oneOf('waits', 'actors', 'notifications', 'session-end')
-type Capability = 'waits' | 'actors' | 'notifications' | 'session-end'
+const capability = oneOf('waits', 'actors', 'notifications', 'session-end', 'scripts')
+type Capability = 'waits' | 'actors' | 'notifications' | 'session-end' | 'scripts'
 const capabilities = (value: unknown): value is Capability[] =>
   Array.isArray(value) &&
-  value.length <= 4 &&
+  value.length <= 5 &&
   value.every(capability) &&
   new Set(value).size === value.length
 const actor = { actorId: id, actorStart: sequence }
@@ -30,6 +30,8 @@ const events = {
   'session.ended': {},
   'actor.started': { actorId: id, parentId: id, parentStart: sequence },
   'actor.ended': actor,
+  'script.started': { scriptId: id },
+  'script.ended': { scriptId: id, scriptStart: sequence },
   'turn.started': { ...actor, turnId: id },
   'turn.ended': { ...turn, outcome: oneOf('completed', 'failed', 'cancelled', 'unknown') },
   'activity.changed': { ...turn, activity: oneOf('working', 'idle') },

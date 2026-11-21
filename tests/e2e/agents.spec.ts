@@ -3,14 +3,18 @@ import type { DesktopApi } from '../../src/shared/desktop-api'
 import { expect, test, type Locator, type Page, type Video } from '@playwright/test'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
+import { setTimeout as delay } from 'node:timers/promises'
 import { git, makeRepo } from './git-repository'
 import { makeTempDir, saveScreenshot, withApp } from './launch-app'
 
 declare global {
   var desktop: DesktopApi
+  var innerWidth: number
+  var innerHeight: number
 }
 
 const fixture = resolve(__dirname, 'fixtures/agent-scenario.mjs')
+const demoSize = { width: 1600, height: 1000 }
 const demo = process.env.E2E_AGENT_DEMO === '1'
 const artifacts = resolve(__dirname, '../../test-results/agents-demo')
 const output = (pane: Locator) => pane.locator('.xterm-rows')
@@ -22,10 +26,12 @@ async function seed(repo?: string) {
   const project = repo ?? join(dir, 'agent-project')
   const userDataDir = join(dir, 'user-data')
   if (!repo) await mkdir(project)
+  const otherProject = join(dir, 'side-project')
+  await mkdir(otherProject)
   await mkdir(join(userDataDir, 'workspaces'), { recursive: true })
   await writeFile(
     join(userDataDir, 'workspaces/default.hatfield-workspace'),
-    JSON.stringify({ version: 1, folders: [{ path: project }] })
+    JSON.stringify({ version: 1, folders: [{ path: project }, { path: otherProject }] })
   )
   await writeFile(
     join(userDataDir, 'settings.json'),
@@ -57,7 +63,9 @@ async function launch(page: Page, provider: string) {
 }
 
 async function capture(page: Page, name: string) {
-  if (demo) await saveScreenshot(page, `agents-demo/${name}`)
+  if (!demo) return
+  await saveScreenshot(page, `agents-demo/${name}`)
+  await delay(1_650)
 }
 
 test('agent launches report through the real socket and sidebar rows select exact panes', async () => {
@@ -66,13 +74,45 @@ test('agent launches report through the real socket and sidebar rows select exac
   const { project, userDataDir, cleanup } = await seed()
   const videos: Video[] = []
   try {
-    if (demo) await mkdir(artifacts, { recursive: true })
+    if (demo) {
+      await mkdir(artifacts, { recursive: true })
+      await writeFile(
+        join(userDataDir, 'window-state.json'),
+        JSON.stringify({
+          version: 1,
+          window: { x: 0, y: 0, ...demoSize, maximized: false },
+          layout: {
+            activeView: 'agents',
+            panels: {
+              agents: { width: 380, collapsed: false },
+              files: { width: 300, collapsed: false },
+              git: { width: 300, collapsed: false }
+            }
+          }
+        })
+      )
+    }
     await withApp(
-      async (_app, page) => {
+      async (app, page) => {
         const video = page.video()
         if (video) videos.push(video)
         if (demo) {
           expect(video, 'Electron window must support Playwright video').not.toBeNull()
+          await app.evaluate(({ BrowserWindow }, size) => {
+            const window = BrowserWindow.getAllWindows()[0]
+            if (!window) throw new Error('Demo window missing')
+            const [width, height] = window.getContentSize()
+            if (width !== size.width || height !== size.height)
+              window.setContentSize(size.width, size.height)
+          }, demoSize)
+          await expect
+            .poll(() =>
+              page.evaluate(() => ({
+                width: globalThis.innerWidth,
+                height: globalThis.innerHeight
+              }))
+            )
+            .toEqual(demoSize)
           await page.context().tracing.start({ screenshots: true, snapshots: true })
         }
         try {
@@ -121,28 +161,60 @@ test('agent launches report through the real socket and sidebar rows select exac
           await expect(first).toHaveClass(/is-active/)
           await expect(panes).toHaveCount(2)
           await capture(page, '02-needs-input')
-          const filter = page.getByRole('combobox', { name: 'Filter sessions by status' })
-          await filter.selectOption({ label: 'Needs input' })
+          const filter = page.getByRole('group', { name: 'Filter sessions by status' })
+          await filter.getByRole('button', { name: 'Needs input' }).click()
           await expect(claude).toHaveCount(0)
-          await filter.selectOption({ label: 'All sessions' })
+          await filter.getByRole('button', { name: 'Working', exact: true }).click()
+          await expect(claude).toContainText('Working')
+          await expect(hatfield).toContainText('Needs input: permission')
+          await filter.getByRole('button', { name: 'All', exact: true }).click()
           await command(page, first, 'resolve')
           await expect(attention).toHaveCount(0)
           await command(page, first, 'child')
           await command(page, first, 'completed')
-          await expect(hatfield).toContainText('Needs input: question · Completed')
+          await expect(hatfield).toContainText('Needs input: question · Last turn: completed')
+          await capture(page, '03-question')
           await command(page, first, 'duplicate', 'duplicate')
           await command(page, first, 'stale', 'stale')
           await expect(attention.getByRole('button')).toHaveCount(1)
-          await expect(hatfield).toContainText('Needs input: question · Completed')
+          await expect(hatfield).toContainText('Needs input: question · Last turn: completed')
           await command(page, first, 'child-done')
           await expect(hatfield).toContainText('Idle · Completed')
+          await command(page, first, 'again')
+          await command(page, first, 'child-working')
+          await command(page, first, 'script')
+          await command(page, first, 'wait')
+          await expect(hatfield).toContainText('1 agent running · 1 script running')
+          await filter.getByRole('button', { name: 'Working', exact: true }).click()
+          await expect(hatfield).toContainText('Needs input: permission')
+          await filter.getByRole('button', { name: 'Needs input' }).click()
+          await expect(claude).toContainText('Working')
+          await command(page, first, 'resolve')
+          await command(page, first, 'completed')
+          await expect(hatfield).toContainText('Working · Last turn: completed')
+          await expect(hatfield).toHaveAttribute('aria-current', 'true')
+          await capture(page, '04-background')
+          await filter.getByRole('button', { name: 'All', exact: true }).click()
+          const completed = filter.getByRole('button', { name: 'Completed', exact: true })
+          await completed.click()
+          await expect(hatfield).toHaveCount(0)
+          await filter.getByRole('button', { name: 'All', exact: true }).click()
+          await command(page, first, 'child-done')
+          await expect(hatfield).not.toContainText('agent running')
+          await expect(hatfield).toContainText('1 script running')
+          await completed.click()
+          await expect(hatfield).toHaveCount(0)
+          await command(page, first, 'script-done')
+          await expect(hatfield).toContainText('Idle · Completed')
+          await filter.getByRole('button', { name: 'All', exact: true }).click()
+          await capture(page, '05-completed')
           await command(page, first, 'again')
           await command(page, first, 'failed')
           await expect(hatfield).toContainText('Idle · Failed')
           await command(page, second, 'cancelled')
           await expect(claude).toContainText('Idle · Cancelled')
           await expect(hatfield).toContainText('Idle · Failed')
-          await capture(page, '03-outcomes')
+          await capture(page, '06-outcomes')
           await command(page, first, 'again')
           await command(page, first, 'wait')
           await first.click()
@@ -157,7 +229,7 @@ test('agent launches report through the real socket and sidebar rows select exac
       },
       {
         userDataDir,
-        ...(demo ? { recordVideo: { dir: artifacts, size: { width: 1280, height: 800 } } } : {})
+        ...(demo ? { recordVideo: { dir: artifacts, size: demoSize } } : {})
       }
     )
     const recorded = videos[0]
@@ -231,6 +303,8 @@ function expectPublicSnapshot(snapshot: AgentSnapshot): void {
       'project',
       'provider',
       'providerSessionId',
+      'runningChildren',
+      'runningScripts',
       'terminalId',
       'tool',
       'updatedAt',
@@ -286,6 +360,13 @@ test('a linked worktree launches into its own tab and publishes only public sess
               .getByRole('list', { name: 'Sessions needing input' })
               .getByRole('button', { name: /^Claude session/ })
             await expect(attention).toContainText('Needs input: permission')
+            const scope = page.getByRole('combobox', { name: 'Filter by project' })
+            await scope.selectOption({ label: 'side-project' })
+            await expect(attention).toHaveCount(0)
+            await expect(page.getByText('No sessions match this filter.')).toBeVisible()
+            await expect(page.getByRole('tab', { name: 'Hatfield', selected: true })).toBeVisible()
+            await scope.selectOption({ label: 'All projects' })
+            await expect(attention).toBeVisible()
             await expect(page.getByRole('tab', { name: 'Hatfield', selected: true })).toBeVisible()
             await expect(rootPane).toHaveClass(/is-active/)
             await attention.click()
