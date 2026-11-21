@@ -1,9 +1,13 @@
 import type { Notice } from './notice'
 
-/** A project folder in the open workspace, as the renderer sees it. */
+/** A project shows in the Projects panel and the file tree; a plain folder only in the file tree. */
+export type WorkspaceFolderKind = 'project' | 'folder'
+
+/** A folder in the open workspace, as the renderer sees it. */
 export type WorkspaceFolder = {
   path: string
   name: string
+  kind: WorkspaceFolderKind
   /** The folder no longer exists on disk; it stays listed until the user removes it. */
   missing: boolean
 }
@@ -41,6 +45,7 @@ export const WORKSPACE_CHANNELS = {
   get: 'workspace:get',
   addFolder: 'workspace:add-folder',
   removeFolder: 'workspace:remove-folder',
+  setFolderKind: 'workspace:set-folder-kind',
   openFile: 'workspace:open-file',
   openRecent: 'workspace:open-recent',
   removeRecent: 'workspace:remove-recent',
@@ -52,6 +57,8 @@ export type WorkspaceApi = {
   /** Opens the native folder picker in main and adds the chosen folder. */
   addWorkspaceFolder: () => Promise<void>
   removeWorkspaceFolder: (path: string) => Promise<void>
+  /** Hide from Projects (`folder`) or Show in Projects (`project`). */
+  setWorkspaceFolderKind: (path: string, kind: WorkspaceFolderKind) => Promise<void>
   /** Opens the native file picker in main and switches to the chosen workspace file. */
   openWorkspaceFile: () => Promise<void>
   /** Opens a Recent entry; main accepts only entries in its own Recent list. */

@@ -1,5 +1,6 @@
 import { readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
+import type { WorkspaceFolderKind } from '../../shared/workspace-api'
 import { writeFileAtomic } from '../files/atomic-write'
 import {
   EMPTY_WORKSPACE_DOCUMENT,
@@ -17,8 +18,11 @@ export function withWorkspaceExtension(file: string): string {
   )
 }
 
+/** A folder of an open workspace, by absolute path. */
+export type WorkspaceEntry = { path: string; kind: WorkspaceFolderKind }
+
 export type ReadWorkspaceFile =
-  | { status: 'ok'; folders: string[] }
+  | { status: 'ok'; folders: WorkspaceEntry[] }
   | { status: 'missing' }
   | { status: 'corrupt'; reason: string }
   | { status: 'newer'; version: number }
@@ -38,14 +42,18 @@ export async function readWorkspaceFile(file: string): Promise<ReadWorkspaceFile
   }
   const parsed = parseWorkspaceDocument(text)
   if (parsed.status !== 'ok') return parsed
-  const folders = parsed.document.folders.map(({ path }) => fromStoredFolderPath(path, file))
-  return { status: 'ok', folders: [...new Set(folders)] }
+  const folders = new Map<string, WorkspaceFolderKind>()
+  for (const { path, kind } of parsed.document.folders) {
+    const absolute = fromStoredFolderPath(path, file)
+    if (!folders.has(absolute)) folders.set(absolute, kind)
+  }
+  return { status: 'ok', folders: [...folders].map(([path, kind]) => ({ path, kind })) }
 }
 
-export function writeWorkspaceFile(file: string, folders: string[]): Promise<void> {
+export function writeWorkspaceFile(file: string, folders: WorkspaceEntry[]): Promise<void> {
   const document = {
     ...EMPTY_WORKSPACE_DOCUMENT,
-    folders: folders.map((folder) => ({ path: toStoredFolderPath(folder, file) }))
+    folders: folders.map(({ path, kind }) => ({ path: toStoredFolderPath(path, file), kind }))
   }
   return writeFileAtomic(file, serializeWorkspaceDocument(document))
 }

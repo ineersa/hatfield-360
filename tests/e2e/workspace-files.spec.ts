@@ -85,7 +85,10 @@ test('recent workspaces open from the welcome screen, reopen at launch and close
         await folderList(page).getByRole('listitem', { name: 'outside' }).click({ button: 'right' })
         await page.getByRole('menuitem', { name: 'Remove from Workspace' }).click()
         await expect(folderList(page).getByRole('listitem')).toHaveText(['api'])
-        expect(await readJson(team)).toEqual({ version: 1, folders: [{ path: 'api' }] })
+        expect(await readJson(team)).toEqual({
+          version: 1,
+          folders: [{ path: 'api', kind: 'project' }]
+        })
       },
       { userDataDir: userData }
     )

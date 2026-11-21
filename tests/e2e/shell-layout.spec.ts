@@ -30,7 +30,7 @@ test('activity bar switches between the Agents, Files and Git views', async () =
     await expect(viewButton(page, 'Files')).toHaveAttribute('aria-pressed', 'true')
     await expect(viewButton(page, 'Agents')).toHaveAttribute('aria-pressed', 'false')
     await expect(sidePanel(page, 'Agents')).toHaveCount(0)
-    await expect(sidePanel(page, 'Files').getByRole('heading')).toHaveText('Project')
+    await expect(sidePanel(page, 'Files').getByRole('heading')).toHaveText('Files')
     await expect(page.getByRole('main', { name: 'Files' })).toContainText('has no folders yet')
 
     await viewButton(page, 'Git').click()

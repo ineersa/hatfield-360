@@ -36,6 +36,15 @@ export function registerWorkspaceIpc(): void {
     }
   })
 
+  handleTrusted(WORKSPACE_CHANNELS.setFolderKind, async (_event, path, kind) => {
+    if (typeof path !== 'string' || path === '' || (kind !== 'project' && kind !== 'folder')) {
+      throw new Error('setWorkspaceFolderKind expects a folder path and "project" or "folder"')
+    }
+    if (!(await workspaceStore.setFolderKind(path, kind))) {
+      throw new Error(`Not in the workspace: ${path}`)
+    }
+  })
+
   handleTrusted(WORKSPACE_CHANNELS.openFile, (event) =>
     pickAndOpenWorkspaceFile(BrowserWindow.fromWebContents(event.sender))
   )

@@ -39,8 +39,10 @@ async function exists(path: string): Promise<boolean> {
 
 /** Asks for a folder with the native picker and adds it to the open workspace. */
 export async function pickAndAddWorkspaceFolder(parent: BrowserWindow | null): Promise<void> {
+  const defaultPath = await workspaceStore.folderPickerStart()
   const result = await showOpenDialog(parent, {
     title: 'Add Folder to Workspace',
+    ...(defaultPath === undefined ? {} : { defaultPath }),
     properties: ['openDirectory']
   })
   const [folder] = result.filePaths

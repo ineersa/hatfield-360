@@ -12,10 +12,17 @@ export class GitError extends Error {
 
 const OUTPUT_LIMIT = 16 * 1024 * 1024
 
+type GitOptions = {
+  /** Written to git's stdin. */
+  input?: string
+  /** Exit codes that are answers rather than failures, such as 1 from `check-ignore` when nothing matched. */
+  okExitCodes?: number[]
+}
+
 /** Runs git (no shell) in `cwd` and resolves with its stdout. */
-export function runGit(cwd: string, args: string[]): Promise<string> {
+export function runGit(cwd: string, args: string[], options: GitOptions = {}): Promise<string> {
   return new Promise((resolve, reject) => {
-    execFile(
+    const child = execFile(
       'git',
       args,
       {
@@ -27,7 +34,10 @@ export function runGit(cwd: string, args: string[]): Promise<string> {
         env: { ...process.env, GIT_OPTIONAL_LOCKS: '0', LC_ALL: 'C' }
       },
       (error, stdout, stderr) => {
-        if (!error) {
+        if (
+          !error ||
+          (typeof error.code === 'number' && options.okExitCodes?.includes(error.code))
+        ) {
           resolve(stdout)
           return
         }
@@ -44,5 +54,6 @@ export function runGit(cwd: string, args: string[]): Promise<string> {
         )
       }
     )
+    if (options.input !== undefined) child.stdin?.end(options.input)
   })
 }

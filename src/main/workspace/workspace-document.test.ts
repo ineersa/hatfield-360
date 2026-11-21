@@ -1,27 +1,55 @@
 import { describe, expect, it } from 'vitest'
-import { parseWorkspaceDocument, serializeWorkspaceDocument } from './workspace-document'
+import {
+  parseWorkspaceDocument,
+  serializeWorkspaceDocument,
+  type WorkspaceDocument
+} from './workspace-document'
 
 describe('parseWorkspaceDocument', () => {
   it('reads folders from a valid file and round-trips through serialize', () => {
-    const text =
-      '{\n  "version": 1,\n  "folders": [\n    {\n      "path": "/home/me/app"\n    }\n  ]\n}\n'
-    const parsed = parseWorkspaceDocument(text)
-    expect(parsed).toEqual({
+    const document: WorkspaceDocument = {
+      version: 1,
+      folders: [
+        { path: '/home/me/app', kind: 'project' },
+        { path: '/home/me/.agents', kind: 'folder' }
+      ]
+    }
+    const text = serializeWorkspaceDocument(document)
+    expect(JSON.parse(text)).toEqual(document)
+    expect(parseWorkspaceDocument(text)).toEqual({ status: 'ok', document })
+  })
+
+  it('reads folders saved without a kind, or with an unknown one, as projects', () => {
+    expect(
+      parseWorkspaceDocument(
+        '{"version":1,"folders":[{"path":"/a"},{"path":"/b","kind":"shared"},{"path":"/c","kind":"folder"}]}'
+      )
+    ).toEqual({
       status: 'ok',
-      document: { version: 1, folders: [{ path: '/home/me/app' }] }
+      document: {
+        version: 1,
+        folders: [
+          { path: '/a', kind: 'project' },
+          { path: '/b', kind: 'project' },
+          { path: '/c', kind: 'folder' }
+        ]
+      }
     })
-    expect(serializeWorkspaceDocument({ version: 1, folders: [{ path: '/home/me/app' }] })).toBe(
-      text
-    )
   })
 
   it('drops repeated folders, keeping the first', () => {
     const parsed = parseWorkspaceDocument(
-      '{"version":1,"folders":[{"path":"/a"},{"path":"/b"},{"path":"/a"}]}'
+      '{"version":1,"folders":[{"path":"/a","kind":"folder"},{"path":"/b"},{"path":"/a"}]}'
     )
     expect(parsed).toEqual({
       status: 'ok',
-      document: { version: 1, folders: [{ path: '/a' }, { path: '/b' }] }
+      document: {
+        version: 1,
+        folders: [
+          { path: '/a', kind: 'folder' },
+          { path: '/b', kind: 'project' }
+        ]
+      }
     })
   })
 

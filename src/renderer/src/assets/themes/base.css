@@ -22,6 +22,8 @@
   --tab-bar-height: calc(var(--app-font-size) * 36 / 13);
   --status-bar-height: calc(var(--app-font-size) * 26 / 13);
   --tree-indent: calc(var(--app-font-size) * 40 / 13);
+  /* One nesting level of the file tree. */
+  --file-tree-indent: calc(var(--app-font-size) * 18 / 13);
   --empty-state-icon-size: calc(var(--app-font-size) * 40 / 13);
 
   /* Text styles: size, weight and colour per kind of text. */

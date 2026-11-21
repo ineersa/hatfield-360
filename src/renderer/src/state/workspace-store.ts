@@ -1,7 +1,11 @@
 import { create } from 'zustand'
 import { mainErrorMessage } from '@/lib/main-error-message'
 import { followNotice, notify } from '@/state/notification-store'
-import type { RecentTarget, WorkspaceView } from '../../../shared/workspace-api'
+import type {
+  RecentTarget,
+  WorkspaceFolderKind,
+  WorkspaceView
+} from '../../../shared/workspace-api'
 
 type WorkspaceState = {
   workspace: WorkspaceView | null
@@ -9,6 +13,7 @@ type WorkspaceState = {
   connect: () => () => void
   addFolder: () => Promise<void>
   removeFolder: (path: string) => Promise<void>
+  setFolderKind: (path: string, kind: WorkspaceFolderKind) => Promise<void>
   openWorkspaceFile: () => Promise<void>
   openRecent: (target: RecentTarget) => Promise<void>
   removeRecent: (target: RecentTarget) => Promise<void>
@@ -39,6 +44,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => {
     },
     addFolder: () => run(() => window.desktop.addWorkspaceFolder()),
     removeFolder: (path) => run(() => window.desktop.removeWorkspaceFolder(path)),
+    setFolderKind: (path, kind) => run(() => window.desktop.setWorkspaceFolderKind(path, kind)),
     openWorkspaceFile: () => run(() => window.desktop.openWorkspaceFile()),
     openRecent: ({ kind, path }) => run(() => window.desktop.openRecent({ kind, path })),
     removeRecent: ({ kind, path }) => run(() => window.desktop.removeRecent({ kind, path }))
