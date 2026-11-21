@@ -11,6 +11,8 @@ import {
   DEFAULT_SETTINGS,
   FONT_SIZE_RANGE,
   ICON_THEMES,
+  LINE_HEIGHT_RANGE,
+  type NumberRange,
   type SettingKey,
   type Settings
 } from '../../shared/settings-api'
@@ -42,14 +44,19 @@ function fontFamily(value: unknown): Checked<string> {
   return { value: value.trim() }
 }
 
-function fontSize(value: unknown): Checked<number> {
-  if (typeof value !== 'number' || !Number.isFinite(value)) return { problem: 'must be a number' }
-  const { min, max } = FONT_SIZE_RANGE
-  const clamped = Math.min(max, Math.max(min, value))
-  return clamped === value
-    ? { value }
-    : { value: clamped, problem: `must be between ${min} and ${max}; using ${clamped}` }
+/** Checks a number, clamping it into `range`. */
+function inRange({ min, max }: NumberRange): (value: unknown) => Checked<number> {
+  return (value) => {
+    if (typeof value !== 'number' || !Number.isFinite(value)) return { problem: 'must be a number' }
+    const clamped = Math.min(max, Math.max(min, value))
+    return clamped === value
+      ? { value }
+      : { value: clamped, problem: `must be between ${min} and ${max}; using ${clamped}` }
+  }
 }
+
+const fontSize = inRange(FONT_SIZE_RANGE)
+const lineHeight = inRange(LINE_HEIGHT_RANGE)
 
 /** Checks a value is one of `choices`. */
 function oneOf<T extends string>(choices: readonly T[]): (value: unknown) => Checked<T> {
@@ -72,9 +79,11 @@ const CHECKS: { [K in SettingKey]: (value: unknown) => Checked<Settings[K]> } = 
   'app.fontSize': fontSize,
   'terminal.fontFamily': fontFamily,
   'terminal.fontSize': fontSize,
+  'terminal.lineHeight': lineHeight,
   'terminal.gpuAcceleration': flag,
   'editor.fontFamily': fontFamily,
   'editor.fontSize': fontSize,
+  'editor.lineHeight': lineHeight,
   'workbench.iconTheme': oneOf(ICON_THEMES),
   'workbench.colorTheme': oneOf(ids(APP_THEMES)),
   'editor.colorTheme': oneOf(ids(EDITOR_THEMES)),

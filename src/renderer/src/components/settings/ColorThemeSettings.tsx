@@ -230,6 +230,7 @@ function EditorThemePreview(): React.JSX.Element | null {
   const id = useSettingsStore((state) => state.values['editor.colorTheme'])
   const fontFamily = useSettingsStore((state) => state.values['editor.fontFamily'])
   const fontSize = useSettingsStore((state) => state.values['editor.fontSize'])
+  const lineHeight = useSettingsStore((state) => state.values['editor.lineHeight'])
   const scheme = useEditorScheme(id)
   // Loads in a frame or two; the section grows once it has.
   if (!scheme) return null
@@ -247,7 +248,8 @@ function EditorThemePreview(): React.JSX.Element | null {
         backgroundColor: text.background,
         color: text.foreground,
         fontFamily: cssFontFamily(fontFamily),
-        fontSize
+        fontSize,
+        lineHeight
       }}
     >
       <div className="py-2">

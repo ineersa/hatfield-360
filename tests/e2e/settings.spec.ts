@@ -131,6 +131,22 @@ test('the Settings page applies each change as it is made and writes it into set
             '{\n  // my terminal\n  "terminal.fontSize": 16,\n  "app.fontFamily": "Noto Sans",\n  "app.fontSize": 16\n}\n'
           )
 
+        // Line height steps by 0.1 and shows on the font preview: 1.3 × 13px.
+        await settingsPage.getByRole('button', { name: 'Increase Editor line height' }).click()
+        await expect(settingsPage.getByLabel('Editor line height', { exact: true })).toHaveValue(
+          '1.3'
+        )
+        await expect(settingsPage.getByLabel('Editor font preview')).toHaveCSS(
+          'line-height',
+          '16.9px'
+        )
+        await expect.poll(readSettings).toMatchObject({ 'editor.lineHeight': 1.3 })
+        await settingsPage.getByRole('button', { name: 'Reset Editor line height' }).click()
+        await expect(settingsPage.getByLabel('Editor line height', { exact: true })).toHaveValue(
+          '1.2'
+        )
+        await expect.poll(readSettings).not.toHaveProperty(['editor.lineHeight'])
+
         await settingsPage.getByText('Lucide', { exact: true }).click()
         await expect(projectIcon(page, folderName)).toHaveAttribute('data-icon-theme', 'lucide')
 

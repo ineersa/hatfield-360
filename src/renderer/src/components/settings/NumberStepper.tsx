@@ -1,28 +1,34 @@
 import { Minus, Plus } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
-import { FONT_SIZE_RANGE } from '../../../../shared/settings-api'
+import type { NumberRange } from '../../../../shared/settings-api'
 
-/** Typing pauses this long before a size applies, so "16" doesn't pass through 1. */
+/** Typing pauses this long before a value applies, so "16" doesn't pass through 1. */
 const TYPING_DELAY_MS = 350
 
-const clamp = (size: number): number =>
-  Math.min(FONT_SIZE_RANGE.max, Math.max(FONT_SIZE_RANGE.min, size))
+// Rounds away float noise from stepping by 0.1 (1.2 + 0.1 is 1.3000000000000003).
+const tidy = (value: number): number => Math.round(value * 1e6) / 1e6
 
 const STEP_BUTTON_CLASS =
   'flex size-icon-button shrink-0 items-center justify-center rounded-button text-muted-foreground hover:bg-hover hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none disabled:opacity-50'
 
-/** A font size that applies while the user types or steps it; Escape puts the saved size back. */
-export function FontSizeInput({
+/** A number (font size, line height) that applies while the user types or steps it; Escape puts the saved one back. */
+export function NumberStepper({
   label,
   value,
+  range,
   disabled,
   onChange
 }: {
   label: string
   value: number
+  range: NumberRange
   disabled: boolean
-  onChange: (size: number) => void
+  onChange: (value: number) => void
 }): React.JSX.Element {
+  const clamp = (next: number): number => tidy(Math.min(range.max, Math.max(range.min, next)))
+  // A fractional step shows whole values as 1.0, so the field reads as a multiplier.
+  const shown = (next: number): string =>
+    range.step < 1 && Number.isInteger(next) ? next.toFixed(1) : String(next)
   // While the field has focus it shows what the user typed; otherwise the saved size.
   const [draft, setDraft] = useState<string | null>(null)
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -42,8 +48,8 @@ export function FontSizeInput({
 
   const apply = (text: string): void => {
     cancelPending()
-    const size = Number(text)
-    if (text.trim() !== '' && Number.isFinite(size) && clamp(size) !== value) onChange(clamp(size))
+    const next = Number(text)
+    if (text.trim() !== '' && Number.isFinite(next) && clamp(next) !== value) onChange(clamp(next))
   }
 
   const step = (by: number): void => {
@@ -57,8 +63,8 @@ export function FontSizeInput({
       <button
         type="button"
         aria-label={`Decrease ${label}`}
-        disabled={disabled || value <= FONT_SIZE_RANGE.min}
-        onClick={() => step(-1)}
+        disabled={disabled || value <= range.min}
+        onClick={() => step(-range.step)}
         className={STEP_BUTTON_CLASS}
       >
         <Minus className="size-4" aria-hidden />
@@ -67,8 +73,8 @@ export function FontSizeInput({
         aria-label={label}
         inputMode="decimal"
         disabled={disabled}
-        value={draft ?? String(value)}
-        onFocus={() => setDraft(String(value))}
+        value={draft ?? shown(value)}
+        onFocus={() => setDraft(shown(value))}
         onChange={(event) => {
           const text = event.target.value
           setDraft(text)
@@ -84,8 +90,9 @@ export function FontSizeInput({
           if (event.key === 'Enter') event.currentTarget.blur()
           if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
             event.preventDefault()
-            step(event.key === 'ArrowUp' ? 1 : -1)
-            setDraft(String(clamp(value + (event.key === 'ArrowUp' ? 1 : -1))))
+            const by = event.key === 'ArrowUp' ? range.step : -range.step
+            step(by)
+            setDraft(shown(clamp(value + by)))
           }
           if (event.key === 'Escape') {
             // Escape here only undoes the typing; it doesn't close the page.
@@ -100,8 +107,8 @@ export function FontSizeInput({
       <button
         type="button"
         aria-label={`Increase ${label}`}
-        disabled={disabled || value >= FONT_SIZE_RANGE.max}
-        onClick={() => step(1)}
+        disabled={disabled || value >= range.max}
+        onClick={() => step(range.step)}
         className={STEP_BUTTON_CLASS}
       >
         <Plus className="size-4" aria-hidden />

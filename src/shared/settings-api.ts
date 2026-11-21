@@ -9,10 +9,14 @@ export type Settings = {
   'app.fontSize': number
   'terminal.fontFamily': string
   'terminal.fontSize': number
+  /** Line height as a multiple of the font size. */
+  'terminal.lineHeight': number
   /** Draw terminals with WebGL; off uses the slower DOM renderer, for GPUs that render them wrong. */
   'terminal.gpuAcceleration': boolean
   'editor.fontFamily': string
   'editor.fontSize': number
+  /** Line height as a multiple of the font size. */
+  'editor.lineHeight': number
   'workbench.iconTheme': IconTheme
   /** The UI chrome's colours, text styles and shapes. */
   'workbench.colorTheme': AppThemeId
@@ -32,8 +36,12 @@ export type AppThemeId = (typeof APP_THEMES)[number]['id']
 export type EditorThemeId = (typeof EDITOR_THEMES)[number]['id']
 export type TerminalThemeId = (typeof TERMINAL_THEMES)[number]['id']
 
-/** Font sizes outside this range are clamped. */
-export const FONT_SIZE_RANGE = { min: 8, max: 32 } as const
+/** A number setting's allowed values: outside the range it is clamped; the Settings page steps by `step`. */
+export type NumberRange = { min: number; max: number; step: number }
+
+export const FONT_SIZE_RANGE: NumberRange = { min: 8, max: 32, step: 1 }
+
+export const LINE_HEIGHT_RANGE: NumberRange = { min: 1, max: 2, step: 0.1 }
 
 const MONOSPACE_FONTS =
   "'JetBrains Mono', 'Cascadia Code', 'SF Mono', Menlo, Consolas, 'DejaVu Sans Mono', monospace"
@@ -43,9 +51,12 @@ export const DEFAULT_SETTINGS: Settings = {
   'app.fontSize': 14,
   'terminal.fontFamily': MONOSPACE_FONTS,
   'terminal.fontSize': 13,
+  'terminal.lineHeight': 1,
   'terminal.gpuAcceleration': true,
   'editor.fontFamily': MONOSPACE_FONTS,
   'editor.fontSize': 13,
+  // JetBrains IDEs' default line spacing.
+  'editor.lineHeight': 1.2,
   'workbench.iconTheme': 'catppuccin',
   'workbench.colorTheme': 'islands-dark',
   'editor.colorTheme': 'islands-dark',

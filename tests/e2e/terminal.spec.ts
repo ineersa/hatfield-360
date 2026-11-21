@@ -82,6 +82,17 @@ test('a terminal opens in the project, runs commands and closes when its shell e
         await expect(screenText(pane)).toContainText('Hatfield360')
         await saveScreenshot(page, 'terminal-single')
 
+        // terminal.lineHeight spaces out the rows of an open terminal as soon as it is saved.
+        const rowHeight = async (): Promise<number> =>
+          (await screenText(pane).locator(':scope > div').first().boundingBox())?.height ?? 0
+        const single = await rowHeight()
+        expect(single).toBeGreaterThan(0)
+        await writeFile(
+          join(userData, 'settings.json'),
+          '{ "terminal.gpuAcceleration": false, "terminal.lineHeight": 2 }'
+        )
+        await expect.poll(rowHeight).toBeGreaterThanOrEqual(single * 2 - 1)
+
         await run(page, pane, 'exit')
         await expect(page.getByRole('tab')).toHaveCount(0)
 

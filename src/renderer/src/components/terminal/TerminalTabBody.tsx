@@ -15,6 +15,7 @@ function currentTerminalOptions(): ITerminalOptions {
   return {
     fontFamily: values['terminal.fontFamily'],
     fontSize: values['terminal.fontSize'],
+    lineHeight: values['terminal.lineHeight'],
     theme: terminalTheme(values['terminal.colorTheme'])
   }
 }
@@ -36,6 +37,7 @@ export function TerminalTabBody({
   const manager = useRef<PaneManager | null>(null)
   const fontFamily = useSettingsStore((state) => state.values['terminal.fontFamily'])
   const fontSize = useSettingsStore((state) => state.values['terminal.fontSize'])
+  const lineHeight = useSettingsStore((state) => state.values['terminal.lineHeight'])
   const gpuAcceleration = useSettingsStore((state) => state.values['terminal.gpuAcceleration'])
   const colorTheme = useSettingsStore((state) => state.values['terminal.colorTheme'])
 
@@ -91,8 +93,8 @@ export function TerminalTabBody({
   }, [tab.id, tab.cwd])
 
   useEffect(() => {
-    manager.current?.setTerminalOptions({ fontFamily, fontSize })
-  }, [fontFamily, fontSize])
+    manager.current?.setTerminalOptions({ fontFamily, fontSize, lineHeight })
+  }, [fontFamily, fontSize, lineHeight])
 
   useEffect(() => {
     manager.current?.setTerminalOptions({ theme: terminalTheme(colorTheme) })

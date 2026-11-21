@@ -5,10 +5,15 @@ import { cn } from '@/lib/class-names'
 import { cssFontFamily } from '@/lib/css-font-family'
 import { useSettingsStore } from '@/state/settings-store'
 import { useShellLayoutStore } from '@/state/shell-layout-store'
-import { DEFAULT_SETTINGS, type IconTheme } from '../../../../shared/settings-api'
+import {
+  DEFAULT_SETTINGS,
+  FONT_SIZE_RANGE,
+  LINE_HEIGHT_RANGE,
+  type IconTheme
+} from '../../../../shared/settings-api'
 import { ColorThemeSettings } from './ColorThemeSettings'
 import { FONT_PICKER_ATTRIBUTE, FontPicker } from './FontPicker'
-import { FontSizeInput } from './FontSizeInput'
+import { NumberStepper } from './NumberStepper'
 import { ResetButton } from './ResetButton'
 
 const PREVIEW_TEXT = 'The quick brown fox jumps over the lazy dog · 0O 1lI {}'
@@ -79,15 +84,21 @@ function FontSetting({
   name,
   description,
   familyKey,
-  sizeKey
+  sizeKey,
+  lineHeightKey
 }: {
   name: string
   description: string
   familyKey: 'app.fontFamily' | 'terminal.fontFamily' | 'editor.fontFamily'
   sizeKey: 'app.fontSize' | 'terminal.fontSize' | 'editor.fontSize'
+  /** The app's line spacing comes from the theme's text styles and row heights, so it has none. */
+  lineHeightKey?: 'terminal.lineHeight' | 'editor.lineHeight'
 }): React.JSX.Element {
   const family = useSettingsStore((state) => state.values[familyKey])
   const size = useSettingsStore((state) => state.values[sizeKey])
+  const lineHeight = useSettingsStore((state) =>
+    lineHeightKey ? state.values[lineHeightKey] : undefined
+  )
   const familyCustomized = useSettingsStore((state) => state.customized.includes(familyKey))
   const editable = useSettingsStore((state) => state.editable)
   const update = useSettingsStore((state) => state.update)
@@ -111,18 +122,32 @@ function FontSetting({
           onChange={(next) => void update(familyKey, next)}
         />
         <ResetButton settingKey={familyKey} label={`${name} font family`} />
-        <FontSizeInput
+        <NumberStepper
           label={`${name} font size`}
           value={size}
+          range={FONT_SIZE_RANGE}
           disabled={!editable}
           onChange={(next) => void update(sizeKey, next)}
         />
         <ResetButton settingKey={sizeKey} label={`${name} font size`} />
       </div>
+      {lineHeightKey && lineHeight !== undefined ? (
+        <div className="flex items-center gap-2">
+          <span className="type-description">Line height</span>
+          <NumberStepper
+            label={`${name} line height`}
+            value={lineHeight}
+            range={LINE_HEIGHT_RANGE}
+            disabled={!editable}
+            onChange={(next) => void update(lineHeightKey, next)}
+          />
+          <ResetButton settingKey={lineHeightKey} label={`${name} line height`} />
+        </div>
+      ) : null}
       <p
         aria-label={`${name} font preview`}
         className="truncate rounded-component bg-frame px-2.5 py-2"
-        style={{ fontFamily: cssFontFamily(family), fontSize: size }}
+        style={{ fontFamily: cssFontFamily(family), fontSize: size, lineHeight }}
       >
         {PREVIEW_TEXT}
       </p>
@@ -135,6 +160,7 @@ const FONT_SETTINGS: {
   description: string
   familyKey: 'app.fontFamily' | 'terminal.fontFamily' | 'editor.fontFamily'
   sizeKey: 'app.fontSize' | 'terminal.fontSize' | 'editor.fontSize'
+  lineHeightKey?: 'terminal.lineHeight' | 'editor.lineHeight'
 }[] = [
   {
     name: 'App',
@@ -146,13 +172,15 @@ const FONT_SETTINGS: {
     name: 'Terminal',
     description: 'Terminal tabs and agent sessions.',
     familyKey: 'terminal.fontFamily',
-    sizeKey: 'terminal.fontSize'
+    sizeKey: 'terminal.fontSize',
+    lineHeightKey: 'terminal.lineHeight'
   },
   {
     name: 'Editor',
     description: 'Files opened in the editor.',
     familyKey: 'editor.fontFamily',
-    sizeKey: 'editor.fontSize'
+    sizeKey: 'editor.fontSize',
+    lineHeightKey: 'editor.lineHeight'
   }
 ]
 
