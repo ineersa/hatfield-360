@@ -39,6 +39,7 @@ import {
 import { cn } from '@/lib/class-names'
 import { copyPathFormForKey, copyPathShortcutLabel } from '@/lib/copy-path-keys'
 import { rendererPlatform } from '@/lib/terminal-shortcut-label'
+import { useEditorTabStore } from '@/state/editor-tab-store'
 import { type FileTreeRoot, useFileTreeStore } from '@/state/file-tree-store'
 import { useWorkspaceStore } from '@/state/workspace-store'
 import { useWorktreeStore } from '@/state/worktree-store'
@@ -82,7 +83,7 @@ function TreeRow({
   selected,
   tabbable,
   onSelect,
-  onToggle,
+  onActivate,
   icon,
   hint,
   tip,
@@ -95,7 +96,8 @@ function TreeRow({
   /** Undefined for rows that don't fold. */
   expanded?: boolean
   dimmed?: boolean
-  onToggle?: () => void
+  /** Clicked: folds a folder, opens a file. */
+  onActivate?: () => void
   icon: ReactNode
   hint?: ReactNode
   /** Shown under the pointer: always (a root's path), or only when the name is cut off. */
@@ -130,7 +132,7 @@ function TreeRow({
       style={{ paddingLeft: indent(row.depth) }}
       onClick={() => {
         onSelect()
-        onToggle?.()
+        onActivate?.()
       }}
       onFocus={onSelect}
     >
@@ -247,7 +249,7 @@ function RootRow({
       label={
         missing ? `${root.name} (missing)` : [root.name, root.branch].filter(Boolean).join(' ')
       }
-      {...(missing ? {} : { expanded, onToggle: () => toggle(root.path) })}
+      {...(missing ? {} : { expanded, onActivate: () => toggle(root.path) })}
       {...state}
       icon={
         missing ? (
@@ -320,7 +322,7 @@ function WorktreeRow({
       row={row}
       label={`${worktree.branch} worktree ${worktree.name}`}
       expanded={expanded}
-      onToggle={() => toggle(worktree.path)}
+      onActivate={() => toggle(worktree.path)}
       {...state}
       icon={<GitBranch className="size-4 shrink-0 text-muted-foreground" aria-hidden />}
       hint={<span className="type-hint min-w-0 flex-1 truncate">{worktree.name}</span>}
@@ -352,13 +354,16 @@ function EntryRow({
 }): React.JSX.Element {
   const expanded = useFileTreeStore((store) => store.expanded[entry.path] === true)
   const toggle = useFileTreeStore((store) => store.toggle)
+  const openFile = useEditorTabStore((store) => store.open)
   const directory = entry.kind === 'directory'
   return (
     <TreeRow
       row={row}
       label={entry.name}
       {...(ignored ? { description: 'Ignored by git' } : {})}
-      {...(directory ? { expanded, onToggle: () => toggle(entry.path) } : {})}
+      {...(directory
+        ? { expanded, onActivate: () => toggle(entry.path) }
+        : { onActivate: () => openFile(entry.path) })}
       dimmed={ignored}
       {...state}
       icon={
@@ -501,6 +506,7 @@ export function FilesPanel(): React.JSX.Element {
   const setRoots = useFileTreeStore((state) => state.setRoots)
   const connect = useFileTreeStore((state) => state.connect)
   const toggle = useFileTreeStore((state) => state.toggle)
+  const openFile = useEditorTabStore((state) => state.open)
   const expand = useFileTreeStore((state) => state.expand)
   const collapseAll = useFileTreeStore((state) => state.collapseAll)
   const reload = useFileTreeStore((state) => state.reload)
@@ -588,6 +594,7 @@ export function FilesPanel(): React.JSX.Element {
         case 'Enter':
           if (row.type === 'error') reload(row.folder)
           else if (folder !== null) toggle(folder)
+          else if (row.type === 'entry') openFile(row.entry.path)
           return true
         case '*':
           expand(

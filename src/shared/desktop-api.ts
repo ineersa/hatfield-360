@@ -1,3 +1,4 @@
+import type { EditorApi } from './editor-api'
 import type { FileTreeApi } from './file-tree-api'
 import type { SettingsApi } from './settings-api'
 import type { ShellLayoutApi } from './shell-layout-api'
@@ -22,6 +23,7 @@ export type DesktopApi = WorkspaceApi &
   ShellLayoutApi &
   TerminalApi &
   WorktreeApi &
-  FileTreeApi & {
+  FileTreeApi &
+  EditorApi & {
     getAppInfo: () => Promise<AppInfo>
   }

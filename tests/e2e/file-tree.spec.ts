@@ -14,6 +14,7 @@ import {
 import { join } from 'node:path'
 import type { DirectoryListing } from '../../src/shared/file-tree-api'
 import { makeTempDir, saveScreenshot, withApp } from './launch-app'
+import { seedWorkspace } from './workspace-seed'
 
 function git(cwd: string, ...args: string[]): void {
   execFileSync(
@@ -42,19 +43,6 @@ function makeRepo(parent: string, name: string): string {
   git(parent, 'init', '-q', '-b', 'main', repo)
   git(repo, 'commit', '-q', '--allow-empty', '-m', 'first')
   return repo
-}
-
-/** A user data folder whose workspace holds `folders`. */
-async function seedWorkspace(
-  folders: { path: string; kind: 'project' | 'folder' }[]
-): Promise<[string, () => Promise<void>]> {
-  const [userData, cleanup] = await makeTempDir('user-data')
-  await mkdir(join(userData, 'workspaces'))
-  await writeFile(
-    join(userData, 'workspaces', 'default.hatfield-workspace'),
-    JSON.stringify({ version: 1, folders })
-  )
-  return [userData, cleanup]
 }
 
 /** The OS folder picker can't be driven by Playwright (user-authorized for #8): answer it from the test. */

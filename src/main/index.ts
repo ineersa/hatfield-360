@@ -2,6 +2,7 @@ import { app, BrowserWindow } from 'electron'
 import { agentStatusServer } from './agent-status/status-server'
 import { separateDevAppData } from './app-data-folder'
 import { registerAppInfoIpc } from './ipc/app-info-ipc'
+import { registerEditorIpc } from './ipc/editor-ipc'
 import { registerFileTreeIpc } from './ipc/file-tree-ipc'
 import { registerSettingsIpc } from './ipc/settings-ipc'
 import { registerShellLayoutIpc } from './ipc/shell-layout-ipc'
@@ -29,6 +30,7 @@ void app.whenReady().then(async () => {
   registerWorkspaceIpc()
   registerWorktreeIpc()
   registerFileTreeIpc()
+  registerEditorIpc()
   registerSettingsIpc()
   registerShellLayoutIpc()
   registerTerminalIpc()

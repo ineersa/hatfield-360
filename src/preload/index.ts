@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { type DesktopApi, IPC_CHANNELS } from '../shared/desktop-api'
+import { EDITOR_CHANNELS } from '../shared/editor-api'
 import { FILE_TREE_CHANNELS } from '../shared/file-tree-api'
 import { SETTINGS_CHANNELS, type SettingsView } from '../shared/settings-api'
 import { SHELL_LAYOUT_CHANNELS } from '../shared/shell-layout-api'
@@ -36,6 +37,13 @@ const desktopApi: DesktopApi = {
     const listener = (_event: unknown, paths: string[]): void => callback(paths)
     ipcRenderer.on(FILE_TREE_CHANNELS.changed, listener)
     return () => ipcRenderer.removeListener(FILE_TREE_CHANNELS.changed, listener)
+  },
+  readTextFile: (path) => ipcRenderer.invoke(EDITOR_CHANNELS.read, path),
+  writeTextFile: (path, contents) => ipcRenderer.invoke(EDITOR_CHANNELS.write, path, contents),
+  subscribeSaveCommand: (callback) => {
+    const listener = (): void => callback()
+    ipcRenderer.on(EDITOR_CHANNELS.save, listener)
+    return () => ipcRenderer.removeListener(EDITOR_CHANNELS.save, listener)
   },
   getSettings: () => ipcRenderer.invoke(SETTINGS_CHANNELS.get),
   updateSetting: (key, value) => ipcRenderer.invoke(SETTINGS_CHANNELS.update, key, value),

@@ -9,6 +9,7 @@ import {
   pickAndOpenWorkspaceFile,
   pickAndSaveWorkspaceAs
 } from '../workspace/workspace-dialogs'
+import { sendSaveCommand } from '../ipc/editor-ipc'
 import { showSettingsPage } from '../ipc/settings-ipc'
 import { sendTerminalCommand } from '../ipc/terminal-ipc'
 import { openSettingsFile } from '../settings/open-settings-file'
@@ -91,6 +92,13 @@ function buildAppMenu(view: WorkspaceView | null): void {
         click: fromMenu(pickAndOpenWorkspaceFile)
       },
       { id: 'open-recent', label: 'Open Recent', submenu: openRecentMenu(view) },
+      { type: 'separator' },
+      {
+        id: 'save-file',
+        label: 'Save',
+        accelerator: 'CommandOrControl+S',
+        click: fromMenu(sendSaveCommand)
+      },
       { type: 'separator' },
       {
         id: 'add-folder-to-workspace',
