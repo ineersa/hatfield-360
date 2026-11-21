@@ -2,9 +2,10 @@ import { create } from 'zustand'
 import { mainErrorMessage } from '@/lib/main-error-message'
 import { notify } from '@/state/notification-store'
 import type { DirectoryListing, PathForm } from '../../../shared/file-tree-api'
+import type { WorkspaceFolderKind } from '../../../shared/workspace-api'
 
 /** A top-level folder of the tree, with the linked worktrees shown under it (projects only). */
-export type FileTreeRoot = { path: string; worktrees: string[] }
+export type FileTreeRoot = { path: string; kind: WorkspaceFolderKind; worktrees: string[] }
 
 type FileTreeState = {
   /** The shown tree's roots, in order; empty while the Files panel is closed, so nothing is watched. */
@@ -26,10 +27,6 @@ type FileTreeState = {
   /** Follows changes main reports in watched folders; returns the unsubscribe. */
   connect: () => () => void
 }
-
-/** Every folder the roots stand for: each root and its worktrees. */
-const rootPaths = (roots: FileTreeRoot[]): string[] =>
-  roots.flatMap((root) => [root.path, ...root.worktrees])
 
 /** Expanded folders the tree shows, from `from` down through expanded worktrees and subfolders. */
 function openFolders(state: FileTreeState, from: string[]): string[] {
@@ -100,10 +97,15 @@ export const useFileTreeStore = create<FileTreeState>((set, get) => {
     listings: {},
     hideIgnored: false,
     setRoots: (roots) => {
-      const shown = new Set(rootPaths(get().roots))
-      const added = rootPaths(roots).filter((path) => !shown.has(path))
+      const before = new Map(get().roots.map((root) => [root.path, root]))
+      // Nothing was watched under a root while it wasn't shown, and a root that changed kind gains or
+      // loses its ignore status, so their open folders are listed fresh.
+      const added = roots.flatMap((root) => {
+        const shown = before.get(root.path)
+        if (shown?.kind !== root.kind) return [root.path, ...root.worktrees]
+        return root.worktrees.filter((worktree) => !shown.worktrees.includes(worktree))
+      })
       set({ roots })
-      // Nothing was watched under a root while it wasn't shown, so its open folders are listed fresh.
       const stale = openFolders(get(), added)
       for (const path of stale) load(path)
       if (stale.length === 0) syncWatches()
@@ -111,8 +113,9 @@ export const useFileTreeStore = create<FileTreeState>((set, get) => {
     toggle: (path) => {
       const expand = !get().expanded[path]
       set((state) => ({ expanded: { ...state.expanded, [path]: expand } }))
-      // Expanding always lists the folder fresh: it wasn't watched while collapsed.
-      if (expand) load(path)
+      // Expanding lists the folder and the open folders kept under it fresh: none was watched while
+      // it was collapsed.
+      if (expand) for (const folder of openFolders(get(), [path])) load(folder)
       else syncWatches()
     },
     expand: (paths) => {
@@ -124,7 +127,7 @@ export const useFileTreeStore = create<FileTreeState>((set, get) => {
           ...Object.fromEntries(collapsed.map((path) => [path, true]))
         }
       }))
-      for (const path of collapsed) load(path)
+      for (const folder of openFolders(get(), collapsed)) load(folder)
     },
     collapseAll: () => {
       set({ expanded: {} })

@@ -54,6 +54,12 @@ export function runGit(cwd: string, args: string[], options: GitOptions = {}): P
         )
       }
     )
-    if (options.input !== undefined) child.stdin?.end(options.input)
+    if (options.input !== undefined) {
+      // Git exiting before it reads all the input breaks the pipe; its exit status says why.
+      child.stdin?.on('error', (error) => {
+        if (!('code' in error && error.code === 'EPIPE')) reject(error)
+      })
+      child.stdin?.end(options.input)
+    }
   })
 }

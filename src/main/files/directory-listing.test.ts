@@ -64,6 +64,19 @@ describe('listDirectory', () => {
     ])
   })
 
+  it('marks nothing when git refuses a folder too big to read in one go', async () => {
+    // Shown in Projects without being a repository: git exits before reading all the names.
+    const plain = join(dir, 'plain')
+    await mkdir(plain)
+    await Promise.all(
+      Array.from({ length: 4000 }, (_, index) =>
+        writeFile(join(plain, `a-file-with-a-long-enough-name-${index}.txt`), '')
+      )
+    )
+    const listing = await listDirectory(plain, [{ path: plain, git: true }])
+    expect(listing.status === 'ok' && listing.entries.filter((entry) => entry.ignored)).toEqual([])
+  })
+
   it('refuses folders outside the roots', async () => {
     const root = join(dir, 'root')
     await mkdir(join(root, 'inner'), { recursive: true })

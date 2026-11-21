@@ -83,12 +83,15 @@ test('folders added to the workspace become projects or plain folders, and can b
   const notes = join(projects, 'notes')
   await mkdir(notes)
   const [userData, cleanUserData] = await makeTempDir('user-data')
-  const expectSavedKinds = async (kinds: string[]) => {
-    const document: unknown = JSON.parse(
-      await readFile(join(userData, 'workspaces', 'default.hatfield-workspace'), 'utf8')
-    )
-    expect(document).toMatchObject({ folders: kinds.map((kind) => ({ kind })) })
-  }
+  // Polled: the workspace file is written after the panels update.
+  const expectSavedKinds = (kinds: string[]) =>
+    expect
+      .poll(async (): Promise<unknown> =>
+        JSON.parse(
+          await readFile(join(userData, 'workspaces', 'default.hatfield-workspace'), 'utf8')
+        )
+      )
+      .toMatchObject({ folders: kinds.map((kind) => ({ kind })) })
   try {
     await withApp(
       async (electronApp, page) => {
@@ -161,6 +164,8 @@ test('the file tree follows the disk and git ignore rules in expanded folders', 
   const plain = join(projects, 'logs')
   await mkdir(join(plain, 'dist'), { recursive: true })
   await writeFile(join(plain, '.gitignore'), 'dist/\n')
+  // A repository kept as a plain folder, until it is shown in Projects.
+  git(plain, 'init', '-q', '-b', 'main')
   const [userData, cleanUserData] = await seedWorkspace([
     { path: repo, kind: 'project' },
     { path: plain, kind: 'folder' }
@@ -189,6 +194,14 @@ test('the file tree follows the disk and git ignore rules in expanded folders', 
         await ignored('dist')
         await notIgnored('src')
         await notIgnored('README.md')
+        // Catppuccin icons follow the file and folder names, and whether a folder is open.
+        const icon = (name: string) => item(page, name).locator('svg[data-icon]')
+        await expect(icon('app main')).toHaveAttribute('data-icon', '_root_open')
+        await expect(icon('src')).toHaveAttribute('data-icon', 'folder_src_open')
+        await expect(icon('dist')).toHaveAttribute('data-icon', 'folder_dist')
+        await expect(icon('a.ts')).toHaveAttribute('data-icon', 'typescript')
+        await expect(icon('README.md')).toHaveAttribute('data-icon', 'readme')
+        await expect(icon('notes.txt')).toHaveAttribute('data-icon', 'text')
 
         // Changes on disk show up in expanded folders.
         await writeFile(join(repo, 'src', 'b.ts'), '')
@@ -243,6 +256,17 @@ test('the file tree follows the disk and git ignore rules in expanded folders', 
         await writeFile(join(repo, 'src', 'later.ts'), '')
         await item(page, 'src').click()
         await expect(item(page, 'later.ts')).toBeVisible()
+
+        // Reopening a folder also lists the open folders kept under it fresh.
+        await item(page, 'app main').click()
+        await expect(item(page, 'src')).toHaveCount(0)
+        await writeFile(join(repo, 'src', 'kept.ts'), '')
+        await item(page, 'app main').click()
+        await expect(item(page, 'kept.ts')).toBeVisible()
+
+        // Shown in Projects, the folder dims what its repository ignores.
+        await contextMenu(page, item(page, 'logs'), 'Show in Projects')
+        await expect(item(page, 'dist').last()).toHaveAttribute('data-ignored', 'true')
       },
       { userDataDir: userData }
     )

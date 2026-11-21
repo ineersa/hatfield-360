@@ -253,9 +253,14 @@ function RootRow({
         missing ? (
           <FolderX className="size-4.5 shrink-0 text-error" aria-hidden />
         ) : folder.kind === 'folder' ? (
-          <FileTreeIcon kind={expanded ? 'folder-open' : 'folder'} className="size-4.5 shrink-0" />
+          <FileTreeIcon
+            kind="folder"
+            name={root.name}
+            open={expanded}
+            className="size-4.5 shrink-0"
+          />
         ) : (
-          <RootFolderIcon className="size-4.5 shrink-0" />
+          <RootFolderIcon open={expanded} className="size-4.5 shrink-0" />
         )
       }
       hint={
@@ -358,7 +363,9 @@ function EntryRow({
       {...state}
       icon={
         <FileTreeIcon
-          kind={directory ? (expanded ? 'folder-open' : 'folder') : 'file'}
+          kind={directory ? 'folder' : 'file'}
+          name={entry.name}
+          open={expanded}
           className={cn('size-4 shrink-0', ignored && 'opacity-50')}
         />
       }
@@ -508,7 +515,11 @@ export function FilesPanel(): React.JSX.Element {
     (): FileTreeRoot[] =>
       roots
         .filter((root) => !root.folder.missing)
-        .map((root) => ({ path: root.path, worktrees: root.worktrees.map((tree) => tree.path) })),
+        .map((root) => ({
+          path: root.path,
+          kind: root.folder.kind,
+          worktrees: root.worktrees.map((tree) => tree.path)
+        })),
     [roots]
   )
   useEffect(() => connect(), [connect])

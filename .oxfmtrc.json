@@ -10,6 +10,7 @@
     "test-results/**",
     "playwright-report/**",
     ".claude/skills/**",
-    ".hatfield/**"
+    ".hatfield/**",
+    "src/renderer/src/assets/icons/catppuccin-icons.json"
   ]
 }

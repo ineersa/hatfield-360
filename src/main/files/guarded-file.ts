@@ -1,4 +1,4 @@
-import { lstat, readFile } from 'node:fs/promises'
+import { lstat, readFile, stat } from 'node:fs/promises'
 import { basename, dirname, join } from 'node:path'
 import { writeFileAtomic } from './atomic-write'
 import { resolveInsideRoots } from './path-containment'
@@ -30,5 +30,7 @@ export async function writeFileInRoots(
     ? await resolveInsideRoots(path, roots)
     : folder && join(folder, basename(path))
   if (!real) throw outsideRoots(path)
+  // Checked before writing: the temp file would go next to a folder, which for a root is outside.
+  if (exists && (await stat(real)).isDirectory()) throw new Error(`Not a file: ${path}`)
   await writeFileAtomic(real, contents)
 }

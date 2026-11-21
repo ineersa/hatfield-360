@@ -1,10 +1,12 @@
 import {
+  chmod,
   mkdir,
   mkdtemp,
   readdir,
   readFile,
   realpath,
   rm,
+  stat,
   symlink,
   writeFile
 } from 'node:fs/promises'
@@ -83,6 +85,31 @@ describe('guarded file access', () => {
         'Not inside the workspace'
       )
       expect(await readdir(outside)).toEqual(['secret'])
+      expect(await readFile(join(outside, 'secret'), 'utf8')).toBe('outside')
+    }
+  )
+
+  it('refuses to write over a folder, leaving nothing next to it', async () => {
+    await expect(writeFileInRoots(root, 'x', [root])).rejects.toThrow('Not a file')
+    expect((await readdir(dir)).toSorted()).toEqual(['outside', 'root'])
+  })
+
+  // Windows has no execute bits; symlinks need extra rights there.
+  it.skipIf(process.platform === 'win32')("keeps the replaced file's permissions", async () => {
+    const script = join(root, 'run.sh')
+    await writeFile(script, 'echo old')
+    await chmod(script, 0o755)
+    await writeFileInRoots(script, 'echo new', [root])
+    expect((await stat(script)).mode & 0o777).toBe(0o755)
+  })
+
+  it.skipIf(process.platform === 'win32')(
+    'never writes through a link planted where a temp file might go',
+    async () => {
+      const target = join(root, 'notes.md')
+      await symlink(join(outside, 'secret'), `${target}.${process.pid}.tmp`)
+      await writeFileInRoots(target, 'edited', [root])
+      expect(await readFile(target, 'utf8')).toBe('edited')
       expect(await readFile(join(outside, 'secret'), 'utf8')).toBe('outside')
     }
   )

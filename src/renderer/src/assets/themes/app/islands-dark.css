@@ -15,6 +15,22 @@
   --status-foreground: #9fa2a8;
   --link: #71a1fe;
   --icon-text: #d1d3d9;
+  /* Catppuccin icon colours, Mocha palette. */
+  --icon-rosewater: #f5e0dc;
+  --icon-flamingo: #f2cdcd;
+  --icon-pink: #f5c2e7;
+  --icon-mauve: #cba6f7;
+  --icon-red: #f38ba8;
+  --icon-maroon: #eba0ac;
+  --icon-peach: #fab387;
+  --icon-yellow: #f9e2af;
+  --icon-green: #a6e3a1;
+  --icon-teal: #94e2d5;
+  --icon-sky: #89dceb;
+  --icon-sapphire: #74c7ec;
+  --icon-blue: #89b4fa;
+  --icon-lavender: #b4befe;
+  --icon-overlay1: #7f849c;
   --hover: #ffffff17;
   --pressed: #ffffff29;
   --row-hover: #ffffff10;
