@@ -6,7 +6,10 @@ import { clickMenuItem, submenuLabels } from './app-menu'
 import { makeTempDir, saveScreenshot, withApp } from './launch-app'
 
 const settingsMain = (page: Page) => page.getByRole('main', { name: 'Settings' })
-const message = (page: Page) => page.getByRole('alert', { name: 'Settings message' })
+/** A toast in the bottom-right corner, named by its title. */
+const toast = (page: Page, title: string) =>
+  page.getByRole('region', { name: 'Notification toasts' }).getByRole('alert', { name: title })
+const message = (page: Page) => toast(page, 'Settings')
 const projectIcon = (page: Page, name: string) =>
   page
     .getByRole('list', { name: 'Workspace folders' })
@@ -58,12 +61,14 @@ test('settings.json sets the app font and icon set at launch and applies every s
         await expectAppFont(page, /^"Inter Variable"/, '12px', '10px')
         await expect(projectIcon(page, folderName)).toHaveAttribute('data-icon-theme', 'catppuccin')
         await saveScreenshot(page, 'settings-message')
-        await message(page).getByRole('button', { name: 'Dismiss' }).click()
+        await message(page).getByRole('button', { name: 'Close' }).click()
         await expect(message(page)).toHaveCount(0)
 
         // Bad values are ignored one by one; the good ones apply.
         await writeFile(settings, '{ "app.fontSize": "big", "workbench.iconTheme": "lucide" }')
-        await expect(message(page)).toHaveText('Settings: "app.fontSize" must be a number.')
+        await expect(
+          message(page).getByText('"app.fontSize" must be a number.', { exact: true })
+        ).toBeVisible()
         await expect(projectIcon(page, folderName)).toHaveAttribute('data-icon-theme', 'lucide')
         await expectAppFont(page, /^"Inter Variable"/, '12px', '10px')
 
@@ -227,7 +232,7 @@ test('the Settings page applies each change as it is made and writes it into set
 
         await page.keyboard.press('Escape')
         await expect(settingsMain(page)).toHaveCount(0)
-        await page.getByRole('button', { name: 'Settings' }).click()
+        await page.getByRole('button', { name: 'Settings', exact: true }).click()
         await expect(settingsMain(page)).toBeVisible()
         await page.getByRole('button', { name: 'Agents' }).click()
         await expect(page.getByRole('main', { name: 'Agents' })).toBeVisible()
@@ -277,7 +282,7 @@ test('the largest app font in the smallest window keeps the status bar and Setti
         })
         await expect.poll(() => page.evaluate('window.innerHeight')).toBeLessThan(420)
         await expect(page.locator('body')).toHaveCSS('font-size', '32px')
-        const gear = page.getByRole('button', { name: 'Settings' })
+        const gear = page.getByRole('button', { name: 'Settings', exact: true })
         const gearBox = await gear.boundingBox()
         const footerBox = await page.locator('footer').boundingBox()
         if (!gearBox || !footerBox) throw new Error('layout is not rendered')

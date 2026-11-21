@@ -19,7 +19,14 @@ async function readJson(path: string): Promise<unknown> {
 
 const folderList = (page: Page) => page.getByRole('list', { name: 'Workspace folders' })
 const recentList = (page: Page) => page.getByRole('list', { name: 'Recent' })
-const message = (page: Page) => page.getByRole('alert', { name: 'Workspace message' })
+/** A toast in the bottom-right corner, named by its title. */
+const toast = (page: Page, title: string) =>
+  page.getByRole('region', { name: 'Notification toasts' }).getByRole('alert', { name: title })
+const message = (page: Page) => toast(page, 'Workspace')
+const bell = (page: Page) =>
+  page
+    .getByRole('navigation', { name: 'Tool windows' })
+    .getByRole('button', { name: /^Notifications/ })
 
 test('recent workspaces open from the welcome screen, reopen at launch and close back to the default', async () => {
   const [userData, cleanUserData] = await makeTempDir('user-data')
@@ -180,13 +187,28 @@ test('a broken workspace file is reported in every view, left untouched, and the
   try {
     await withApp(
       async (app, page) => {
-        await expect(message(page)).toHaveText(
+        await expect(message(page)).toContainText(
           `Can't open workspace "broken": the file is broken (not valid JSON). Opened the default workspace instead.`
         )
         await expect(page).toHaveTitle('Default Workspace — Hatfield 360')
         await saveScreenshot(page, 'workspace-message')
-        await message(page).getByRole('button', { name: 'Dismiss' }).click()
+
+        // The toast floats in the main area's bottom-right corner; closing it moves nothing.
+        const main = page.getByRole('main')
+        const mainBox = await main.boundingBox()
+        const toastBox = await message(page).boundingBox()
+        if (!mainBox || !toastBox) throw new Error('Nothing to measure')
+        expect(toastBox.width).toBeLessThan(Number(await page.evaluate('window.innerWidth')) / 2)
+        expect(toastBox.x + toastBox.width).toBeLessThanOrEqual(mainBox.x + mainBox.width)
+        expect(toastBox.x + toastBox.width).toBeGreaterThan(mainBox.x + mainBox.width - 40)
+        expect(toastBox.y + toastBox.height).toBeLessThanOrEqual(mainBox.y + mainBox.height)
+        expect(toastBox.y + toastBox.height).toBeGreaterThan(mainBox.y + mainBox.height - 40)
+        await expect(bell(page)).toHaveAccessibleName('Notifications (1)')
+        await message(page).getByRole('button', { name: 'Close' }).click()
         await expect(message(page)).toHaveCount(0)
+        expect(await main.boundingBox()).toEqual(mainBox)
+        // A closed toast stays in the list.
+        await expect(bell(page)).toHaveAccessibleName('Notifications (1)')
 
         // Outside the Agents view there is no workspace panel; the message must still show.
         await page
@@ -194,19 +216,42 @@ test('a broken workspace file is reported in every view, left untouched, and the
           .getByRole('button', { name: 'Files', exact: true })
           .click()
         await clickSubmenuItem(app, 'open-recent', `${join(projects, 'broken')} (Workspace)`)
-        await expect(message(page)).toHaveText(
+        await expect(message(page)).toContainText(
           `Can't open workspace "broken": the file is broken (not valid JSON).`
         )
         await expect(page).toHaveTitle('Default Workspace — Hatfield 360')
 
-        // Dismissing hides this occurrence only: trying again shows the same error again.
-        await message(page).getByRole('button', { name: 'Dismiss' }).click()
+        // Closing hides this occurrence only: trying again shows the same error again.
+        await message(page).getByRole('button', { name: 'Close' }).click()
         await expect(message(page)).toHaveCount(0)
         await clickSubmenuItem(app, 'open-recent', `${join(projects, 'broken')} (Workspace)`)
-        await expect(message(page)).toHaveText(
+        await expect(message(page)).toContainText(
           `Can't open workspace "broken": the file is broken (not valid JSON).`
         )
         expect(await readFile(broken, 'utf8')).toBe(contents)
+
+        // The bell opens the list, newest first; opening it closes the toasts it now shows.
+        await expect(bell(page)).toHaveAccessibleName('Notifications (3)')
+        await bell(page).click()
+        await expect(message(page)).toHaveCount(0)
+        const items = page
+          .getByRole('complementary', { name: 'Notifications panel' })
+          .getByRole('listitem')
+        await expect(items).toHaveCount(3)
+        await expect(items.first()).not.toContainText('Opened the default workspace instead.')
+        await expect(items.last()).toContainText('Opened the default workspace instead.')
+        await saveScreenshot(page, 'notifications-panel')
+        await items.first().getByRole('button', { name: 'Dismiss' }).click()
+        await expect(items).toHaveCount(2)
+        await expect(bell(page)).toHaveAccessibleName('Notifications (2)')
+        await page.getByRole('button', { name: 'Clear all' }).click()
+        await expect(items).toHaveCount(0)
+        await expect(page.getByText('No notifications.')).toBeVisible()
+        await expect(bell(page)).toHaveAccessibleName('Notifications')
+        await bell(page).click()
+        await expect(page.getByRole('complementary', { name: 'Notifications panel' })).toHaveCount(
+          0
+        )
       },
       { userDataDir: userData }
     )
@@ -241,8 +286,9 @@ test('changes whose app state cannot be saved leave main and the window in agree
         await expect(message(page)).toBeVisible()
         await expect(page).toHaveTitle('Default Workspace — Hatfield 360')
 
+        // The second failure stacks under the first toast.
         await recentList(page).getByRole('button', { name: 'api', exact: true }).click()
-        await expect(message(page)).toBeVisible()
+        await expect(message(page)).toHaveCount(2)
         await expect(page.getByText('Default Workspace has no folders yet.')).toBeVisible()
 
         // A reloaded window asks main afresh, so it shows what main really has open.

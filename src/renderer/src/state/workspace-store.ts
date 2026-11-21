@@ -1,12 +1,10 @@
 import { create } from 'zustand'
+import { mainErrorMessage } from '@/lib/main-error-message'
+import { followNotice, notify } from '@/state/notification-store'
 import type { RecentTarget, WorkspaceView } from '../../../shared/workspace-api'
 
 type WorkspaceState = {
   workspace: WorkspaceView | null
-  error: string | null
-  /** The id of the notice from main the user closed; the next notice shows again. */
-  dismissedNoticeId: number | null
-  dismissMessage: () => void
   /** Loads the workspace and follows changes made in main (File menu, other windows); returns the unsubscribe. */
   connect: () => () => void
   addFolder: () => Promise<void>
@@ -16,31 +14,27 @@ type WorkspaceState = {
   removeRecent: (target: RecentTarget) => Promise<void>
 }
 
-const message = (error: unknown): string => (error instanceof Error ? error.message : String(error))
+const showNotice = followNotice((body) => ({ severity: 'error', title: 'Workspace', body }))
 
-/** Electron prefixes errors thrown in main with "Error invoking remote method '<channel>': Error: ". */
-const mainErrorMessage = (error: unknown): string =>
-  message(error).replace(/^Error invoking remote method '[^']*': (?:Error: )?/, '')
-
-export const useWorkspaceStore = create<WorkspaceState>((set, get) => {
-  const run = async (action: () => Promise<void>): Promise<void> => {
-    try {
-      await action()
-      set({ error: null })
-    } catch (error) {
-      set({ error: mainErrorMessage(error) })
-    }
+/** Runs a workspace action; a failure is shown as a notification. */
+async function run(action: () => Promise<void>): Promise<void> {
+  try {
+    await action()
+  } catch (error) {
+    notify({ severity: 'error', title: 'Workspace', body: mainErrorMessage(error) })
   }
+}
 
+export const useWorkspaceStore = create<WorkspaceState>((set) => {
+  const apply = (workspace: WorkspaceView): void => {
+    set({ workspace })
+    showNotice(workspace.notice)
+  }
   return {
     workspace: null,
-    error: null,
-    dismissedNoticeId: null,
-    dismissMessage: () =>
-      set({ error: null, dismissedNoticeId: get().workspace?.notice?.id ?? null }),
     connect: () => {
-      const unsubscribe = window.desktop.subscribeWorkspace((workspace) => set({ workspace }))
-      void run(async () => set({ workspace: await window.desktop.getWorkspace() }))
+      const unsubscribe = window.desktop.subscribeWorkspace(apply)
+      void run(async () => apply(await window.desktop.getWorkspace()))
       return unsubscribe
     },
     addFolder: () => run(() => window.desktop.addWorkspaceFolder()),

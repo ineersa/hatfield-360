@@ -10,6 +10,9 @@
   --icon-button-size: calc(var(--app-font-size) * 28 / 13);
   --activity-button-size: calc(var(--app-font-size) * 36 / 13);
   --activity-bar-width: calc(var(--app-font-size) * 56 / 13);
+  /* Balloons and the notifications tool window, about 400px wide as in JetBrains IDEs. */
+  --toast-width: calc(var(--app-font-size) * 380 / 13);
+  --notifications-panel-width: calc(var(--app-font-size) * 380 / 13);
   --small-icon-button-size: calc(var(--app-font-size) * 22 / 13);
   --panel-header-height: calc(var(--app-font-size) * 38 / 13);
   --tab-bar-height: calc(var(--app-font-size) * 36 / 13);

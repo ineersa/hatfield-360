@@ -1,13 +1,15 @@
 import { useEffect, useRef } from 'react'
-import { SettingsMessage } from '@/components/settings/SettingsMessage'
 import { SettingsPage } from '@/components/settings/SettingsPage'
 import { useAppFont } from '@/components/settings/use-app-font'
 import { useColorThemes } from '@/components/settings/use-color-themes'
+import { NotificationsBar } from '@/components/notifications/NotificationsBar'
+import { NotificationsPanel } from '@/components/notifications/NotificationsPanel'
+import { Toaster } from '@/components/notifications/Toaster'
 import { TerminalTabs } from '@/components/terminal/TerminalTabs'
 import { useTerminalCommands } from '@/components/terminal/use-terminal-commands'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { WelcomeScreen } from '@/components/workspace/WelcomeScreen'
-import { WorkspaceMessage } from '@/components/workspace/WorkspaceMessage'
+import { useNotificationStore } from '@/state/notification-store'
 import { useSettingsStore } from '@/state/settings-store'
 import { SIDE_PANEL_MIN_WIDTH, useShellLayoutStore } from '@/state/shell-layout-store'
 import { useTerminalStore } from '@/state/terminal-store'
@@ -37,6 +39,7 @@ export function AppShell(): React.JSX.Element {
   const connectLayout = useShellLayoutStore((state) => state.connect)
   const layoutLoaded = useShellLayoutStore((state) => state.loaded)
   const hasTerminals = useTerminalStore((state) => state.tabs.length > 0)
+  const notificationsOpen = useNotificationStore((state) => state.panelOpen)
 
   useEffect(() => connectWorkspace(), [connectWorkspace])
   useEffect(() => connectWorktrees(), [connectWorktrees])
@@ -64,9 +67,7 @@ export function AppShell(): React.JSX.Element {
   return (
     <TooltipProvider>
       <div className="type-body flex h-screen flex-col bg-frame">
-        <WorkspaceMessage />
-        <SettingsMessage />
-        <div className="flex min-h-0 flex-1 pt-island-gap pr-island-gap">
+        <div className="flex min-h-0 flex-1 pt-island-gap">
           <ActivityBar />
           <div className="flex min-w-0 flex-1">
             {panel.collapsed ? null : (
@@ -126,8 +127,11 @@ export function AppShell(): React.JSX.Element {
               )}
             </main>
           </div>
+          {notificationsOpen ? <NotificationsPanel /> : null}
+          <NotificationsBar />
         </div>
         <StatusBar />
+        <Toaster />
       </div>
     </TooltipProvider>
   )

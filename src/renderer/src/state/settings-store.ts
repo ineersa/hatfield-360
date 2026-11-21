@@ -1,4 +1,6 @@
 import { create } from 'zustand'
+import { mainErrorMessage } from '@/lib/main-error-message'
+import { followNotice, notify } from '@/state/notification-store'
 import {
   DEFAULT_SETTINGS,
   type SettingKey,
@@ -13,50 +15,39 @@ type SettingsState = {
   loaded: boolean
   customized: SettingKey[]
   editable: boolean
-  notice: SettingsView['notice']
-  /** Why the last change from the Settings page failed. */
-  error: string | null
-  /** The id of the notice the user closed; the next notice shows again. */
-  dismissedNoticeId: number | null
-  dismissMessage: () => void
   /** Loads settings and follows every save of settings.json; returns the unsubscribe. */
   connect: () => () => void
-  /** null resets the setting to its default. */
-  update: <K extends SettingKey>(key: K, value: Settings[K] | null) => Promise<void>
+  /** null resets the setting to its default. Resolves to whether main saved it. */
+  update: <K extends SettingKey>(key: K, value: Settings[K] | null) => Promise<boolean>
   /** Puts every setting back to its default; stops at the first one main refuses. */
   resetAll: () => Promise<void>
   openFile: () => Promise<void>
 }
 
-const message = (error: unknown): string => (error instanceof Error ? error.message : String(error))
-
-/** Electron prefixes errors thrown in main with "Error invoking remote method '<channel>': Error: ". */
-const mainErrorMessage = (error: unknown): string =>
-  message(error).replace(/^Error invoking remote method '[^']*': (?:Error: )?/, '')
+const failed = (error: unknown): void => {
+  notify({ severity: 'error', title: 'Settings', body: mainErrorMessage(error) })
+}
 
 export const useSettingsStore = create<SettingsState>((set, get) => {
-  const apply = ({ values, customized, editable, notice }: SettingsView): void =>
-    set({ values, loaded: true, customized, editable, notice })
-  const run = async (action: () => Promise<void>): Promise<void> => {
-    try {
-      await action()
-      set({ error: null })
-    } catch (error) {
-      set({ error: mainErrorMessage(error) })
-    }
+  // Problems in settings.json: the app keeps the values it could use, so they are warnings.
+  const showNotice = followNotice((body) => ({
+    severity: 'warning',
+    title: 'Settings',
+    body,
+    action: { label: 'Open settings.json', run: () => void get().openFile() }
+  }))
+  const apply = ({ values, customized, editable, notice }: SettingsView): void => {
+    set({ values, loaded: true, customized, editable })
+    showNotice(notice)
   }
   return {
     values: DEFAULT_SETTINGS,
     loaded: false,
     customized: [],
     editable: true,
-    notice: null,
-    error: null,
-    dismissedNoticeId: null,
-    dismissMessage: () => set({ error: null, dismissedNoticeId: get().notice?.id ?? null }),
     connect: () => {
       const unsubscribe = window.desktop.subscribeSettings(apply)
-      void run(async () => apply(await window.desktop.getSettings()))
+      window.desktop.getSettings().then(apply, failed)
       return unsubscribe
     },
     update: async (key, value) => {
@@ -65,17 +56,18 @@ export const useSettingsStore = create<SettingsState>((set, get) => {
       if (value !== null) set({ values: { ...previous, [key]: value } })
       try {
         await window.desktop.updateSetting(key, value)
-        set({ error: null })
+        return true
       } catch (error) {
-        set({ values: previous, error: mainErrorMessage(error) })
+        set({ values: previous })
+        failed(error)
+        return false
       }
     },
     resetAll: async () => {
       for (const key of get().customized) {
-        await get().update(key, null)
-        if (get().error) return
+        if (!(await get().update(key, null))) return
       }
     },
-    openFile: () => run(() => window.desktop.openSettingsFile())
+    openFile: () => window.desktop.openSettingsFile().catch(failed)
   }
 })
