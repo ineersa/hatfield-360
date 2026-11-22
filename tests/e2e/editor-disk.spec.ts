@@ -1,7 +1,7 @@
 import { expect, test, type Page } from '@playwright/test'
 import { mkdir, readFile, realpath, rm, writeFile } from 'node:fs/promises'
-import { join } from 'node:path'
-import { editor, lines, openFile, showView, tab, typeAtEnd } from './editor-page'
+import { dirname, join } from 'node:path'
+import { editor, lines, openFile, showView, tab, tabs, typeAtEnd } from './editor-page'
 import { makeTempDir, saveScreenshot, withApp } from './launch-app'
 import { seedWorkspace } from './workspace-seed'
 
@@ -15,7 +15,10 @@ async function withProject(
   const [dir, cleanDir] = await makeTempDir('editor-disk')
   const app = join(await realpath(dir), 'app')
   await mkdir(app)
-  for (const [name, contents] of Object.entries(files)) await writeFile(join(app, name), contents)
+  for (const [name, contents] of Object.entries(files)) {
+    await mkdir(dirname(join(app, name)), { recursive: true })
+    await writeFile(join(app, name), contents)
+  }
   const [userData, cleanUserData] = await seedWorkspace([{ path: app, kind: 'folder' }])
   try {
     await withApp(
@@ -181,4 +184,52 @@ test('Markdown tabs preview the rendered text, without running or loading anythi
     await page.getByRole('button', { name: 'Preview' }).click()
     await expect(preview.getByRole('heading', { name: 'Added later', level: 2 })).toBeVisible()
   })
+})
+
+test('links in a Markdown preview open headings and files in the app', async () => {
+  const filler = Array.from({ length: 80 }, (_, index) => `Paragraph ${index}.`).join('\n\n')
+  const readme = [
+    '# Project',
+    '',
+    '[Usage below](#usage-notes), [the guide](docs/guide.md#install-it), [the code](/src/main.ts),',
+    'and [a file URL](file:///etc/passwd).',
+    '',
+    filler,
+    '',
+    '## Usage notes',
+    '',
+    'Run it.'
+  ].join('\n')
+  const guide = ['# Guide', '', filler, '', '## Install it', '', 'With pnpm.'].join('\n')
+  await withProject(
+    { 'README.md': readme, 'docs/guide.md': guide, 'src/main.ts': 'export const main = 1\n' },
+    async (page) => {
+      await openFile(page, 'app', 'README.md')
+      await page.getByRole('button', { name: 'Preview' }).click()
+      const preview = page.getByLabel('Markdown preview')
+      const usage = preview.getByRole('heading', { name: 'Usage notes' })
+      await expect(usage).not.toBeInViewport()
+      await preview.getByRole('link', { name: 'Usage below' }).click()
+      await expect(usage).toBeInViewport()
+
+      // A link to another scheme leads nowhere.
+      await preview.getByRole('link', { name: 'a file URL' }).click()
+      await expect(tabs(page)).toHaveCount(1)
+
+      // Another Markdown file opens in its preview, at the linked heading.
+      await preview.getByRole('link', { name: 'the guide' }).click()
+      await expect(tab(page, 'guide.md')).toHaveAttribute('aria-selected', 'true')
+      await expect(page.getByRole('button', { name: 'Preview' })).toHaveAttribute(
+        'aria-pressed',
+        'true'
+      )
+      await expect(preview.getByRole('heading', { name: 'Install it' })).toBeInViewport()
+
+      // Any other file opens in the editor; a slash starts at the workspace folder.
+      await tab(page, 'README.md').click()
+      await preview.getByRole('link', { name: 'the code' }).click()
+      await expect(tab(page, 'main.ts')).toHaveAttribute('aria-selected', 'true')
+      await expect(lines(page)).toContainText('export const main = 1')
+    }
+  )
 })

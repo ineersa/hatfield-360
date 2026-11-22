@@ -17,9 +17,7 @@ import { loadDocument, saveDocument } from './editor-documents'
 import { fileName, type TabLabel, tabLabels } from './editor-tab-labels'
 import { EDITOR_FILE_LIMITS } from '../../../../shared/editor-api'
 import { ExternalChangeDialog } from './ExternalChangeDialog'
-import { MarkdownPreview } from './MarkdownPreview'
-
-const isMarkdown = (path: string): boolean => /\.(md|markdown)$/i.test(path)
+import { isMarkdown, MarkdownPreview } from './MarkdownPreview'
 
 function fileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} bytes`
