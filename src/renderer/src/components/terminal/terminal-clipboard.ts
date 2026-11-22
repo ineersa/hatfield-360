@@ -1,13 +1,24 @@
 import type { Terminal } from '@xterm/xterm'
 import { terminalClipboardAction } from '@/lib/terminal-clipboard-keys'
 import { rendererPlatform } from '@/lib/terminal-shortcut-label'
+import { useSettingsStore } from '@/state/settings-store'
 
 /** The byte Ctrl+V sends; TUIs (Claude Code, ...) read it as "paste the clipboard image". */
 const CTRL_V = '\x16'
 
+function trimOnCopy(): boolean {
+  return useSettingsStore.getState().values['terminal.trimLeadingWhitespaceOnCopy']
+}
+
+function trimLineStarts(text: string): string {
+  return text.replace(/(^|[\r\n])[ \t]+/g, '$1')
+}
+
 /** Puts the terminal's selection on the clipboard and clears it. */
 export function copyTerminalSelection(terminal: Terminal): void {
-  void window.desktop.writeTerminalClipboard(terminal.getSelection()).catch(() => undefined)
+  const selection = terminal.getSelection()
+  const text = trimOnCopy() ? trimLineStarts(selection) : selection
+  void window.desktop.writeTerminalClipboard(text).catch(() => undefined)
   terminal.clearSelection()
 }
 
@@ -24,6 +35,17 @@ export function pasteIntoTerminal(terminal: Terminal): void {
  * The clipboard is main's: a keypress can't wait for the page's clipboard permission.
  */
 export function bindClipboardKeys(terminal: Terminal): void {
+  // Native Edit → Copy (including Cmd+C) otherwise goes straight to xterm's copy handler.
+  terminal.element?.addEventListener(
+    'copy',
+    (event) => {
+      if (!trimOnCopy() || !terminal.hasSelection() || !event.clipboardData) return
+      event.clipboardData.setData('text/plain', trimLineStarts(terminal.getSelection()))
+      event.preventDefault()
+      event.stopPropagation()
+    },
+    true
+  )
   terminal.attachCustomKeyEventHandler((event) => {
     if (event.type !== 'keydown') return true
     const action = terminalClipboardAction(event, rendererPlatform, terminal.hasSelection())

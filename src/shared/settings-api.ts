@@ -16,6 +16,7 @@ export type Settings = {
   'terminal.lineHeight': number
   /** Draw terminals with WebGL; off uses the slower DOM renderer, for GPUs that render them wrong. */
   'terminal.gpuAcceleration': boolean
+  'terminal.trimLeadingWhitespaceOnCopy': boolean
   'editor.fontFamily': string
   'editor.fontSize': number
   /** Line height as a multiple of the font size. */
@@ -58,6 +59,7 @@ export const DEFAULT_SETTINGS: Settings = {
   'terminal.fontSize': 13,
   'terminal.lineHeight': 1,
   'terminal.gpuAcceleration': true,
+  'terminal.trimLeadingWhitespaceOnCopy': false,
   'editor.fontFamily': MONOSPACE_FONTS,
   'editor.fontSize': 13,
   // JetBrains IDEs' default line spacing.
