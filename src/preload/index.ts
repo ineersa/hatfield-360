@@ -41,6 +41,7 @@ const desktopApi: DesktopApi = {
   },
   readTextFile: (path) => ipcRenderer.invoke(EDITOR_CHANNELS.read, path),
   writeTextFile: (path, contents) => ipcRenderer.invoke(EDITOR_CHANNELS.write, path, contents),
+  releaseTextFile: (path) => ipcRenderer.invoke(EDITOR_CHANNELS.release, path),
   subscribeSaveCommand: (callback) => {
     const listener = (): void => callback()
     ipcRenderer.on(EDITOR_CHANNELS.save, listener)

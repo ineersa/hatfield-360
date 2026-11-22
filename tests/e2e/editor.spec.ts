@@ -272,6 +272,37 @@ test('closing the window or quitting with unsaved changes asks first, even after
   }
 })
 
+test('a closed tab can no longer write its file once the folder has left the workspace', async () => {
+  const [app, cleanProject] = await makeProject()
+  const notes = join(app, 'notes.txt')
+  const [userData, cleanUserData] = await seedWorkspace([{ path: app, kind: 'folder' }])
+  try {
+    await withApp(
+      async (_app, page) => {
+        await showView(page, 'Files')
+        await openFile(page, 'app', 'notes.txt')
+        await expect(lines(page)).toContainText('first line')
+        await page.getByRole('button', { name: 'Close notes.txt' }).click()
+        await expect(tabs(page)).toHaveCount(0)
+        await item(page, 'app').click({ button: 'right' })
+        await page.getByRole('menuitem', { name: 'Remove from Workspace' }).click()
+        await expect(item(page, 'app')).toBeHidden()
+
+        // The page asks main directly, as a compromised page could. (A script string: the tests
+        // are typed for Node, without the DOM.)
+        const write = `window.desktop.writeTextFile(${JSON.stringify(notes)}, 'overwritten')
+          .then(() => 'written', (error) => String(error))`
+        expect(await page.evaluate<string>(write)).toContain('Not inside the workspace')
+        expect(await readFile(notes, 'utf8')).toBe('first line\n')
+      },
+      { userDataDir: userData }
+    )
+  } finally {
+    await cleanUserData()
+    await cleanProject()
+  }
+})
+
 test('a failed save says why and keeps the changes', async () => {
   // A read-only folder refuses the new file; Windows has no such folder mode, and root ignores it.
   test.skip(process.platform === 'win32' || process.getuid?.() === 0, 'needs folder permissions')

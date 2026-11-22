@@ -27,7 +27,11 @@ export async function loadDocument(path: string): Promise<void> {
   setLoad(path, { status: 'loading' })
   try {
     const text = await window.desktop.readTextFile(path)
-    if (!isOpen(path)) return
+    // Closed while it loaded: main is told the editor doesn't hold it.
+    if (!isOpen(path)) {
+      await window.desktop.releaseTextFile(path)
+      return
+    }
     // The URI's extension picks the language.
     const model = monaco.editor.createModel(text, undefined, monaco.Uri.file(path))
     // Brackets keep the scheme's colour, as in JetBrains IDEs; Monaco sets this per model, not per editor.
@@ -103,5 +107,12 @@ useEditorTabStore.subscribe((state) => {
     if (state.tabs.some((tab) => tab.path === path)) continue
     document.model.dispose()
     documents.delete(path)
+    // Main stops letting the file be written once a save still running ends, unless it was reopened.
+    void (saves.get(path)?.catch(() => false) ?? Promise.resolve()).then(() => {
+      if (documents.has(path) || loading.has(path)) return
+      window.desktop
+        .releaseTextFile(path)
+        .catch((error: unknown) => console.error('Releasing the file failed:', error))
+    })
   }
 })
