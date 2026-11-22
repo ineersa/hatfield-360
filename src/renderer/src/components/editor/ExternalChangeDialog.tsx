@@ -13,9 +13,10 @@ import { fileName } from './editor-tab-labels'
 
 /**
  * Asks which version stays when a tab with unsaved edits finds its file changed on disk: seen
- * there, or found by a save, which then wrote nothing. The active tab is asked about first.
+ * there, or found by a save, which then wrote nothing. The active tab is asked about first, and only
+ * while the Files view shows (`hidden` otherwise); the question waits until then.
  */
-export function ExternalChangeDialog(): React.JSX.Element {
+export function ExternalChangeDialog({ hidden }: { hidden: boolean }): React.JSX.Element {
   const tabs = useEditorTabStore((state) => state.tabs)
   const activePath = useEditorTabStore((state) => state.activePath)
   const conflicted = tabs.filter((tab) => tab.conflict !== null)
@@ -25,7 +26,7 @@ export function ExternalChangeDialog(): React.JSX.Element {
 
   return (
     <AlertDialog
-      open={tab !== undefined}
+      open={tab !== undefined && !hidden}
       onOpenChange={(open) => {
         // Escape cancels a save; a change seen on disk needs an answer.
         if (!open && tab && onSave) cancelConflict(tab.path)

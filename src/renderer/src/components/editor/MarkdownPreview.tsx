@@ -6,7 +6,7 @@ import { useEditorTabStore } from '@/state/editor-tab-store'
 import { useFileTreeStore } from '@/state/file-tree-store'
 import { useSettingsStore } from '@/state/settings-store'
 import { editorDocument } from './editor-documents'
-import { headingSlug, markdownLinkTarget } from './markdown-link-target'
+import { headingSlug, innermostRoot, markdownLinkTarget } from './markdown-link-target'
 
 export const isMarkdown = (path: string): boolean => /\.(md|markdown)$/i.test(path)
 
@@ -26,14 +26,12 @@ function scrollToHeading(container: HTMLElement | null, slug: string): boolean {
   return false
 }
 
-/** The workspace folder the file is in, the innermost one when they nest. */
-function rootOf(path: string): string | null {
-  const inside = useFileTreeStore
-    .getState()
-    .roots.map((root) => root.path)
-    .filter((root) => path.startsWith(root) && /^[\\/]/.test(path.slice(root.length)))
-  return inside.toSorted((a, b) => b.length - a.length)[0] ?? null
-}
+/** The workspace folder or linked worktree the file is in. */
+const rootOf = (path: string): string | null =>
+  innermostRoot(
+    path,
+    useFileTreeStore.getState().roots.flatMap((root) => [root.path, ...root.worktrees])
+  )
 
 /** Follows a link: a web page opens in the browser, a heading or a file in the app. */
 function follow(href: string, from: string, container: HTMLElement | null): void {

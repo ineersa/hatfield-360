@@ -262,7 +262,7 @@ export function EditorTabs({ hidden }: { hidden: boolean }): React.JSX.Element {
           />
         ) : null}
       </div>
-      <ExternalChangeDialog />
+      <ExternalChangeDialog hidden={hidden} />
       <AlertDialog
         open={closing !== null}
         onOpenChange={(open) => {

@@ -52,6 +52,14 @@ export function markdownLinkTarget(
   return { kind: 'file', path: resolved(base, file.split('/')), slug: slug || null }
 }
 
+/** The innermost of `roots` (workspace folders and their linked worktrees) holding the file. */
+export function innermostRoot(path: string, roots: readonly string[]): string | null {
+  const holding = roots.filter(
+    (root) => path.startsWith(root) && /^[\\/]/.test(path.slice(root.length))
+  )
+  return holding.toSorted((a, b) => b.length - a.length)[0] ?? null
+}
+
 /**
  * GitHub's anchor for a heading: lower case, punctuation dropped, spaces as dashes; a repeat of an
  * earlier heading's anchor gets `-1`, `-2`, ... (`seen` counts them across one document).

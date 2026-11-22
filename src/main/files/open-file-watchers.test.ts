@@ -1,4 +1,4 @@
-import { mkdtemp, realpath, rename, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, realpath, rename, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -56,5 +56,25 @@ describe('OpenFileWatchers', () => {
     await writeFile(kept, 'marker')
     await vi.waitFor(() => expect(sent).toContain(kept))
     expect(sent).not.toContain(notes)
+  })
+
+  it('reports the open files of a folder renamed away, and watches a folder made in its place', async () => {
+    const src = join(dir, 'src')
+    const index = join(src, 'index.ts')
+    await mkdir(src)
+    await writeFile(index, 'one')
+    watchers.set(new Map([[index, index]]))
+    // Wait for the watcher to know its folder before moving it.
+    await writeFile(index, 'two')
+    await vi.waitFor(() => expect(sent).toContain(index))
+    sent = []
+
+    await rename(src, join(dir, 'old-src'))
+    await vi.waitFor(() => expect([...new Set(sent)]).toEqual([index]))
+    sent = []
+
+    await mkdir(src)
+    await writeFile(index, 'back')
+    await vi.waitFor(() => expect(sent).toContain(index))
   })
 })

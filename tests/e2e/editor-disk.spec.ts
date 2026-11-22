@@ -151,6 +151,9 @@ test('Markdown tabs preview the rendered text, without running or loading anythi
     '<img src="https://example.com/raw.png" onerror="window.ranFromMarkdown = true">',
     '',
     '![remote picture](https://example.com/picture.png)',
+    '',
+    '- **bold item** and *italic*',
+    '> a quote',
     ''
   ].join('\n')
   await withProject({ 'README.md': markdown }, async (page) => {
@@ -160,6 +163,11 @@ test('Markdown tabs preview the rendered text, without running or loading anythi
     })
     await openFile(page, 'app', 'README.md')
     await expect(lines(page)).toContainText('# Title here')
+    // The source is highlighted as Markdown: the heading bold, unlike plain text.
+    const token = (text: string) => lines(page).locator('span > span', { hasText: text })
+    await expect(token('# Title here')).toHaveCSS('font-weight', '700')
+    await expect(token('Some')).toHaveCSS('font-weight', '400')
+    await saveScreenshot(page, 'editor-markdown-source')
     await page.getByRole('button', { name: 'Preview' }).click()
     const preview = page.getByLabel('Markdown preview')
     await expect(preview.getByRole('heading', { name: 'Title here', level: 1 })).toBeVisible()
@@ -232,4 +240,73 @@ test('links in a Markdown preview open headings and files in the app', async () 
       await expect(lines(page)).toContainText('export const main = 1')
     }
   )
+})
+
+/** Collects the paths main reports changed on disk, as the page hears of them. */
+const recordChanges = (page: Page) =>
+  page.evaluate(
+    `window.reportedChanges = []; window.desktop.subscribeFileChanges((paths) => window.reportedChanges.push(...paths))`
+  )
+const reportedChanges = (page: Page) => page.evaluate<string[]>('window.reportedChanges')
+/** Resolves once main has answered every read the page sent before it (they are answered in order). */
+const settled = (page: Page, path: string) =>
+  page.evaluate(`window.desktop.readTextFile(${JSON.stringify(path)}).then(() => undefined)`)
+
+test('closing a binary tab stops main watching its file', async () => {
+  const binary = Buffer.from([0x00, 0x01, 0x02])
+  await withProject({ 'image.png': binary, 'notes.txt': 'open\n' }, async (page, app) => {
+    await recordChanges(page)
+    await openFile(page, 'app', 'image.png')
+    await expect(page.getByText('image.png is a binary file (3 bytes), not shown.')).toBeVisible()
+    await openFile(page, 'app', 'notes.txt')
+    await expect(lines(page)).toContainText('open')
+    await page.getByRole('button', { name: 'Close image.png' }).click()
+    await expect(tab(page, 'image.png')).toBeHidden()
+    await expect(tabs(page)).toHaveCount(1)
+
+    // Main reports in order, so once the open file is reported an earlier change would be too.
+    await writeFile(join(app, 'image.png'), Buffer.from([0x00, 0x09]))
+    await writeFile(join(app, 'notes.txt'), 'marker\n')
+    await expect.poll(() => reportedChanges(page)).toContain(join(app, 'notes.txt'))
+    expect(await reportedChanges(page)).not.toContain(join(app, 'image.png'))
+  })
+})
+
+test('a change on disk undone before the user answers no longer asks', async () => {
+  await withProject({ 'notes.txt': 'original\n' }, async (page, app) => {
+    const notes = join(app, 'notes.txt')
+    await openFile(page, 'app', 'notes.txt')
+    await typeAtEnd(page, 'mine')
+    await writeFile(notes, 'theirs\n')
+    await expect(changedDialog(page)).toBeVisible()
+    await writeFile(notes, 'original\n')
+    await expect(changedDialog(page)).toBeHidden()
+    await expect(lines(page)).toContainText('mine')
+    // The edits still stand on the original: saving writes them without asking.
+    await lines(page).click()
+    await page.keyboard.press('ControlOrMeta+S')
+    await expect(tab(page, 'notes.txt')).toBeVisible()
+    expect(await readFile(notes, 'utf8')).toBe('original\nmine')
+    await expect(changedDialog(page)).toHaveCount(0)
+  })
+})
+
+test('a change on disk asks only once the Files view shows again', async () => {
+  await withProject({ 'notes.txt': 'original\n' }, async (page, app) => {
+    const notes = join(app, 'notes.txt')
+    await recordChanges(page)
+    await openFile(page, 'app', 'notes.txt')
+    await typeAtEnd(page, 'mine')
+    await expect(tab(page, 'notes.txt, unsaved')).toBeVisible()
+    await showView(page, 'Agents')
+    await writeFile(notes, 'theirs\n')
+    await expect.poll(() => reportedChanges(page)).toContain(notes)
+    // The tab's own re-read was sent before this one, so it has been answered too.
+    await settled(page, notes)
+    await expect(changedDialog(page)).toHaveCount(0)
+    await showView(page, 'Files')
+    await expect(changedDialog(page)).toContainText('notes.txt changed on disk')
+    await changedDialog(page).getByRole('button', { name: 'Load Disk Version' }).click()
+    await expect(lines(page)).toHaveText('theirs')
+  })
 })

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { headingSlug, markdownLinkTarget } from './markdown-link-target'
+import { headingSlug, innermostRoot, markdownLinkTarget } from './markdown-link-target'
 
 const from = '/work/app/docs/guide.md'
 
@@ -67,6 +67,18 @@ describe('Markdown link targets', () => {
       path: 'C:\\x.md',
       slug: null
     })
+  })
+})
+
+describe('the root of a linked file', () => {
+  it('is the innermost workspace folder or worktree holding it', () => {
+    const roots = ['/work/app', '/work/app/.worktrees/fix', '/elsewhere/app-feature']
+    expect(innermostRoot('/work/app/.worktrees/fix/README.md', roots)).toBe(
+      '/work/app/.worktrees/fix'
+    )
+    expect(innermostRoot('/work/app/README.md', roots)).toBe('/work/app')
+    expect(innermostRoot('/elsewhere/app-feature/docs/a.md', roots)).toBe('/elsewhere/app-feature')
+    expect(innermostRoot('/work/application/README.md', roots)).toBeNull()
   })
 })
 

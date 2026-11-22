@@ -19,6 +19,8 @@ type EditorDocument = {
 
 const documents = new Map<string, EditorDocument>()
 const loading = new Set<string>()
+/** Files main holds for a tab (it watches them and lets them be saved), with or without a model. */
+const held = new Set<string>()
 
 const tabOf = (path: string) => useEditorTabStore.getState().tabs.find((tab) => tab.path === path)
 
@@ -45,6 +47,7 @@ export async function loadDocument(path: string): Promise<void> {
       setLoad(path, { status: 'error', message: 'there is no such file.' })
       return
     }
+    held.add(path)
     if (file.kind === 'binary') {
       setLoad(path, { status: 'ready', file: 'binary', size: file.size })
       return
@@ -200,14 +203,21 @@ async function refreshDocument(path: string): Promise<void> {
   const file = await window.desktop.readTextFile(path)
   if (documents.get(path) !== document) return
   setDeleted(path, file.kind === 'missing')
-  // The app's own save, or only touched.
-  if (file.kind === 'missing' || file.version === document.base) return
+  const conflict = tabOf(path)?.conflict ?? null
+  // The app's own save, only touched, or changed back before the user answered: nothing to ask.
+  if (file.kind === 'missing' || file.version === document.base) {
+    if (conflict === 'disk') {
+      document.disk = null
+      setConflict(path, null)
+    }
+    return
+  }
   if (!isEdited(document)) {
     showDisk(path, document, file)
     return
   }
   document.disk = file
-  setConflict(path, 'disk')
+  setConflict(path, conflict ?? 'disk')
 }
 
 // Reloads wait for saves of the same file still running, so the app's own save isn't a change.
@@ -230,10 +240,22 @@ export function keepEdits(path: string): void {
   if (conflict === 'save') void saveDocument(path)
 }
 
-/** The file on disk differs from a tab's edits: discard the edits for the file's text. */
+/** The file on disk differs from a tab's edits: discard the edits for the file's text as it is now. */
 export function loadDiskVersion(path: string): void {
-  const document = documents.get(path)
-  if (document?.disk) showDisk(path, document, document.disk)
+  void queued(path, async () => {
+    const document = documents.get(path)
+    if (!document) return
+    const file = await window.desktop.readTextFile(path)
+    if (documents.get(path) !== document) return
+    useEditorTabStore.getState().setDeleted(path, file.kind === 'missing')
+    showDisk(path, document, file)
+  }).catch((error: unknown) =>
+    notify({
+      severity: 'error',
+      title: `Couldn't load ${fileName(path)}`,
+      body: mainErrorMessage(error)
+    })
+  )
 }
 
 /** A save found the file changed on disk, and the user wants neither version yet. */
@@ -243,15 +265,16 @@ export function cancelConflict(path: string): void {
   useEditorTabStore.getState().setConflict(path, null)
 }
 
-// A model lives as long as its tab.
+// A model, and main's hold on the file, last as long as its tab.
 useEditorTabStore.subscribe((state) => {
-  for (const [path, document] of documents) {
+  for (const path of held) {
     if (state.tabs.some((tab) => tab.path === path)) continue
-    document.model.dispose()
+    documents.get(path)?.model.dispose()
     documents.delete(path)
+    held.delete(path)
     // Main stops letting the file be written once a save still running ends, unless it was reopened.
     void (queues.get(path)?.catch(() => undefined) ?? Promise.resolve()).then(() => {
-      if (documents.has(path) || loading.has(path)) return
+      if (held.has(path) || loading.has(path)) return
       window.desktop
         .releaseTextFile(path)
         .catch((error: unknown) => console.error('Releasing the file failed:', error))
