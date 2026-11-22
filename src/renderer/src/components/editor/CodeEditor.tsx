@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useLayoutEffect, useRef } from 'react'
 import { cssFontFamily } from '@/lib/css-font-family'
 import { useEditorScheme } from '@/lib/editor-scheme'
 import { useEditorTabStore } from '@/state/editor-tab-store'
@@ -33,8 +33,8 @@ export function CodeEditor({
   const lineHeight = useSettingsStore((state) => state.values['editor.lineHeight'])
   const scheme = useEditorScheme(themeId)
 
-  // Monaco has one theme for all its editors.
-  useEffect(() => {
+  // Monaco has one theme for all its editors. Set before the editor is first painted with it.
+  useLayoutEffect(() => {
     if (!scheme) return
     const name = `hatfield-${themeId}`
     monaco.editor.defineTheme(name, monacoTheme(scheme))
@@ -95,7 +95,8 @@ export function CodeEditor({
       ref={container}
       aria-label="Editor"
       data-path={path}
-      hidden={hidden || !ready}
+      // Shown once its theme is set, never in Monaco's own colours first.
+      hidden={hidden || !ready || !scheme}
       className="min-h-0 flex-1"
     />
   )

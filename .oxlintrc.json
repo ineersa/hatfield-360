@@ -42,7 +42,7 @@
     "import/no-unassigned-import": [
       "error",
       {
-        "allow": ["**/*.css", "**/*.worker.js"]
+        "allow": ["**/*.css"]
       }
     ],
     "typescript/no-floating-promises": "error",

@@ -59,6 +59,19 @@ test('files open in editor tabs that switch, reorder and close, with highlightin
           }
         })
         await showView(page, 'Files')
+        // Every frame the editor is on screen, from its first, shows the theme's background.
+        // (A script string: the tests are typed for Node, without the DOM.)
+        await page.evaluate(`
+          globalThis.editorBackgrounds = []
+          const record = () => {
+            const background = document.querySelector('.monaco-editor-background')
+            if (background && background.offsetParent !== null) {
+              editorBackgrounds.push(getComputedStyle(background).backgroundColor)
+            }
+            requestAnimationFrame(record)
+          }
+          requestAnimationFrame(record)
+        `)
         await openFile(page, 'app', 'src', 'index.ts')
         await expect(tabs(page)).toHaveCount(1)
         await expect(lines(page)).toContainText('const greeting = "hello"')
@@ -67,6 +80,10 @@ test('files open in editor tabs that switch, reorder and close, with highlightin
           'color',
           'rgb(207, 142, 109)'
         )
+
+        expect(await page.evaluate('[...new Set(globalThis.editorBackgrounds)]')).toEqual([
+          'rgb(25, 26, 28)'
+        ])
 
         // Two files of the same name show the folder that tells them apart.
         await item(page, 'test').click()

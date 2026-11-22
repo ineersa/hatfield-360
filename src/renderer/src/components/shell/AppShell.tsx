@@ -21,10 +21,9 @@ import { SHELL_VIEWS } from './shell-views'
 import { SIDE_PANEL_HANDLE_WIDTH, SidePanelResizeHandle } from './SidePanelResizeHandle'
 import { StatusBar } from './StatusBar'
 
-// Monaco is large; it loads with the first file opened.
-const EditorTabs = lazy(() =>
-  import('@/components/editor/EditorTabs').then((module) => ({ default: module.EditorTabs }))
-)
+// Monaco is large: it loads once the Files view is shown, so neither startup nor the first file waits.
+const loadEditorTabs = () => import('@/components/editor/EditorTabs')
+const EditorTabs = lazy(() => loadEditorTabs().then((module) => ({ default: module.EditorTabs })))
 
 /** Sliver of main area that stays visible however wide the side panel gets, as in JetBrains IDEs. */
 const MAIN_AREA_MIN_WIDTH = 120
@@ -53,6 +52,9 @@ export function AppShell(): React.JSX.Element {
   useEffect(() => connectSettings(), [connectSettings])
   useEffect(() => connectLayout(), [connectLayout])
   useEffect(() => window.desktop.subscribeShowSettings(openSettings), [openSettings])
+  useEffect(() => {
+    if (activeView === 'files') void loadEditorTabs()
+  }, [activeView])
   useAppFont()
   useColorThemes()
   useTerminalCommands()
