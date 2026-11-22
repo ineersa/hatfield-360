@@ -1,24 +1,8 @@
 import { expect, test, type Page } from '@playwright/test'
-import { execFileSync } from 'node:child_process'
-import { mkdir, realpath, writeFile } from 'node:fs/promises'
+import { mkdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
+import { git, makeRepo } from './git-repository'
 import { makeTempDir, saveScreenshot, withApp } from './launch-app'
-
-function git(cwd: string, ...args: string[]): void {
-  execFileSync(
-    'git',
-    [
-      '-c',
-      'user.name=Test',
-      '-c',
-      'user.email=test@example.com',
-      '-c',
-      'commit.gpgsign=false',
-      ...args
-    ],
-    { cwd, stdio: 'ignore' }
-  )
-}
 
 /** A user data folder whose workspace holds `folders`, with the DOM renderer so terminal text is readable. */
 async function seedWorkspace(folders: string[]): Promise<[string, () => Promise<void>]> {
@@ -30,20 +14,6 @@ async function seedWorkspace(folders: string[]): Promise<[string, () => Promise<
   )
   await writeFile(join(userData, 'settings.json'), '{ "terminal.gpuAcceleration": false }')
   return [userData, cleanup]
-}
-
-/** A repository `app` with one commit on `main`, in a fresh folder (resolved, as git prints it). */
-async function makeRepo(): Promise<{
-  projects: string
-  repo: string
-  cleanup: () => Promise<void>
-}> {
-  const [dir, cleanup] = await makeTempDir('projects')
-  const projects = await realpath(dir)
-  const repo = join(projects, 'app')
-  git(projects, 'init', '-q', '-b', 'main', repo)
-  git(repo, 'commit', '-q', '--allow-empty', '-m', 'first')
-  return { projects, repo, cleanup }
 }
 
 const rows = (page: Page) =>

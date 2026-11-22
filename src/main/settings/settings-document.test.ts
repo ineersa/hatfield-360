@@ -44,6 +44,7 @@ describe('parseSettings', () => {
     }`
     expect(parseSettings(text, DEFAULT_SETTINGS)).toEqual({
       values: {
+        ...DEFAULT_SETTINGS,
         'app.fontFamily': 'Noto Sans',
         'app.fontSize': 12.5,
         'terminal.fontFamily': "'Iosevka Term', monospace",
@@ -76,6 +77,19 @@ describe('parseSettings', () => {
       editable: true,
       problems: []
     })
+  })
+
+  it('reads a launch profile from JSON with comments and trailing commas', () => {
+    const text = `{
+      // Keep launches wrapped by the sandbox.
+      "agents.hatfield": { "executable": "  hatfield-safe  ", "args": ["--label", " local dev "], },
+    }`
+    const parsed = parseSettings(text, lastGood)
+    expect(parsed.values['agents.hatfield']).toEqual({
+      executable: 'hatfield-safe',
+      args: ['--label', ' local dev ']
+    })
+    expect(parsed.problems).toEqual([])
   })
 
   it('keeps the last good settings when the file is not valid JSON or not an object', () => {
@@ -167,6 +181,24 @@ describe('withSetting', () => {
   "app.fontSize": 16,
 }
 `
+
+  it('removes a saved profile when independently entered values match the default', () => {
+    const custom = '{ "agents.hatfield": { "executable": "hatfield-safe", "args": [] } }'
+    const updated = withSetting(custom, 'agents.hatfield', { executable: 'hatfield', args: [] })
+    expect(updated).not.toContain('agents.hatfield')
+  })
+
+  it('keeps literal arguments, in order, when saving the default executable', () => {
+    const updated = withSetting('{}', 'agents.claude', {
+      executable: 'claude',
+      args: ['--flag', ' literal ']
+    })
+    expect(updated).toContain('"agents.claude"')
+    expect(parseSettings(updated, lastGood).values['agents.claude']).toEqual({
+      executable: 'claude',
+      args: ['--flag', ' literal ']
+    })
+  })
 
   it('changes one setting and keeps comments and the other settings', () => {
     expect(withSetting(file, 'app.fontSize', 18)).toBe(`{

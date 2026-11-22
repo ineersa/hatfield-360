@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="320" viewBox="0 0 256 320" fill="none" role="img" aria-labelledby="title desc">
+<title id="title">Hatfield plush puppy</title>
+<desc id="desc">A tiny warm-grey plush puppy with an oversized head, glossy blue eyes, cream markings, short folded ears, little paws and a large embroidered H on its belly.</desc>
+<defs>
+ <radialGradient id="fur" cx=".38" cy=".25" r=".8"><stop stop-color="#A09F98"/><stop offset=".6" stop-color="#85857F"/><stop offset="1" stop-color="#595B58"/></radialGradient>
+ <radialGradient id="cream" cx=".4" cy=".25" r=".8"><stop stop-color="#ECEADC"/><stop offset=".7" stop-color="#D9D8C9"/><stop offset="1" stop-color="#B4B6A7"/></radialGradient>
+ <radialGradient id="caramel" cx=".3" cy=".25" r=".9"><stop stop-color="#797C75"/><stop offset=".65" stop-color="#555B57"/><stop offset="1" stop-color="#383F3D"/></radialGradient>
+ <radialGradient id="iris"><stop offset=".5" stop-color="#223E4A"/><stop offset=".78" stop-color="#4B778A"/><stop offset=".92" stop-color="#7FA1AF"/><stop offset="1" stop-color="#34505C"/></radialGradient>
+ <radialGradient id="eye" cx=".35" cy=".2" r=".85"><stop stop-color="#263341"/><stop offset=".45" stop-color="#0A1018"/><stop offset="1" stop-color="#030509"/></radialGradient>
+ <linearGradient id="nose" x2="0" y2="1"><stop stop-color="#464A53"/><stop offset="1" stop-color="#151921"/></linearGradient>
+ <filter id="soft"><feGaussianBlur stdDeviation=".6"/></filter>
+</defs>
+<!-- Small bean-filled body, tucked limbs, and broad soft feet. -->
+<path d="M83 177C66 192 62 228 65 259C66 284 88 299 127 299C167 299 190 283 191 258C194 225 186 194 172 178Z" fill="url(#fur)"/>
+<ellipse cx="128" cy="246" rx="40" ry="48" fill="url(#cream)"/>
+<path d="M75 199C56 203 48 231 54 248C58 261 73 259 81 247C88 235 91 212 85 204Z" fill="url(#fur)"/>
+<path d="M181 199C201 203 208 231 202 248C198 261 184 259 176 247C168 235 166 212 171 204Z" fill="url(#fur)"/>
+<ellipse cx="67" cy="244" rx="13" ry="16" transform="rotate(18 67 244)" fill="url(#caramel)"/>
+<ellipse cx="189" cy="244" rx="13" ry="16" transform="rotate(-18 189 244)" fill="url(#caramel)"/>
+<ellipse cx="85" cy="287" rx="26" ry="21" transform="rotate(-14 85 287)" fill="url(#fur)"/>
+<ellipse cx="171" cy="287" rx="26" ry="21" transform="rotate(14 171 287)" fill="url(#fur)"/>
+<ellipse cx="85" cy="293" rx="20" ry="14" transform="rotate(-14 85 293)" fill="url(#caramel)"/>
+<ellipse cx="171" cy="293" rx="20" ry="14" transform="rotate(14 171 293)" fill="url(#caramel)"/>
+<path d="M128 23C140 18 144 24 153 23C163 22 170 28 178 31C187 33 192 42 199 47C208 54 211 64 216 73C223 85 224 101 224 115C225 134 220 155 210 170C199 186 183 195 166 199C145 206 112 207 91 201C69 195 51 184 42 167C32 149 30 132 31 115C30 99 33 83 40 70C44 61 49 52 57 46C63 39 71 34 80 31C89 26 98 24 107 25C116 20 121 24 128 23Z" fill="url(#fur)"/>
+<!-- Short ears fold forward and taper to rounded tips. -->
+<path d="M76 39C62 24 42 23 28 35C13 48 13 70 22 89C27 100 35 110 42 108C51 106 49 91 52 77C55 61 66 48 76 39Z" fill="url(#caramel)"/>
+<path d="M180 39C194 24 214 23 228 35C243 48 243 70 234 89C229 100 221 110 214 108C205 106 207 91 204 77C201 61 190 48 180 39Z" fill="url(#caramel)"/>
+<path d="M65 36C45 32 29 47 29 66M191 36C211 32 227 47 227 66" stroke="#7FA1AF" stroke-width="3" stroke-linecap="round" opacity=".55"/>
+<!-- Silver eye surrounds and charcoal puppy patches. -->
+<ellipse cx="81" cy="114" rx="43" ry="48" transform="rotate(-9 81 114)" fill="url(#cream)"/>
+<ellipse cx="175" cy="114" rx="43" ry="48" transform="rotate(9 175 114)" fill="url(#caramel)"/>
+<path d="M49 89Q75 65 100 84M156 80Q181 69 201 91" stroke="#ECEADC" stroke-width="10" stroke-linecap="round"/>
+<!-- Large bead eyes with amber rims and asymmetric soft reflections. -->
+<g stroke="#252A32" stroke-width="3">
+ <ellipse cx="80" cy="118" rx="32" ry="35" fill="url(#iris)"/>
+ <ellipse cx="176" cy="118" rx="32" ry="35" fill="url(#iris)"/>
+</g>
+<ellipse cx="80" cy="118" rx="24" ry="27" fill="url(#eye)"/>
+<ellipse cx="176" cy="118" rx="24" ry="27" fill="url(#eye)"/>
+<g fill="#FFFDF6"><ellipse cx="71" cy="105" rx="7" ry="8" transform="rotate(30 71 105)"/><ellipse cx="167" cy="105" rx="7" ry="8" transform="rotate(30 167 105)"/><circle cx="89" cy="132" r="3" opacity=".7"/><circle cx="185" cy="132" r="3" opacity=".7"/></g>
+<ellipse cx="128" cy="166" rx="41" ry="30" fill="url(#cream)"/>
+<ellipse cx="128" cy="151" rx="25" ry="19" fill="url(#caramel)"/>
+<path d="M112 153C113 145 143 145 144 153C144 160 134 168 128 168C122 168 112 160 112 153Z" fill="url(#nose)"/>
+<path d="M119 152Q128 149 136 152" stroke="#949CA6" stroke-width="3" stroke-linecap="round" opacity=".6"/>
+<path d="M128 168V177M117 178Q122 182 128 177Q134 182 139 178" stroke="#4A505A" stroke-width="2.5" stroke-linecap="round"/>
+<!-- Small embroidered initial: no oversized badge or toy-company branding. -->
+<path d="M113 233V266M143 233V266M113 249.5H143" stroke="#4B778A" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M112 234V265M142 234V265M114 248.5H142" stroke="#B4CCD1" stroke-width="1.3" stroke-linecap="round" stroke-dasharray="1.5 3.5"/>
+<!-- Short tufts suggest brushed plush rather than a hard outline. -->
+<g stroke="#BCC0B4" stroke-width="2" stroke-linecap="round" opacity=".45">
+ <path d="M91 32L88 37M102 28L100 34M113 27L112 32M124 26V31M136 27L137 32M147 28L149 33M159 31L161 36M169 35L172 40M47 75L44 82M39 91L37 98M38 145L41 152M53 172L58 177M68 187L74 190M183 189L189 186M205 173L209 167M215 151L217 144M79 216L76 222M179 215L182 221M106 280L110 284M145 283L150 279"/>
+</g>
+</svg>

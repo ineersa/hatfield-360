@@ -1,7 +1,8 @@
 import { app, type WebContents } from 'electron'
+import { constants } from 'node:fs'
 import { randomUUID } from 'node:crypto'
-import { chmod, stat } from 'node:fs/promises'
-import { dirname, join } from 'node:path'
+import { access, chmod, stat } from 'node:fs/promises'
+import { delimiter, dirname, isAbsolute, join, resolve as resolvePath } from 'node:path'
 import { type IPty, spawn } from 'node-pty'
 import {
   TERMINAL_CHANNELS,
@@ -32,6 +33,8 @@ type Session = {
   id: string
   pty: IPty
   owner: WebContents
+  cwd: string
+  project: string | null
   output: string[]
   outputBytes: number
   flushTimer: NodeJS.Timeout | null
@@ -59,6 +62,30 @@ async function ensureSpawnHelperExecutable(): Promise<void> {
   }
 }
 
+// Unix node-pty can report a missing executable only as a child exit, after spawn returns.
+async function agentExecutable(
+  file: string,
+  cwd: string,
+  path: string | undefined
+): Promise<string> {
+  if (process.platform === 'win32')
+    return !isAbsolute(file) && /[\\/]/.test(file) ? resolvePath(cwd, file) : file
+  const candidates = isAbsolute(file)
+    ? [file]
+    : file.includes('/')
+      ? [resolvePath(cwd, file)]
+      : (path ?? '/usr/bin:/bin')
+          .split(delimiter)
+          .map((directory) => resolvePath(cwd, directory, file))
+  for (const candidate of candidates) {
+    const executable = await access(candidate, constants.X_OK)
+      .then(() => stat(candidate))
+      .catch(() => null)
+    if (executable?.isFile()) return candidate
+  }
+  throw new Error('Agent executable not found.')
+}
+
 /** Shells in ptys, each owned by the window that started it and ended with it. */
 class TerminalSessions {
   private readonly sessions = new Map<string, Session>()
@@ -67,29 +94,48 @@ class TerminalSessions {
   private readonly endings = new Set<Promise<void>>()
   private helperChecked: Promise<void> | null = null
 
+  directory(owner: WebContents, id: string) {
+    const session = this.owned(owner, id)
+    return session ? { cwd: session.cwd, project: session.project } : null
+  }
+
   async spawn(
     owner: WebContents,
-    request: { cwd: string; cols: number; rows: number }
+    request: { cwd: string; cols: number; rows: number },
+    agent?: {
+      id: string
+      project: string | null
+      executable: string
+      args: string[]
+      env: Record<string, string>
+      onExit: () => void
+    }
   ): Promise<TerminalSession> {
     this.helperChecked ??= ensureSpawnHelperExecutable()
     await this.helperChecked
-    const shell = defaultShell(process.env, process.platform)
+    const env = terminalEnvironment(process.env, {
+      platform: process.platform,
+      appVersion: app.getVersion()
+    })
+    const shell = agent
+      ? { file: await agentExecutable(agent.executable, request.cwd, env.PATH), args: agent.args }
+      : defaultShell(process.env, process.platform)
+    if (owner.isDestroyed()) throw new Error('The terminal window has closed.')
     const pty = spawn(shell.file, shell.args, {
       name: 'xterm-256color',
       cols: request.cols,
       rows: request.rows,
       cwd: request.cwd,
-      env: terminalEnvironment(process.env, {
-        platform: process.platform,
-        appVersion: app.getVersion()
-      }),
+      env: { ...env, ...agent?.env },
       ...(process.platform === 'win32' ? { useConptyDll: true } : {})
     })
-    const id = randomUUID()
+    const id = agent?.id ?? randomUUID()
     const session: Session = {
       id,
       pty,
       owner,
+      cwd: request.cwd,
+      project: agent?.project ?? null,
       output: [],
       outputBytes: 0,
       flushTimer: null,
@@ -105,6 +151,7 @@ class TerminalSessions {
     pty.onExit(({ exitCode, signal }) => {
       this.flushOutput(session)
       this.sessions.delete(id)
+      agent?.onExit()
       const exit: TerminalExit = { id, exitCode, signal: signal ?? null }
       if (!session.detached && !owner.isDestroyed()) owner.send(TERMINAL_CHANNELS.exit, exit)
     })
