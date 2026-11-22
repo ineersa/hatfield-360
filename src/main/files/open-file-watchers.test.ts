@@ -77,4 +77,26 @@ describe('OpenFileWatchers', () => {
     await writeFile(index, 'back')
     await vi.waitFor(() => expect(sent).toContain(index))
   })
+
+  it('reports the open files under a folder further up renamed away, and follows them back', async () => {
+    const components = join(dir, 'src', 'components')
+    const index = join(components, 'index.ts')
+    await mkdir(components, { recursive: true })
+    await writeFile(index, 'one')
+    watchers.set(new Map([[index, index]]))
+    await writeFile(index, 'two')
+    await vi.waitFor(() => expect(sent).toContain(index))
+    sent = []
+
+    await rename(join(dir, 'src'), join(dir, 'old-src'))
+    await vi.waitFor(() => expect([...new Set(sent)]).toEqual([index]))
+    sent = []
+
+    await mkdir(components, { recursive: true })
+    await vi.waitFor(() => expect(sent).toContain(index))
+    sent = []
+    // Watched again: edits in the new folder are seen.
+    await writeFile(index, 'back')
+    await vi.waitFor(() => expect(sent).toContain(index))
+  })
 })

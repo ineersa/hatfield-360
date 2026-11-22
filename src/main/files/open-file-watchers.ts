@@ -9,24 +9,35 @@ import { basename, dirname } from 'node:path'
 const QUIET_MS = 150
 /** A file written to without pause is still reported this often. */
 const MAX_DELAY_MS = 1000
+/** Renames and deletes on the way to the folders come in bursts; they are checked once after one. */
+const RECHECK_MS = 50
 
 /**
- * A watched folder and, by file name, the paths the page knows its open files in it by. `inode` is
- * the folder's, to tell it from another folder moved to its path.
+ * A folder with open files and, by file name, the paths the page knows them by. Watched while it
+ * exists; `inode` tells it from another folder moved to its path.
  */
-type Folder = { watcher: FSWatcher; files: Map<string, Set<string>>; inode: number | null }
+type Folder = {
+  files: Map<string, Set<string>>
+  watcher: FSWatcher | null
+  inode: number | null
+}
+
+/** A folder above open files' folders, watched for the names on the way down to them. */
+type Ancestor = { watcher: FSWatcher; names: Set<string> }
 
 /**
  * Watches a page's open files for changes on disk. Their folders are watched, not the files, so a
  * file replaced by a rename (an atomic save), deleted or created again is seen as well as edited.
+ * The folders above them are watched too: renaming or deleting any of them moves the files away
+ * without an event in their own folder.
  */
 export class OpenFileWatchers {
   private readonly folders = new Map<string, Folder>()
-  /** Folders of open files that don't exist now, by the watcher of the folder they'd be made in. */
-  private readonly absent = new Map<string, Omit<Folder, 'inode'>>()
+  private readonly ancestors = new Map<string, Ancestor>()
   private readonly pending = new Set<string>()
   private timer: NodeJS.Timeout | null = null
   private firstPending = 0
+  private recheckTimer: NodeJS.Timeout | null = null
 
   constructor(private readonly send: (paths: string[]) => void) {}
 
@@ -41,95 +52,115 @@ export class OpenFileWatchers {
       names.set(basename(real), paths)
       wanted.set(folder, names)
     }
-    for (const [held, drop] of [
-      [this.folders, (folder: string) => this.drop(folder)],
-      [this.absent, (folder: string) => this.stopWaiting(folder)]
-    ] as const) {
-      for (const [folder, entry] of held) {
-        const names = wanted.get(folder)
-        if (names) entry.files = names
-        else drop(folder)
+    for (const [folder, held] of this.folders) {
+      const names = wanted.get(folder)
+      if (names) {
+        held.files = names
+      } else {
+        held.watcher?.close()
+        this.folders.delete(folder)
       }
     }
     for (const [folder, names] of wanted) {
-      if (!this.folders.has(folder) && !this.absent.has(folder)) this.open(folder, names)
+      if (this.folders.has(folder)) continue
+      this.folders.set(folder, { files: names, watcher: null, inode: null })
+      this.open(folder)
     }
+    this.watchAncestors()
   }
 
-  private open(folder: string, files: Map<string, Set<string>>): void {
+  private open(folder: string): void {
+    const held = this.folders.get(folder)
+    if (!held || held.watcher) return
     try {
-      const watcher = watch(folder, (event, name) => {
-        const held = this.folders.get(folder)
-        if (held?.watcher !== watcher) return
+      const watcher = watch(folder, (_event, name) => {
+        if (held.watcher !== watcher) return
         // Some platforms leave out the name: any of the folder's files may have changed.
         const paths = name === null ? [...held.files.values()] : [held.files.get(name)]
         for (const set of paths) for (const path of set ?? []) this.queue(path)
-        // Renaming the folder itself reports its own name, or none, on Linux.
-        if (event === 'rename' && (name === null || !held.files.has(name))) void this.check(folder)
-      })
-      // The folder itself went away: its files did too.
-      watcher.on('error', () => this.moved(folder, watcher))
-      const held: Folder = { watcher, files, inode: null }
-      this.folders.set(folder, held)
-      void stat(folder)
-        .then((stats) => {
-          held.inode = stats.ino
-        })
-        .catch(() => this.moved(folder, watcher))
-    } catch {
-      // Gone already (the file's tab shows it missing when it is next read): watched for once made.
-      this.waitFor(folder, files)
-    }
-  }
-
-  /** Watches the folder's parent until the folder is made again, then reports its open files. */
-  private waitFor(folder: string, files: Map<string, Set<string>>): void {
-    try {
-      const watcher = watch(dirname(folder), (_event, name) => {
-        const waiting = this.absent.get(folder)
-        if (waiting?.watcher !== watcher || (name !== null && name !== basename(folder))) return
-        this.stopWaiting(folder)
-        this.open(folder, waiting.files)
-        if (this.folders.has(folder))
-          for (const set of waiting.files.values()) for (const path of set) this.queue(path)
       })
       watcher.on('error', () => {
-        if (this.absent.get(folder)?.watcher === watcher) this.stopWaiting(folder)
+        if (held.watcher === watcher) this.recheckSoon()
       })
-      this.absent.set(folder, { watcher, files })
+      held.watcher = watcher
+      held.inode = null
+      void stat(folder).then(
+        (stats) => {
+          if (held.watcher === watcher) held.inode = stats.ino
+        },
+        () => this.recheckSoon()
+      )
     } catch {
-      // Its parent is gone too: saving the file makes the folders and watches it again.
+      // Gone (the file's tab shows it missing when it is next read): an ancestor sees it made again.
     }
   }
 
-  private stopWaiting(folder: string): void {
-    this.absent.get(folder)?.watcher.close()
-    this.absent.delete(folder)
+  /** Watches each existing folder above the open files' folders, for the names leading to them. */
+  private watchAncestors(): void {
+    const wanted = new Map<string, Set<string>>()
+    for (const folder of this.folders.keys()) {
+      for (let child = folder, parent = dirname(folder); parent !== child;) {
+        const names = wanted.get(parent) ?? new Set<string>()
+        names.add(basename(child))
+        wanted.set(parent, names)
+        child = parent
+        parent = dirname(parent)
+      }
+    }
+    for (const [dir, ancestor] of this.ancestors) {
+      const names = wanted.get(dir)
+      if (names) {
+        ancestor.names = names
+      } else {
+        ancestor.watcher.close()
+        this.ancestors.delete(dir)
+      }
+    }
+    for (const [dir, names] of wanted) {
+      if (this.ancestors.has(dir)) continue
+      try {
+        const watcher = watch(dir, (_event, name) => {
+          const ancestor = this.ancestors.get(dir)
+          if (ancestor?.watcher !== watcher) return
+          if (name === null || ancestor.names.has(name)) this.recheckSoon()
+        })
+        watcher.on('error', () => this.recheckSoon())
+        this.ancestors.set(dir, { watcher, names })
+      } catch {
+        // Gone too: a folder above it sees it made again.
+      }
+    }
   }
 
-  /** The folder at the path is no longer the one watched: renamed, deleted or replaced. */
-  private async check(folder: string): Promise<void> {
-    const held = this.folders.get(folder)
-    if (!held || held.inode === null) return
-    const inode = await stat(folder).then(
-      (stats) => stats.ino,
-      () => null
-    )
-    if (inode !== held.inode) this.moved(folder, held.watcher)
+  private recheckSoon(): void {
+    if (this.recheckTimer) return
+    this.recheckTimer = setTimeout(() => {
+      this.recheckTimer = null
+      void this.recheck()
+    }, RECHECK_MS)
   }
 
-  /** Reports the folder's files and watches whatever folder is at its path now, if any. */
-  private moved(folder: string, watcher: FSWatcher): void {
-    const held = this.folders.get(folder)
-    if (held?.watcher !== watcher) return
-    this.drop(folder)
-    for (const set of held.files.values()) for (const path of set) this.queue(path)
-    this.open(folder, held.files)
-  }
-
-  private drop(folder: string): void {
-    this.folders.get(folder)?.watcher.close()
-    this.folders.delete(folder)
+  /**
+   * Something on the way to the folders was renamed, deleted or made. The folders above are watched
+   * again at their paths, and each folder no longer the one watched (or made again) is watched
+   * again, its files reported so their tabs read them again.
+   */
+  private async recheck(): Promise<void> {
+    for (const ancestor of this.ancestors.values()) ancestor.watcher.close()
+    this.ancestors.clear()
+    this.watchAncestors()
+    for (const [folder, held] of this.folders) {
+      const inode = await stat(folder).then(
+        (stats) => (stats.isDirectory() ? stats.ino : null),
+        () => null
+      )
+      if (this.folders.get(folder) !== held) continue
+      if (held.watcher ? inode !== null && inode === held.inode : inode === null) continue
+      held.watcher?.close()
+      held.watcher = null
+      for (const set of held.files.values()) for (const path of set) this.queue(path)
+      if (inode !== null) this.open(folder)
+    }
   }
 
   private queue(path: string): void {
@@ -150,8 +181,12 @@ export class OpenFileWatchers {
 
   close(): void {
     if (this.timer) clearTimeout(this.timer)
+    if (this.recheckTimer) clearTimeout(this.recheckTimer)
     this.timer = null
-    for (const folder of this.folders.keys()) this.drop(folder)
-    for (const folder of this.absent.keys()) this.stopWaiting(folder)
+    this.recheckTimer = null
+    for (const held of this.folders.values()) held.watcher?.close()
+    this.folders.clear()
+    for (const ancestor of this.ancestors.values()) ancestor.watcher.close()
+    this.ancestors.clear()
   }
 }
