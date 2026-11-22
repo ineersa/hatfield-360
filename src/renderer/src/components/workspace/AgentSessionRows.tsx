@@ -1,5 +1,6 @@
+import claudeCodeIcon from '@/assets/claudecode-color.svg'
 import { cn } from '@/lib/class-names'
-import { Activity, Check, HatGlasses, MessageCircle, Sun, X } from 'lucide-react'
+import { Activity, Check, HatGlasses, MessageCircle, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import {
   AGENT_PROVIDERS,
@@ -153,7 +154,6 @@ export function AgentSessionRows({
       {sessions.map((session) => {
         const provider = AGENT_PROVIDERS[session.provider]
         const title = `${provider} session${session.providerSessionId ? ` · ${session.providerSessionId}` : ''}`
-        const Provider = session.provider === 'hatfield' ? HatGlasses : Sun
         const state = isStopped(session)
           ? 'stopped'
           : session.wait
@@ -192,7 +192,11 @@ export function AgentSessionRows({
                 current && 'bg-selection text-selection-foreground hover:bg-selection'
               )}
             >
-              <Provider className="size-4 shrink-0" aria-hidden />
+              {session.provider === 'hatfield' ? (
+                <HatGlasses className="size-4 shrink-0" aria-hidden />
+              ) : (
+                <img src={claudeCodeIcon} alt="" className="size-4 shrink-0" aria-hidden />
+              )}
               <span className="min-w-0 flex-1">
                 <span className="type-tree-row block truncate" title={title}>
                   {title}
