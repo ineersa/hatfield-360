@@ -52,8 +52,21 @@ function rule(token: string, own: TextAttributes, text: TextAttributes): editor.
   }
 }
 
-/** The Monaco theme for a JetBrains editor scheme: token colours and the editor's own colours. */
-export function monacoTheme(scheme: EditorScheme): editor.IStandaloneThemeData {
+/** The app theme's popup colours, which Monaco's context menu takes, as in the rest of the app. */
+export type MenuColors = {
+  background: string
+  foreground: string
+  border: string
+  selection: string
+  selectionForeground: string
+  separator: string
+}
+
+/**
+ * The Monaco theme for a JetBrains editor scheme: token colours and the editor's own colours, with
+ * the context menu in the app theme's popup colours (JetBrains schemes colour only the editor).
+ */
+export function monacoTheme(scheme: EditorScheme, menu: MenuColors): editor.IStandaloneThemeData {
   const { colors, attributes } = scheme
   const text = attributes.TEXT ?? {}
   const search = attributes.TEXT_SEARCH_RESULT_ATTRIBUTES?.background
@@ -90,7 +103,13 @@ export function monacoTheme(scheme: EditorScheme): editor.IStandaloneThemeData {
     ['editorError.foreground', attributes.ERRORS_ATTRIBUTES?.effect?.color],
     ['editorWarning.foreground', attributes.WARNING_ATTRIBUTES?.effect?.color],
     // JetBrains' error stripe has no border.
-    ['editorOverviewRuler.border', text.background]
+    ['editorOverviewRuler.border', text.background],
+    ['menu.background', menu.background],
+    ['menu.foreground', menu.foreground],
+    ['menu.border', menu.border],
+    ['menu.selectionBackground', menu.selection],
+    ['menu.selectionForeground', menu.selectionForeground],
+    ['menu.separatorBackground', menu.separator]
   ]
   return {
     base: scheme.dark ? 'vs-dark' : 'vs',

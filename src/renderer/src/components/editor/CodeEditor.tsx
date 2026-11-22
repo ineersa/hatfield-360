@@ -1,11 +1,33 @@
-import { useEffect, useLayoutEffect, useRef } from 'react'
+import { useEffect, useLayoutEffect, useRef, useSyncExternalStore } from 'react'
 import { cssFontFamily } from '@/lib/css-font-family'
 import { useEditorScheme } from '@/lib/editor-scheme'
 import { useEditorTabStore } from '@/state/editor-tab-store'
 import { useSettingsStore } from '@/state/settings-store'
 import { editorDocument, saveDocument, viewStates } from './editor-documents'
 import { monaco } from './monaco-environment'
-import { monacoTheme } from './monaco-theme'
+import { type MenuColors, monacoTheme } from './monaco-theme'
+
+/** The page's app theme (`data-theme`), which changes after the editor's own effects run. */
+function subscribeAppTheme(onChange: () => void): () => void {
+  const observer = new MutationObserver(onChange)
+  observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] })
+  return () => observer.disconnect()
+}
+const appThemeId = (): string | undefined => document.documentElement.dataset.theme
+
+/** The current app theme's popup colours, read from its stylesheet. */
+function menuColors(): MenuColors {
+  const style = getComputedStyle(document.documentElement)
+  const role = (name: string): string => style.getPropertyValue(`--${name}`).trim()
+  return {
+    background: role('popover'),
+    foreground: role('popover-foreground'),
+    border: role('popover-border'),
+    selection: role('popover-selection'),
+    selectionForeground: role('popover-selection-foreground'),
+    separator: role('separator')
+  }
+}
 
 /**
  * The Monaco editor of the editor tabs: one instance that shows the active tab's model, keeping
@@ -32,14 +54,15 @@ export function CodeEditor({
   const fontSize = useSettingsStore((state) => state.values['editor.fontSize'])
   const lineHeight = useSettingsStore((state) => state.values['editor.lineHeight'])
   const scheme = useEditorScheme(themeId)
+  const appTheme = useSyncExternalStore(subscribeAppTheme, appThemeId)
 
   // Monaco has one theme for all its editors. Set before the editor is first painted with it.
   useLayoutEffect(() => {
     if (!scheme) return
-    const name = `hatfield-${themeId}`
-    monaco.editor.defineTheme(name, monacoTheme(scheme))
+    const name = `hatfield-${themeId}-${appTheme ?? 'default'}`
+    monaco.editor.defineTheme(name, monacoTheme(scheme, menuColors()))
     monaco.editor.setTheme(name)
-  }, [scheme, themeId])
+  }, [scheme, themeId, appTheme])
 
   useEffect(() => {
     const element = container.current
@@ -48,11 +71,9 @@ export function CodeEditor({
       model: null,
       // Lays out again when the tab area is resized or shown after another view.
       automaticLayout: true,
-      // As in JetBrains IDEs: no minimap or empty breakpoint margin, brackets in the scheme's colour,
-      // the caret row filled to the gutter.
+      // As in JetBrains IDEs: no minimap or empty breakpoint margin, the caret row filled to the gutter.
       minimap: { enabled: false },
       glyphMargin: false,
-      bracketPairColorization: { enabled: false },
       renderLineHighlight: 'all',
       fixedOverflowWidgets: true
     })

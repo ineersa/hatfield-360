@@ -83,7 +83,8 @@ function TreeRow({
   selected,
   tabbable,
   onSelect,
-  onActivate,
+  onToggle,
+  onOpen,
   icon,
   hint,
   tip,
@@ -96,8 +97,9 @@ function TreeRow({
   /** Undefined for rows that don't fold. */
   expanded?: boolean
   dimmed?: boolean
-  /** Clicked: folds a folder, opens a file. */
-  onActivate?: () => void
+  onToggle?: () => void
+  /** Double-clicked, as JetBrains trees open files; a single click only selects. */
+  onOpen?: () => void
   icon: ReactNode
   hint?: ReactNode
   /** Shown under the pointer: always (a root's path), or only when the name is cut off. */
@@ -132,8 +134,9 @@ function TreeRow({
       style={{ paddingLeft: indent(row.depth) }}
       onClick={() => {
         onSelect()
-        onActivate?.()
+        onToggle?.()
       }}
+      onDoubleClick={onOpen}
       onFocus={onSelect}
     >
       {expanded === undefined ? (
@@ -249,7 +252,7 @@ function RootRow({
       label={
         missing ? `${root.name} (missing)` : [root.name, root.branch].filter(Boolean).join(' ')
       }
-      {...(missing ? {} : { expanded, onActivate: () => toggle(root.path) })}
+      {...(missing ? {} : { expanded, onToggle: () => toggle(root.path) })}
       {...state}
       icon={
         missing ? (
@@ -322,7 +325,7 @@ function WorktreeRow({
       row={row}
       label={`${worktree.branch} worktree ${worktree.name}`}
       expanded={expanded}
-      onActivate={() => toggle(worktree.path)}
+      onToggle={() => toggle(worktree.path)}
       {...state}
       icon={<GitBranch className="size-4 shrink-0 text-muted-foreground" aria-hidden />}
       hint={<span className="type-hint min-w-0 flex-1 truncate">{worktree.name}</span>}
@@ -362,8 +365,8 @@ function EntryRow({
       label={entry.name}
       {...(ignored ? { description: 'Ignored by git' } : {})}
       {...(directory
-        ? { expanded, onActivate: () => toggle(entry.path) }
-        : { onActivate: () => openFile(entry.path) })}
+        ? { expanded, onToggle: () => toggle(entry.path) }
+        : { onOpen: () => openFile(entry.path) })}
       dimmed={ignored}
       {...state}
       icon={

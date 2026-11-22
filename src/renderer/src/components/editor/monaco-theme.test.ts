@@ -14,11 +14,21 @@ function scheme(id: string): EditorScheme {
   return loaded
 }
 
+// Passed through as given: the app reads them from its theme's popup roles.
+const MENU = {
+  background: 'popover',
+  foreground: 'popover-foreground',
+  border: 'popover-border',
+  selection: 'popover-selection',
+  selectionForeground: 'popover-selection-foreground',
+  separator: 'separator'
+}
+
 const islandsDark = scheme('islands-dark')
 const light = scheme('light')
 
 const rule = (source: EditorScheme, token: string) =>
-  monacoTheme(source).rules.find((candidate) => candidate.token === token)
+  monacoTheme(source, MENU).rules.find((candidate) => candidate.token === token)
 
 describe('Monaco themes from editor schemes', () => {
   it('take token colours and styles from the scheme', () => {
@@ -38,7 +48,7 @@ describe('Monaco themes from editor schemes', () => {
   })
 
   it('take the editor colours from the scheme and its light or dark base', () => {
-    const dark = monacoTheme(islandsDark)
+    const dark = monacoTheme(islandsDark, MENU)
     expect(dark.base).toBe('vs-dark')
     expect(dark.colors).toMatchObject({
       'editor.background': islandsDark.attributes.TEXT?.background,
@@ -46,11 +56,19 @@ describe('Monaco themes from editor schemes', () => {
       'editor.lineHighlightBackground': islandsDark.colors.CARET_ROW_COLOR,
       'editorLineNumber.foreground': islandsDark.colors.LINE_NUMBERS_COLOR
     })
-    expect(monacoTheme(light).base).toBe('vs')
+    expect(monacoTheme(light, MENU).base).toBe('vs')
+  })
+
+  it('give the context menu the app theme popup colours', () => {
+    expect(monacoTheme(islandsDark, MENU).colors).toMatchObject({
+      'menu.background': MENU.background,
+      'menu.selectionBackground': MENU.selection,
+      'menu.separatorBackground': MENU.separator
+    })
   })
 
   it('give Monaco token colours without the # or the alpha', () => {
-    const colours = monacoTheme(islandsDark).rules.flatMap((entry) =>
+    const colours = monacoTheme(islandsDark, MENU).rules.flatMap((entry) =>
       entry.foreground === undefined ? [] : [entry.foreground]
     )
     expect(colours).not.toHaveLength(0)

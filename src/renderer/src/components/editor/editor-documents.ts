@@ -32,6 +32,10 @@ export async function loadDocument(path: string): Promise<void> {
     if (!isOpen(path)) return
     // The URI's extension picks the language.
     const model = monaco.editor.createModel(text, undefined, monaco.Uri.file(path))
+    // Brackets keep the scheme's colour, as in JetBrains IDEs; Monaco sets this per model, not per editor.
+    model.updateOptions({
+      bracketColorizationOptions: { enabled: false, independentColorPoolPerBracketType: false }
+    })
     const document: EditorDocument = { model, savedVersion: model.getAlternativeVersionId() }
     model.onDidChangeContent(() =>
       setDirty(path, model.getAlternativeVersionId() !== document.savedVersion)

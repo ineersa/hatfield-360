@@ -28,14 +28,26 @@ async function makeProject(): Promise<[string, () => Promise<void>]> {
   return [app, cleanup]
 }
 
-/** Opens a file from the tree, expanding the folders on the way. */
+/** Opens a file from the tree with a double click, expanding the folders on the way. */
 async function openFile(page: Page, ...path: string[]): Promise<void> {
   for (const folder of path.slice(0, -1)) {
     if ((await item(page, folder).getAttribute('aria-expanded')) !== 'true') {
       await item(page, folder).click()
     }
   }
-  await item(page, path.at(-1) ?? '').click()
+  await item(page, path.at(-1) ?? '').dblclick()
+}
+
+/** Opens the editor's context menu, checks its background and closes it. */
+async function expectMenuBackground(page: Page, color: string): Promise<void> {
+  await lines(page).click({ button: 'right' })
+  await expect(page.getByRole('menuitem', { name: /Go to Definition/ })).toBeVisible()
+  // Monaco paints the menu on its scrolling element.
+  await expect(page.locator('.monaco-menu-container > .monaco-scrollable-element')).toHaveCSS(
+    'background-color',
+    color
+  )
+  await page.keyboard.press('Escape')
 }
 
 /** Puts the caret at the end of the text and types there. */
@@ -87,13 +99,17 @@ test('files open in editor tabs that switch, reorder and close, with highlightin
 
         // Two files of the same name show the folder that tells them apart.
         await item(page, 'test').click()
+        // A single click only selects a file, as in JetBrains trees.
         await item(page, 'index.ts').last().click()
+        await expect(item(page, 'index.ts').last()).toHaveAttribute('aria-selected', 'true')
+        await expect(tabs(page)).toHaveCount(1)
+        await item(page, 'index.ts').last().dblclick()
         await expect(tabs(page)).toHaveText(['index.tssrc', 'index.tstest'])
         await expect(tab(page, 'index.ts test')).toHaveAttribute('aria-selected', 'true')
         await expect(lines(page)).toContainText('export const tested = true')
 
         // Opening a file that is already open switches to its tab.
-        await item(page, 'index.ts').first().click()
+        await item(page, 'index.ts').first().dblclick()
         await expect(tabs(page)).toHaveCount(2)
         await expect(tab(page, 'index.ts src')).toHaveAttribute('aria-selected', 'true')
         await expect(lines(page)).toContainText('const greeting')
@@ -103,6 +119,9 @@ test('files open in editor tabs that switch, reorder and close, with highlightin
         // The JSON worker runs and marks the syntax error.
         await openFile(page, 'broken.json')
         await expect(editor(page).locator('.squiggly-error')).not.toHaveCount(0)
+        // Braces keep the scheme's colour: no bracket-pair colouring.
+        await expect(lines(page).getByText('{', { exact: true })).toBeVisible()
+        await expect(editor(page).locator('[class*="bracket-highlighting-"]')).toHaveCount(0)
         await saveScreenshot(page, 'editor-islands-dark')
 
         // Dragging a tab onto another puts it in that tab's place.
@@ -236,13 +255,8 @@ test('the editor follows the editor theme and font settings as they change', asy
         await openFile(page, 'app', 'src', 'index.ts')
         // The TEXT background of the Islands Dark editor scheme, then of Light.
         await expect(background).toHaveCSS('background-color', 'rgb(25, 26, 28)')
-        // The context menu takes the theme's colours too, not a see-through default.
-        await lines(page).click({ button: 'right' })
-        await expect(page.getByRole('menuitem', { name: /Go to Definition/ })).toBeVisible()
-        await expect(
-          page.locator('.monaco-menu-container > .monaco-scrollable-element')
-        ).not.toHaveCSS('background-color', 'rgba(0, 0, 0, 0)')
-        await page.keyboard.press('Escape')
+        // The context menu is a popup in the app theme's popover colour.
+        await expectMenuBackground(page, 'rgb(38, 40, 44)')
 
         await writeFile(
           join(userData, 'settings.json'),
@@ -254,6 +268,8 @@ test('the editor follows the editor theme and font settings as they change', asy
         )
         await expect(background).toHaveCSS('background-color', 'rgb(255, 255, 255)')
         await expect(lines(page)).toHaveCSS('font-size', '16px')
+        // Islands Light's popover.
+        await expectMenuBackground(page, 'rgb(255, 255, 255)')
         await saveScreenshot(page, 'editor-light')
       },
       { userDataDir: userData }
