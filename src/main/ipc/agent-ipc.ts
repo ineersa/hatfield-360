@@ -10,8 +10,9 @@ import { existingDirectory } from './terminal-ipc'
 import { handleTrusted } from './trusted-ipc'
 
 export function registerAgentIpc(): void {
-  const launch = trackAgentSessions((owner) =>
-    owner.send(AGENT_CHANNELS.changed, agentSnapshot(owner))
+  const launch = trackAgentSessions(
+    (owner) => owner.send(AGENT_CHANNELS.changed, agentSnapshot(owner)),
+    (owner, notice) => owner.send(AGENT_CHANNELS.notification, notice)
   )
   handleTrusted(AGENT_CHANNELS.get, (event) => agentSnapshot(event.sender))
   handleTrusted(AGENT_CHANNELS.launch, async (event, value) => {

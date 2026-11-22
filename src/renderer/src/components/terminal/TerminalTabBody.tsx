@@ -79,7 +79,10 @@ export function TerminalTabBody({
     })
     manager.current = panes
     panes.createInitialPane()
+    const findTerminal = (id: string) =>
+      panes.getPanes().find((item) => item.container.dataset.terminalId === id)
     terminalTabControllers.set(tab.id, {
+      hasTerminal: (id) => findTerminal(id) !== undefined,
       run: (command) => {
         const activePane = panes.getActivePane()
         if (command === 'focus-next-pane') panes.focusSibling(1)
@@ -90,7 +93,7 @@ export function TerminalTabBody({
         else panes.closePane(activePane.id)
       },
       selectTerminal: (id) => {
-        const pane = panes.getPanes().find((item) => item.container.dataset.terminalId === id)
+        const pane = findTerminal(id)
         if (!pane) return false
         panes.setActivePane(pane.id, isShown.current)
         return true

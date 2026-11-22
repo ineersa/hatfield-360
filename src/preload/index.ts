@@ -1,4 +1,4 @@
-import { AGENT_CHANNELS, type AgentSnapshot } from '../shared/agent-api'
+import { AGENT_CHANNELS, type AgentNotification, type AgentSnapshot } from '../shared/agent-api'
 import { contextBridge, ipcRenderer } from 'electron'
 import { type DesktopApi, IPC_CHANNELS } from '../shared/desktop-api'
 import { EDITOR_CHANNELS } from '../shared/editor-api'
@@ -13,6 +13,11 @@ import { type ProjectWorktrees, WORKTREE_CHANNELS } from '../shared/worktree-api
 const desktopApi: DesktopApi = {
   launchAgent: (request) => ipcRenderer.invoke(AGENT_CHANNELS.launch, request),
   getAgentSessions: () => ipcRenderer.invoke(AGENT_CHANNELS.get),
+  subscribeAgentNotifications: (callback) => {
+    const listener = (_event: unknown, notice: AgentNotification): void => callback(notice)
+    ipcRenderer.on(AGENT_CHANNELS.notification, listener)
+    return () => ipcRenderer.removeListener(AGENT_CHANNELS.notification, listener)
+  },
   subscribeAgentSessions: (callback) => {
     const listener = (_event: unknown, snapshot: AgentSnapshot): void => callback(snapshot)
     ipcRenderer.on(AGENT_CHANNELS.changed, listener)

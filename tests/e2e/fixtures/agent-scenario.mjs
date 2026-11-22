@@ -71,6 +71,7 @@ for await (const command of input) {
             'waits',
             'actors',
             'session-end',
+            'notifications',
             ...(provider === 'hatfield' ? ['scripts'] : [])
           ]
         })
@@ -127,6 +128,12 @@ for await (const command of input) {
       case 'cancelled':
         reply = await emit('turn.ended', { ...turn, outcome: command })
         break
+      case 'message':
+        reply = await emit('notification', {
+          title: 'Review available',
+          body: 'The report is ready.'
+        })
+        break
       case 'duplicate':
         reply = await send(last)
         break
@@ -138,7 +145,7 @@ for await (const command of input) {
         break
       default:
         print(
-          'Commands: start, again, tool, wait, resolve, child, child-done, completed, failed, cancelled, duplicate, stale, quit'
+          'Commands: start, again, tool, wait, resolve, child, child-done, completed, failed, cancelled, message, duplicate, stale, quit'
         )
     }
     if (reply) print(`ACK ${command}: ${reply}`)

@@ -1,17 +1,22 @@
 import { randomUUID } from 'node:crypto'
 import type { WebContents } from 'electron'
 import type {
+  AgentNotification,
   AgentSession,
   AgentSnapshot,
   AgentProfile,
   AgentProvider
 } from '../../shared/agent-api'
 import { terminalSessions } from '../terminal/terminal-sessions'
+import { AgentNotificationPolicy } from './agent-notifications'
 import { agentStatusServer } from './status-server'
 
 const records = new Map<string, { owner: WebContents; session: AgentSession }>()
 const trackedOwners = new WeakSet<WebContents>()
-const launches = new Map<string, AgentSession>()
+const launches = new Map<
+  string,
+  { owner: WebContents; session: AgentSession; policy: AgentNotificationPolicy }
+>()
 let revision = 0
 
 export function agentSnapshot(owner: WebContents): AgentSnapshot {
@@ -23,20 +28,37 @@ export function agentSnapshot(owner: WebContents): AgentSnapshot {
   }
 }
 
-export function trackAgentSessions(publish: (owner: WebContents) => void) {
+export function trackAgentSessions(
+  publish: (owner: WebContents) => void,
+  notify: (owner: WebContents, notice: AgentNotification) => void
+) {
   const changed = (owner: WebContents) => {
     revision++
     if (!owner.isDestroyed()) publish(owner)
   }
   agentStatusServer.subscribe((change) => {
     if (change.kind !== 'event' && change.kind !== 'revoked') return
-    const session = launches.get(change.launchId)
-    if (!session) return
-    if (change.kind === 'event' && change.event.kind === 'notification') return
+    const launch = launches.get(change.launchId)
+    if (!launch) return
+    const { owner, session, policy } = launch
+    if (change.kind === 'revoked') launches.delete(change.launchId)
     const reported = agentStatusServer
       .snapshot()
       .find((entry) => entry.launchId === change.launchId)?.session
     const trusted = reported?.provider === session.provider ? reported : undefined
+    if (change.kind === 'event') {
+      if (trusted && !owner.isDestroyed()) {
+        for (const message of policy.accept(change.event, trusted)) {
+          notify(owner, {
+            provider: session.provider,
+            terminalId: session.terminalId,
+            providerSessionId: trusted.id,
+            message
+          })
+        }
+      }
+      if (change.event.kind === 'notification') return
+    }
     const turn = trusted?.actors.get('main')?.turn
     const waits =
       trusted && !trusted.ended
@@ -60,8 +82,7 @@ export function trackAgentSessions(publish: (owner: WebContents) => void) {
     session.wait = waits[0]?.reason ?? null
     if (trusted) session.outcome = turn?.outcome ?? null
     session.updatedAt = Date.now()
-    const owner = records.get(session.id)?.owner
-    if (owner) changed(owner)
+    if (records.has(session.id)) changed(owner)
   })
   return async (
     owner: WebContents,
@@ -102,7 +123,8 @@ export function trackAgentSessions(publish: (owner: WebContents) => void) {
         for (const [id, record] of records) if (record.owner === owner) records.delete(id)
       })
     }
-    if (credential) launches.set(credential.launchId, session)
+    if (credential)
+      launches.set(credential.launchId, { owner, session, policy: new AgentNotificationPolicy() })
     const release = () => {
       if (!credential) return
       launches.delete(credential.launchId)
