@@ -1,3 +1,4 @@
+import type { AgentLaunch } from '../../../../shared/agent-api'
 import type { ManagedPane } from '@/lib/pane-manager/pane-manager-types'
 import { listenToSession } from '@/lib/terminal-output-router'
 import type { TerminalExit } from '../../../../shared/terminal-api'
@@ -32,7 +33,9 @@ function showExited(pane: ManagedPane, exit: TerminalExit): void {
 export function startPaneShell(
   pane: ManagedPane,
   cwd: string | null,
-  onShellEnded: () => void
+  onShellEnded: () => void,
+  agent?: AgentLaunch,
+  onStarted?: () => void
 ): PaneShell {
   const { terminal } = pane
   let sessionId: string | null = null
@@ -62,8 +65,10 @@ export function startPaneShell(
     requestAnimationFrame(() => {
       if (disposed) return
       const { cols, rows } = terminal
-      window.desktop
-        .spawnTerminal({ ...(cwd ? { cwd } : {}), cols, rows })
+      const spawn = agent
+        ? window.desktop.launchAgent({ ...agent, cols, rows })
+        : window.desktop.spawnTerminal({ ...(cwd ? { cwd } : {}), cols, rows })
+      spawn
         .then((session) => {
           if (disposed) {
             void window.desktop.killTerminal(session.id)
@@ -72,6 +77,7 @@ export function startPaneShell(
           sessionId = session.id
           pane.container.dataset.terminalId = session.id
           pane.container.dataset.pid = String(session.pid)
+          onStarted?.()
           stopListening = listenToSession(session.id, {
             // Acknowledged once xterm has parsed it, so main reads the shell only as fast as it draws.
             data: (data) =>
@@ -82,7 +88,7 @@ export function startPaneShell(
               }),
             exit: (exit) => {
               exited = true
-              if (!exit.signal) onShellEnded()
+              if (!agent && !exit.signal) onShellEnded()
               else showExited(pane, exit)
             }
           })
@@ -98,7 +104,9 @@ export function startPaneShell(
         })
         .catch((error: unknown) => {
           exited = true
-          terminal.write(`\x1b[31mThe shell couldn't start: ${mainErrorMessage(error)}\x1b[0m\r\n`)
+          terminal.write(
+            `\x1b[31mThe ${agent ? 'agent' : 'shell'} couldn't start: ${mainErrorMessage(error)}\x1b[0m\r\n`
+          )
         })
     })
   )

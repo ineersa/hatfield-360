@@ -17,6 +17,7 @@ type Session = {
   capabilities: string[]
   ended: boolean
   actors: Map<string, Actor>
+  scripts: Map<string, number>
 }
 
 export class StatusState {
@@ -68,6 +69,7 @@ export class StatusState {
         provider: event.provider,
         capabilities: event.capabilities,
         ended: false,
+        scripts: new Map(),
         actors: new Map([['main', { start: event.sequence }]])
       }
       return undefined
@@ -83,6 +85,7 @@ export class StatusState {
       case 'session.ended': {
         if (!session.capabilities.includes('session-end')) return 'state'
         session.ended = true
+        session.scripts.clear()
         const main = session.actors.get('main')
         session.actors.clear()
         if (main) {
@@ -95,6 +98,16 @@ export class StatusState {
         }
         return undefined
       }
+      case 'script.started':
+        if (!session.capabilities.includes('scripts') || session.scripts.has(event.scriptId))
+          return 'state'
+        if (session.scripts.size >= 32) return 'limit'
+        session.scripts.set(event.scriptId, event.sequence)
+        return undefined
+      case 'script.ended':
+        if (session.scripts.get(event.scriptId) !== event.scriptStart) return 'state'
+        session.scripts.delete(event.scriptId)
+        return undefined
       case 'notification':
         return session.capabilities.includes('notifications') ? undefined : 'state'
       case 'actor.started': {

@@ -1,3 +1,4 @@
+import type { AgentApi } from './agent-api'
 import type { FileTreeApi } from './file-tree-api'
 import type { SettingsApi } from './settings-api'
 import type { ShellLayoutApi } from './shell-layout-api'
@@ -18,6 +19,7 @@ export const IPC_CHANNELS = {
 
 /** Everything the preload bridge exposes to the renderer as `window.desktop`. */
 export type DesktopApi = WorkspaceApi &
+  AgentApi &
   SettingsApi &
   ShellLayoutApi &
   TerminalApi &

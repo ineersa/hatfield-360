@@ -1,3 +1,4 @@
+import { AgentLaunchSettings } from './AgentLaunchSettings'
 import { FileJson, FolderRoot, RotateCcw, X } from 'lucide-react'
 import { useEffect, useId, useState } from 'react'
 import { CatppuccinRootFolderIcon } from '@/components/icons/CatppuccinIcons'
@@ -311,6 +312,7 @@ export function SettingsPage(): React.JSX.Element {
             <FontSetting key={setting.familyKey} {...setting} />
           ))}
           <TerminalGpuSetting />
+          <AgentLaunchSettings />
         </div>
       </div>
     </div>

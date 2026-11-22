@@ -1,3 +1,4 @@
+import { AGENT_PROVIDERS, type AgentLaunch } from '../../../shared/agent-api'
 import { create } from 'zustand'
 import { useShellLayoutStore } from './shell-layout-store'
 
@@ -6,13 +7,16 @@ export type TerminalTab = {
   title: string
   /** The folder new shells in this tab start in; null for the home folder. */
   cwd: string | null
+  agent?: AgentLaunch
 }
 
 type TerminalState = {
+  paneByTab: Record<string, string | null>
+  setActivePane: (tabId: string, id: string | null) => void
   tabs: TerminalTab[]
   activeTabId: string | null
   /** Opens a tab with one shell and shows it in the Agents view. */
-  openTerminal: (cwd: string | null) => void
+  openTerminal: (cwd: string | null, agent?: AgentLaunch) => void
   /** Removes the tab; its panes' shells end as the tab unmounts. */
   closeTab: (id: string) => void
   activateTab: (id: string) => void
@@ -26,16 +30,20 @@ function folderName(path: string): string {
 }
 
 export const useTerminalStore = create<TerminalState>((set, get) => ({
+  paneByTab: {},
+  setActivePane: (tabId, id) =>
+    set((state) => ({ paneByTab: { ...state.paneByTab, [tabId]: id } })),
   tabs: [],
   activeTabId: null,
-  openTerminal: (cwd) => {
+  openTerminal: (cwd, agent) => {
     const tab: TerminalTab = {
       id: `terminal-tab-${nextTabNumber++}`,
-      title: cwd ? folderName(cwd) : 'Terminal',
-      cwd
+      title: agent ? AGENT_PROVIDERS[agent.provider] : cwd ? folderName(cwd) : 'Terminal',
+      cwd,
+      ...(agent ? { agent } : {})
     }
     set((state) => ({ tabs: [...state.tabs, tab], activeTabId: tab.id }))
-    useShellLayoutStore.setState({ activeView: 'agents', settingsOpen: false })
+    useShellLayoutStore.getState().showAgents()
   },
   closeTab: (id) => {
     set((state) => {
@@ -45,7 +53,9 @@ export const useTerminalStore = create<TerminalState>((set, get) => ({
       // The neighbour to the left takes over, as in browsers and IDEs.
       const neighbour = tabs[Math.max(0, index - 1)]
       const activeTabId = state.activeTabId === id ? (neighbour?.id ?? null) : state.activeTabId
-      return { tabs, activeTabId }
+      const paneByTab = { ...state.paneByTab }
+      delete paneByTab[id]
+      return { tabs, activeTabId, paneByTab }
     })
   },
   activateTab: (id) => set({ activeTabId: id }),

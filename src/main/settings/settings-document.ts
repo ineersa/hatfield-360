@@ -74,7 +74,28 @@ function flag(value: unknown): Checked<boolean> {
   return typeof value === 'boolean' ? { value } : { problem: 'must be true or false' }
 }
 
+function agentProfile(raw: unknown): Checked<Settings['agents.hatfield']> {
+  if (!isPlainObject(raw) || typeof raw.executable !== 'string')
+    return { problem: 'must contain an executable and an array of string arguments' }
+  const executable = raw.executable.trim()
+  if (
+    !executable ||
+    executable.length > 4096 ||
+    Array.from(executable).some((character) => character.charCodeAt(0) < 32) ||
+    !Array.isArray(raw.args) ||
+    raw.args.length > 64 ||
+    !raw.args.every(
+      (arg: unknown): arg is string =>
+        typeof arg === 'string' && arg.length <= 4096 && !arg.includes('\0')
+    )
+  )
+    return { problem: 'must contain an executable and an array of string arguments' }
+  return { value: { executable, args: raw.args } }
+}
+
 const CHECKS: { [K in SettingKey]: (value: unknown) => Checked<Settings[K]> } = {
+  'agents.hatfield': agentProfile,
+  'agents.claude': agentProfile,
   'app.fontFamily': fontFamily,
   'app.fontSize': fontSize,
   'terminal.fontFamily': fontFamily,
@@ -178,6 +199,15 @@ export function checkSettingValue<K extends SettingKey>(key: K, raw: unknown): S
   return checked.value
 }
 
+function matchesDefault(value: Settings[SettingKey], fallback: Settings[SettingKey]): boolean {
+  if (typeof value !== 'object' || typeof fallback !== 'object') return value === fallback
+  return (
+    value.executable === fallback.executable &&
+    value.args.length === fallback.args.length &&
+    value.args.every((arg, index) => arg === fallback.args[index])
+  )
+}
+
 /**
  * settings.json contents with one setting changed, keeping the user's comments and layout. A
  * default value is removed instead, so the file holds only what the user changed.
@@ -187,7 +217,7 @@ export function withSetting<K extends SettingKey>(
   key: K,
   value: Settings[K] | null
 ): string {
-  const kept = value === null || value === DEFAULT_SETTINGS[key] ? undefined : value
+  const kept = value === null || matchesDefault(value, DEFAULT_SETTINGS[key]) ? undefined : value
   const base = text.trim() === '' ? '{}\n' : text
   const edits = modify(base, [key], kept, {
     formattingOptions: { insertSpaces: true, tabSize: 2, eol: '\n' }

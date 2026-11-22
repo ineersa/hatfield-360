@@ -62,6 +62,46 @@ describe.skipIf(process.platform === 'win32')('agent status socket', () => {
   const server = new AgentStatusServer()
   afterEach(async () => server.stop())
 
+  it('correlates script jobs across parent completion and rejects old or unsupported reports', async () => {
+    await server.start()
+    const { event, start, send, launchId } = session(server)
+    const job = { kind: 'script.started', scriptId: 'bash-job' }
+    const finish = { kind: 'script.ended', scriptId: 'bash-job', scriptStart: 3 }
+    expect(await send(event(1, start), event(2, job))).toEqual([
+      accepted,
+      { ok: false, error: 'state' }
+    ])
+    const epoch = (n: number, fields: Record<string, unknown>) =>
+      event(n, { sessionEpoch: 2, ...fields })
+    expect(
+      await send(
+        epoch(2, { ...start, capabilities: ['scripts', 'session-end'] }),
+        epoch(3, job),
+        epoch(4, { kind: 'turn.started', actorId: 'main', actorStart: 2, turnId: 'parent' }),
+        epoch(5, {
+          kind: 'turn.ended',
+          actorId: 'main',
+          actorStart: 2,
+          turnId: 'parent',
+          turnStart: 4,
+          outcome: 'completed'
+        })
+      )
+    ).toEqual([accepted, accepted, accepted, accepted])
+    expect(server.snapshot()[0]?.session?.scripts.get('bash-job')).toBe(3)
+    expect(await send(epoch(3, job), epoch(6, finish), epoch(7, job), epoch(8, finish))).toEqual([
+      { ok: true, status: 'duplicate' },
+      accepted,
+      accepted,
+      { ok: false, error: 'state' }
+    ])
+    expect(server.snapshot()[0]?.session?.scripts.get('bash-job')).toBe(7)
+    expect(await send(epoch(8, { kind: 'session.ended' }))).toEqual([accepted])
+    expect(server.snapshot()[0]?.session?.scripts.size).toBe(0)
+    server.markExited(launchId)
+    expect(await send(epoch(9, job))).toEqual([{ ok: false, error: 'unauthorized' }])
+  })
+
   it('starts once with private permissions and closes clients and the owned directory at shutdown', async () => {
     const [path, again] = await Promise.all([server.start(), server.start()])
     if (!path) throw new Error('Expected Unix socket')

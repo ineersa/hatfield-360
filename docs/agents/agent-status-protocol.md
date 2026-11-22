@@ -49,3 +49,12 @@ Delivery is best effort; there is no spool, replay, heartbeat or guarantee of ev
 - 64 simultaneous connections; at most 32 frames plus one terminal limit reply per connection, with one fixed-size frame assembly buffer per connection. Each reply is below 64 bytes; writes are bounded by the frame count even if the peer doesn't read.
 - Two seconds total server connection lifetime; recommend a sender deadline of at most one second with immediate failure on an absent endpoint.
 - 64 launch records, 128 authenticated attempts per launch per monotonic one-second bucket (including retransmissions), 32 active actors per session including main, 16 outstanding waits per current actor turn, no notification history. Deduplication retains digests, not payloads.
+
+### Background scripts (optional v1 capability)
+
+Report `scripts` in `session.started` only when the adapter observes actual background Bash or code-mode job lifecycles. A consumer must not infer scripts from tool names or process lists. Without the capability the count is unknown, not zero.
+
+- `script.started` adds `scriptId` (same syntax as actor IDs). Its `sequence` is the script's start reference.
+- `script.ended` adds `scriptId` and `scriptStart` (the matching start sequence). Send it whenever the job ceases execution, including failure or cancellation; it does not report a parent turn outcome.
+
+The usual credentials, session epoch, high-water sequence and retry rules apply. Jobs belong to the session epoch, not a turn or actor, so they survive parent completion. At most 32 can be active per session. A duplicate active ID or an end referring to a different start is rejected. A session boundary clears jobs; process exit retires the launch. A future scheduled job is not running until it actually starts.

@@ -16,7 +16,10 @@ const APP_RUNTIME_KEYS = [
   'ELECTRON_RUN_AS_NODE',
   'ELECTRON_RENDERER_URL',
   'ELECTRON_NO_ATTACH_CONSOLE',
-  'APP_BACKGROUND_LAUNCH'
+  'APP_BACKGROUND_LAUNCH',
+  'H360_STATUS_ENDPOINT',
+  'H360_STATUS_TOKEN',
+  'H360_STATUS_LAUNCH_ID'
 ] as const
 
 function withoutAppDirEntries(value: string | undefined, appDir: string): string | undefined {

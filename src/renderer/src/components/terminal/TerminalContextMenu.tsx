@@ -1,3 +1,4 @@
+import type { AgentProvider } from '../../../../shared/agent-api'
 import type { Terminal } from '@xterm/xterm'
 import { Clipboard, Columns2, Copy, Eraser, Rows2, X } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
@@ -22,12 +23,17 @@ const CLIPBOARD_KEYS =
 export function TerminalContextMenu({
   activeTerminal,
   runCommand,
+  launchSplit,
+  canLaunch,
   children
 }: {
   activeTerminal: () => Terminal | null
   runCommand: (command: 'split-right' | 'split-down' | 'close-pane') => void
+  launchSplit: (provider: AgentProvider) => void
+  canLaunch: () => boolean
   children: ReactNode
 }): React.JSX.Element {
+  const [launchable, setLaunchable] = useState(false)
   const [hasSelection, setHasSelection] = useState(false)
   const withTerminal = (action: (terminal: Terminal) => void) => () => {
     const terminal = activeTerminal()
@@ -37,7 +43,10 @@ export function TerminalContextMenu({
   return (
     <ContextMenu
       onOpenChange={(open) => {
-        if (open) setHasSelection(activeTerminal()?.hasSelection() ?? false)
+        if (open) {
+          setHasSelection(activeTerminal()?.hasSelection() ?? false)
+          setLaunchable(canLaunch())
+        }
         // Back to typing in the terminal once the closing menu has let go of focus.
         else setTimeout(() => activeTerminal()?.focus(), 0)
       }}
@@ -64,6 +73,13 @@ export function TerminalContextMenu({
           <Rows2 aria-hidden />
           Split Down
           <ContextMenuShortcut>{terminalShortcutLabel('split-down')}</ContextMenuShortcut>
+        </ContextMenuItem>
+        <ContextMenuSeparator />
+        <ContextMenuItem disabled={!launchable} onSelect={() => launchSplit('hatfield')}>
+          Launch Hatfield in New Split
+        </ContextMenuItem>
+        <ContextMenuItem disabled={!launchable} onSelect={() => launchSplit('claude')}>
+          Launch Claude in New Split
         </ContextMenuItem>
         <ContextMenuSeparator />
         <ContextMenuItem onSelect={withTerminal((terminal) => terminal.clear())}>

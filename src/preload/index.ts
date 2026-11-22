@@ -1,3 +1,4 @@
+import { AGENT_CHANNELS, type AgentSnapshot } from '../shared/agent-api'
 import { contextBridge, ipcRenderer } from 'electron'
 import { type DesktopApi, IPC_CHANNELS } from '../shared/desktop-api'
 import { FILE_TREE_CHANNELS } from '../shared/file-tree-api'
@@ -8,6 +9,13 @@ import { type WorkspaceView, WORKSPACE_CHANNELS } from '../shared/workspace-api'
 import { type ProjectWorktrees, WORKTREE_CHANNELS } from '../shared/worktree-api'
 
 const desktopApi: DesktopApi = {
+  launchAgent: (request) => ipcRenderer.invoke(AGENT_CHANNELS.launch, request),
+  getAgentSessions: () => ipcRenderer.invoke(AGENT_CHANNELS.get),
+  subscribeAgentSessions: (callback) => {
+    const listener = (_event: unknown, snapshot: AgentSnapshot): void => callback(snapshot)
+    ipcRenderer.on(AGENT_CHANNELS.changed, listener)
+    return () => ipcRenderer.removeListener(AGENT_CHANNELS.changed, listener)
+  },
   getAppInfo: () => ipcRenderer.invoke(IPC_CHANNELS.getAppInfo),
   getWorkspace: () => ipcRenderer.invoke(WORKSPACE_CHANNELS.get),
   addWorkspaceFolder: () => ipcRenderer.invoke(WORKSPACE_CHANNELS.addFolder),

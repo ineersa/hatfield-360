@@ -12,7 +12,7 @@ import {
 import { terminalSessions } from '../terminal/terminal-sessions'
 import { handleTrusted } from './trusted-ipc'
 
-async function existingDirectory(path: string): Promise<string> {
+export async function existingDirectory(path: string): Promise<string> {
   if (!isAbsolute(path)) throw new Error('The terminal folder must be an absolute path.')
   const info = await stat(path).catch(() => null)
   if (!info?.isDirectory()) throw new Error(`The folder ${path} doesn't exist.`)

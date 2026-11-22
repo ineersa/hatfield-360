@@ -1,4 +1,13 @@
 import {
+  AgentAttention,
+  AgentSessionRows,
+  matchesStatus,
+  statuses,
+  type SessionFilter,
+  useAgentSessions
+} from './AgentSessionRows'
+import { type AgentSession } from '../../../../shared/agent-api'
+import {
   ChevronRight,
   CircleAlert,
   FolderMinus,
@@ -17,7 +26,7 @@ import {
   usePointerTooltip
 } from '@/components/ui/tooltip'
 import { cn } from '@/lib/class-names'
-import { Fragment } from 'react'
+import { Fragment, useEffect, useState } from 'react'
 import { OpenTerminalMenuContent } from '@/components/terminal/OpenTerminalMenuContent'
 import {
   OpenFolderEmptyState,
@@ -31,7 +40,13 @@ import type { ProjectWorktrees, Worktree } from '../../../../shared/worktree-api
 const worktreeLabel = (worktree: Worktree): string =>
   worktree.branch ?? `detached ${worktree.head.slice(0, 7)}`
 
-function WorktreeRow({ worktree }: { worktree: Worktree }): React.JSX.Element {
+function WorktreeRow({
+  worktree,
+  project
+}: {
+  worktree: Worktree
+  project: string
+}): React.JSX.Element {
   const label = worktreeLabel(worktree)
   const pathTip = usePointerTooltip()
   return (
@@ -65,7 +80,7 @@ function WorktreeRow({ worktree }: { worktree: Worktree }): React.JSX.Element {
         </ContextMenuTrigger>
         <TooltipContent {...pathTip.placement}>{worktree.path}</TooltipContent>
       </Tooltip>
-      <OpenTerminalMenuContent cwd={worktree.path} disabled={worktree.prunable} />
+      <OpenTerminalMenuContent cwd={worktree.path} project={project} disabled={worktree.prunable} />
     </ContextMenu>
   )
 }
@@ -76,32 +91,58 @@ function hasChildRows(project: ProjectWorktrees | undefined): boolean {
   return project?.status === 'git' && project.worktrees.some((worktree) => !worktree.project)
 }
 
-/** The project's worktrees under its row; nothing for a folder outside git. */
-function ProjectWorktreeRows({ folder }: { folder: string }): React.JSX.Element | null {
+function ProjectWorktreeRows({
+  folder,
+  sessions,
+  now
+}: {
+  now: number
+  folder: string
+  sessions: AgentSession[]
+}): React.JSX.Element | null {
   const project = useWorktreeStore((state) => state.projects[folder])
   const collapsed = useWorktreeStore((state) => state.collapsed[folder] === true)
   if (collapsed) return null
-  if (project?.status === 'error') {
-    return (
-      <li role="alert" className="type-hint flex gap-2 py-1 pr-2.5 pl-tree-indent">
-        <CircleAlert className="mt-0.5 size-3.5 shrink-0 text-error" aria-hidden />
-        <span className="min-w-0 break-words">Git: {project.message}</span>
-      </li>
-    )
-  }
-  if (project?.status !== 'git') return null
   return (
     <>
-      {project.worktrees
-        .filter((worktree) => !worktree.project)
-        .map((worktree) => (
-          <WorktreeRow key={worktree.path} worktree={worktree} />
-        ))}
+      {project?.status === 'error' && (
+        <li role="alert" className="type-hint flex gap-2 py-1 pr-2.5 pl-tree-indent">
+          <CircleAlert className="mt-0.5 size-3.5 shrink-0 text-error" aria-hidden />
+          <span className="min-w-0 break-words">Git: {project.message}</span>
+        </li>
+      )}
+      <AgentSessionRows
+        now={now}
+        sessions={sessions.filter(
+          (session) =>
+            session.cwd === folder ||
+            project?.status !== 'git' ||
+            !project.worktrees.some((tree) => !tree.project && tree.path === session.cwd)
+        )}
+      />
+      {project?.status === 'git' &&
+        project.worktrees
+          .filter((worktree) => !worktree.project)
+          .map((worktree) => (
+            <Fragment key={worktree.path}>
+              <WorktreeRow worktree={worktree} project={folder} />
+              <AgentSessionRows
+                now={now}
+                sessions={sessions.filter((session) => session.cwd === worktree.path)}
+              />
+            </Fragment>
+          ))}
     </>
   )
 }
 
-function ProjectRow({ folder }: { folder: WorkspaceFolder }): React.JSX.Element {
+function ProjectRow({
+  folder,
+  hasSessions
+}: {
+  folder: WorkspaceFolder
+  hasSessions: boolean
+}): React.JSX.Element {
   const removeFolder = useWorkspaceStore((state) => state.removeFolder)
   const setFolderKind = useWorkspaceStore((state) => state.setFolderKind)
   const pathTip = usePointerTooltip()
@@ -110,7 +151,7 @@ function ProjectRow({ folder }: { folder: WorkspaceFolder }): React.JSX.Element 
   const toggleCollapsed = useWorktreeStore((state) => state.toggleCollapsed)
   const checkout =
     project?.status === 'git' ? project.worktrees.find((worktree) => worktree.project) : undefined
-  const foldable = !folder.missing && hasChildRows(project)
+  const foldable = !folder.missing && (hasChildRows(project) || hasSessions)
   return (
     <ContextMenu>
       <Tooltip delayDuration={PATH_TOOLTIP_DELAY_MS} onOpenChange={pathTip.onOpenChange}>
@@ -169,7 +210,7 @@ function ProjectRow({ folder }: { folder: WorkspaceFolder }): React.JSX.Element 
         </ContextMenuTrigger>
         <TooltipContent {...pathTip.placement}>{folder.path}</TooltipContent>
       </Tooltip>
-      <OpenTerminalMenuContent cwd={folder.path} disabled={folder.missing}>
+      <OpenTerminalMenuContent cwd={folder.path} project={folder.path} disabled={folder.missing}>
         <ContextMenuItem onSelect={() => void setFolderKind(folder.path, 'folder')}>
           <FolderMinus aria-hidden />
           Hide from Projects
@@ -183,6 +224,9 @@ function ProjectRow({ folder }: { folder: WorkspaceFolder }): React.JSX.Element 
   )
 }
 
+const filterClass =
+  'type-hint inline-flex items-center gap-1 rounded-component border border-separator px-1.5 py-0.5 hover:bg-hover focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none'
+
 /** Agents side panel: the open workspace's projects; plain folders show only in the Files view. */
 export function WorkspacePanel(): React.JSX.Element {
   const workspace = useWorkspaceStore((state) => state.workspace)
@@ -190,13 +234,31 @@ export function WorkspacePanel(): React.JSX.Element {
 
   const allFolders = workspace?.folders ?? []
   const folders = allFolders.filter((folder) => folder.kind === 'project')
+  const { sessions, error } = useAgentSessions()
+  const [project, setProject] = useState('')
+  const [filters, setFilters] = useState<SessionFilter[]>([])
+  const [now, setNow] = useState(Date.now)
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 15_000)
+    return () => clearInterval(timer)
+  }, [])
+  const scope = folders.some((folder) => folder.path === project) ? project : ''
+  const visible = sessions.filter(
+    (session) =>
+      (!scope || session.project === scope) &&
+      (!filters.length || filters.some((filter) => matchesStatus(session, filter)))
+  )
+  const attention = visible.filter((session) => session.wait)
+  const ungrouped = visible.filter(
+    (session) => !folders.some((folder) => !folder.missing && folder.path === session.project)
+  )
   // Action errors and notices show in the shell's workspace message; the panel shows why the workspace is read-only.
   const problem = workspace?.problem ?? null
 
   return (
     <>
       <div className="flex h-panel-header shrink-0 items-center gap-1 pt-1 pr-2 pl-4">
-        <h2 className="type-panel-title flex-1 truncate">Projects</h2>
+        <h2 className="type-panel-title flex-1 truncate">Agents</h2>
         <Tooltip>
           <TooltipTrigger asChild>
             <button
@@ -211,8 +273,13 @@ export function WorkspacePanel(): React.JSX.Element {
           <TooltipContent side="bottom">Add Folder to Workspace</TooltipContent>
         </Tooltip>
       </div>
+      {error ? (
+        <p role="alert" className="type-hint px-4 text-error">
+          Agent status unavailable: {error}
+        </p>
+      ) : null}
       {problem ? <WorkspaceProblemBanner problem={problem} /> : null}
-      {workspace && folders.length === 0 && !workspace.problem ? (
+      {workspace && folders.length === 0 && sessions.length === 0 && !workspace.problem ? (
         <OpenFolderEmptyState
           message={
             allFolders.length === 0
@@ -221,17 +288,93 @@ export function WorkspacePanel(): React.JSX.Element {
           }
         />
       ) : (
-        <ul
-          aria-label="Workspace folders"
-          className="flex min-h-0 flex-col gap-0.5 overflow-y-auto px-2"
-        >
-          {folders.map((folder) => (
-            <Fragment key={folder.path}>
-              <ProjectRow folder={folder} />
-              {folder.missing ? null : <ProjectWorktreeRows folder={folder.path} />}
-            </Fragment>
-          ))}
-        </ul>
+        <div className="min-h-0 overflow-y-auto">
+          <div className="px-2 pb-2">
+            <select
+              aria-label="Filter by project"
+              value={scope}
+              onChange={(event) => setProject(event.target.value)}
+              className="type-body h-control w-full rounded-component border border-input-border bg-input px-2 text-input-foreground"
+            >
+              <option value="">All projects</option>
+              {folders.map((folder) => (
+                <option key={folder.path} value={folder.path}>
+                  {folder.name}
+                </option>
+              ))}
+            </select>
+            <div
+              role="group"
+              aria-label="Filter sessions by status"
+              className="flex flex-wrap gap-1 py-2"
+            >
+              <button
+                type="button"
+                aria-pressed={!filters.length}
+                onClick={() => setFilters([])}
+                className={cn(filterClass, !filters.length && 'border-ring bg-hover')}
+              >
+                All
+              </button>
+              {(['working', 'attention', 'idle', 'stopped'] as const).map((key) => {
+                const { icon: Icon, label, color } = statuses[key]
+                const pressed = filters.includes(key)
+                return (
+                  <button
+                    type="button"
+                    key={key}
+                    aria-pressed={pressed}
+                    onClick={() =>
+                      setFilters((current) =>
+                        pressed ? current.filter((value) => value !== key) : [...current, key]
+                      )
+                    }
+                    className={cn(filterClass, color, pressed && 'border-ring bg-hover')}
+                  >
+                    <Icon aria-hidden className="size-3" />
+                    {label}
+                  </button>
+                )
+              })}
+            </div>
+            <AgentAttention
+              sessions={attention}
+              projectName={(path) =>
+                folders.find((folder) => folder.path === path)?.name ?? 'Other terminals'
+              }
+            />
+          </div>
+          <ul aria-label="Workspace folders" className="flex min-h-0 flex-col gap-0.5 px-2">
+            {folders
+              .filter((folder) => !scope || folder.path === scope)
+              .map((folder) => (
+                <Fragment key={folder.path}>
+                  <ProjectRow
+                    folder={folder}
+                    hasSessions={sessions.some((session) => session.project === folder.path)}
+                  />
+                  {folder.missing ? null : (
+                    <ProjectWorktreeRows
+                      now={now}
+                      folder={folder.path}
+                      sessions={visible.filter((session) => session.project === folder.path)}
+                    />
+                  )}
+                </Fragment>
+              ))}
+          </ul>
+          {sessions.length > 0 && visible.length === 0 && (
+            <p className="type-hint px-2 pt-2">No sessions match this filter.</p>
+          )}
+          {ungrouped.length > 0 && (
+            <div className="px-2 py-2">
+              <h3 className="type-section-title px-2">Other terminals</h3>
+              <ul>
+                <AgentSessionRows now={now} sessions={ungrouped} />
+              </ul>
+            </div>
+          )}
+        </div>
       )}
     </>
   )
