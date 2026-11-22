@@ -21,6 +21,7 @@ type ShellLayoutState = {
   connect: () => () => void
   openSettings: () => void
   closeSettings: () => void
+  showAgents: () => void
   /** Activating the current view toggles its side panel, like JetBrains tool window buttons. */
   activateView: (view: ShellViewId) => void
   setPanelWidth: (view: ShellViewId, width: number) => void
@@ -76,6 +77,7 @@ export const useShellLayoutStore = create<ShellLayoutState>((set, get) => ({
   },
   openSettings: () => set({ settingsOpen: true }),
   closeSettings: () => set({ settingsOpen: false }),
+  showAgents: () => set({ activeView: 'agents', settingsOpen: false }),
   activateView: (view) => {
     set((state) => {
       // Leaving Settings shows the chosen view as it was, without toggling its panel.

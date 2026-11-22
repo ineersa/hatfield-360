@@ -9,6 +9,7 @@ import {
   type AgentSnapshot
 } from '../../../../shared/agent-api'
 import { terminalTabControllers } from '@/components/terminal/terminal-tab-controllers'
+import { useShellLayoutStore } from '@/state/shell-layout-store'
 import { useTerminalStore } from '@/state/terminal-store'
 import { mainErrorMessage } from '@/lib/main-error-message'
 
@@ -38,6 +39,7 @@ function selectTerminal(id: string): void {
   for (const [tabId, controller] of terminalTabControllers) {
     if (!controller.selectTerminal(id)) continue
     useTerminalStore.getState().activateTab(tabId)
+    useShellLayoutStore.getState().showAgents()
     return
   }
 }

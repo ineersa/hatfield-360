@@ -1,7 +1,7 @@
 import type { AgentSnapshot } from '../../src/shared/agent-api'
 import type { DesktopApi } from '../../src/shared/desktop-api'
 import { expect, test, type Locator, type Page, type Video } from '@playwright/test'
-import { mkdir, readFile, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 import { git, makeRepo } from './git-repository'
@@ -467,6 +467,34 @@ function expectPublicSnapshot(snapshot: AgentSnapshot): void {
   }
 }
 
+test('a project with broken Git metadata still displays its launched session', async () => {
+  test.skip(process.platform === 'win32', 'The agent reporting transport is Unix only')
+  const { project, userDataDir, cleanup } = await seed()
+  try {
+    await mkdir(join(project, '.git'))
+    await withApp(
+      async (_app, page) => {
+        const folders = page.getByRole('list', { name: 'Workspace folders' })
+        const gitError = folders.getByRole('alert').filter({ hasText: 'Git:' })
+        await expect(gitError).toBeVisible()
+        await launch(page, 'Hatfield')
+        const pane = page.getByRole('tabpanel', { name: 'Hatfield' }).getByTestId('terminal-pane')
+        await startFocusedScenario(page, pane)
+        const session = folders.getByRole('button', { name: /^Hatfield session/ })
+        await expect(session).toHaveCount(1)
+        await expect(session).toContainText('hatfield-e2e')
+        await expect(gitError).toBeVisible()
+        await projectRow(page).getByRole('button', { name: 'Collapse agent-project' }).click()
+        await expect(session).toHaveCount(0)
+        await expect(gitError).toHaveCount(0)
+      },
+      { userDataDir }
+    )
+  } finally {
+    await cleanup()
+  }
+})
+
 test('a linked worktree launches into its own tab and publishes only public session data', async () => {
   test.skip(process.platform === 'win32', 'The agent reporting transport is Unix only')
   const { repo, projects, cleanup: cleanRepo } = await makeRepo()
@@ -507,7 +535,16 @@ test('a linked worktree launches into its own tab and publishes only public sess
             await startFocusedScenario(page, worktreePane)
             const worktreeId = await worktreePane.getAttribute('data-terminal-id')
             if (!worktreeId) throw new Error('Linked worktree terminal missing')
+            const settings = page.getByRole('main', { name: 'Settings', exact: true })
+            const openSettings = page.getByRole('button', { name: 'Settings', exact: true })
+            const agentsView = page.getByRole('button', { name: 'Agents', exact: true })
+            await openSettings.click()
+            await expect(settings).toBeVisible()
             await page.getByRole('button', { name: /^Hatfield session/ }).click()
+            await expect(settings).toHaveCount(0)
+            await expect(agentsView).toHaveAttribute('aria-pressed', 'true')
+            await expect(rootPane).toBeVisible()
+            await expect(rootPane.locator('textarea')).toBeFocused()
             await expect(page.getByRole('tab', { name: 'Hatfield', selected: true })).toBeVisible()
             await page.evaluate((id) => globalThis.desktop.writeTerminal(id, 'wait\r'), worktreeId)
             const attention = page
@@ -523,7 +560,13 @@ test('a linked worktree launches into its own tab and publishes only public sess
             await expect(attention).toBeVisible()
             await expect(page.getByRole('tab', { name: 'Hatfield', selected: true })).toBeVisible()
             await expect(rootPane).toHaveClass(/is-active/)
+            await openSettings.click()
+            await expect(settings).toBeVisible()
             await attention.click()
+            await expect(settings).toHaveCount(0)
+            await expect(agentsView).toHaveAttribute('aria-pressed', 'true')
+            await expect(worktreePane).toBeVisible()
+            await expect(worktreePane.locator('textarea')).toBeFocused()
             await expect(page.getByRole('tab', { name: 'Claude', selected: true })).toBeVisible()
             await expect(worktreePane).toHaveAttribute('data-terminal-id', worktreeId)
             await expect(output(worktreePane)).toContainText('ACK wait: accepted')
@@ -543,6 +586,15 @@ test('a linked worktree launches into its own tab and publishes only public sess
             const pushed = await reports.evaluate(({ updates }) => updates)
             expect(pushed).toContainEqual(snapshot)
             for (const update of pushed) expectPublicSnapshot(update)
+
+            await rename(join(repo, '.git'), join(repo, 'git-backup'))
+            await mkdir(join(repo, '.git'))
+            const folders = page.getByRole('list', { name: 'Workspace folders' })
+            await expect(folders.getByRole('alert').filter({ hasText: 'Git:' })).toBeVisible()
+            await expect(folders.getByRole('listitem', { name: 'feature worktree' })).toHaveCount(0)
+            const linkedSession = folders.getByRole('button', { name: /^Claude session/ })
+            await expect(linkedSession).toHaveCount(1)
+            await expect(linkedSession).toContainText('claude-e2e')
           } finally {
             await reports.evaluate(({ stop }) => stop())
             await reports.dispose()

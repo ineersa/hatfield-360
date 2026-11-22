@@ -43,7 +43,7 @@ export const useTerminalStore = create<TerminalState>((set, get) => ({
       ...(agent ? { agent } : {})
     }
     set((state) => ({ tabs: [...state.tabs, tab], activeTabId: tab.id }))
-    useShellLayoutStore.setState({ activeView: 'agents', settingsOpen: false })
+    useShellLayoutStore.getState().showAgents()
   },
   closeTab: (id) => {
     set((state) => {

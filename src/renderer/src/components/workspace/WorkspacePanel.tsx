@@ -103,16 +103,14 @@ function ProjectWorktreeRows({
   const project = useWorktreeStore((state) => state.projects[folder])
   const collapsed = useWorktreeStore((state) => state.collapsed[folder] === true)
   if (collapsed) return null
-  if (project?.status === 'error') {
-    return (
-      <li role="alert" className="type-hint flex gap-2 py-1 pr-2.5 pl-tree-indent">
-        <CircleAlert className="mt-0.5 size-3.5 shrink-0 text-error" aria-hidden />
-        <span className="min-w-0 break-words">Git: {project.message}</span>
-      </li>
-    )
-  }
   return (
     <>
+      {project?.status === 'error' && (
+        <li role="alert" className="type-hint flex gap-2 py-1 pr-2.5 pl-tree-indent">
+          <CircleAlert className="mt-0.5 size-3.5 shrink-0 text-error" aria-hidden />
+          <span className="min-w-0 break-words">Git: {project.message}</span>
+        </li>
+      )}
       <AgentSessionRows
         now={now}
         sessions={sessions.filter(
