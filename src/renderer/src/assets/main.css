@@ -3,6 +3,7 @@
 @import './themes/app-themes.css';
 @import './themes/base.css';
 @import './terminal.css';
+@import './markdown-preview.css';
 
 /*
  * Every component styles itself through these roles, never with raw values. Colours, radii and row

@@ -1,4 +1,4 @@
-import { lstat, readFile, realpath, stat } from 'node:fs/promises'
+import { lstat, realpath, stat } from 'node:fs/promises'
 import { basename, dirname, join } from 'node:path'
 import { writeFileAtomic } from './atomic-write'
 import { resolveInsideRoots } from './path-containment'
@@ -6,16 +6,27 @@ import { resolveInsideRoots } from './path-containment'
 const outsideRoots = (path: string): Error => new Error(`Not inside the workspace: ${path}`)
 
 /**
- * Reads a text file that is inside one of `roots` once symlinks are followed, with `real`, the file
- * it was read from.
+ * The real file the editor may read `path` from: one inside `roots` once symlinks are followed, or
+ * `held`, the file it was read from before, while the path still leads there. Null when nothing is
+ * at the path and saying so reveals nothing new: the path is held, or its folder is in the roots.
  */
-export async function readFileInRoots(
+export async function locateEditorFile(
   path: string,
-  roots: string[]
-): Promise<{ text: string; real: string }> {
-  const real = await resolveInsideRoots(path, roots)
-  if (real === null) throw outsideRoots(path)
-  return { text: await readFile(real, 'utf8'), real }
+  roots: string[],
+  held: string | undefined
+): Promise<string | null> {
+  const inside = await resolveInsideRoots(path, roots)
+  if (inside !== null) return inside
+  const exists = await lstat(path).then(
+    () => true,
+    () => false
+  )
+  if (!exists) {
+    if (held !== undefined || (await resolveInsideRoots(dirname(path), roots)) !== null) return null
+    throw outsideRoots(path)
+  }
+  if (held !== undefined && (await realpath(path).catch(() => null)) === held) return held
+  throw outsideRoots(path)
 }
 
 /**

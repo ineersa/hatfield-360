@@ -10,6 +10,7 @@ import { registerFileTreeIpc } from './ipc/file-tree-ipc'
 import { registerSettingsIpc } from './ipc/settings-ipc'
 import { registerShellLayoutIpc } from './ipc/shell-layout-ipc'
 import { registerTerminalIpc } from './ipc/terminal-ipc'
+import { registerWebLinkIpc } from './ipc/web-link-ipc'
 import { registerWorkspaceIpc } from './ipc/workspace-ipc'
 import { registerWorktreeIpc } from './ipc/worktree-ipc'
 import { installAppMenu } from './menu/app-menu'
@@ -39,6 +40,7 @@ void app.whenReady().then(async () => {
   registerSettingsIpc()
   registerShellLayoutIpc()
   registerTerminalIpc()
+  registerWebLinkIpc()
   registerAgentIpc()
   installAppMenu()
   followAppTheme()

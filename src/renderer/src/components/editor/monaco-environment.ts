@@ -5,6 +5,7 @@ import CssWorker from 'monaco-editor/language/css/css.worker.js?worker'
 import HtmlWorker from 'monaco-editor/language/html/html.worker.js?worker'
 import JsonWorker from 'monaco-editor/language/json/json.worker.js?worker'
 import TsWorker from 'monaco-editor/language/typescript/ts.worker.js?worker'
+import { markdownLanguage } from './markdown-tokens'
 
 // Monaco's Vite setup: Vite's build would inline the editor worker's entry as a data: URL that can't
 // load the modules it imports. Monaco asks here for every worker, by its language or `editorWorkerService`.
@@ -30,5 +31,8 @@ for (const defaults of [
 ]) {
   defaults.setDiagnosticsOptions({ noSemanticValidation: true })
 }
+
+// Registered outright, so Monaco's own Markdown tokenizer is never loaded in its place.
+monaco.languages.setMonarchTokensProvider('markdown', markdownLanguage)
 
 export { monaco }

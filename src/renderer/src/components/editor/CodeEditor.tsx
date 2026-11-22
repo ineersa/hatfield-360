@@ -37,12 +37,15 @@ function menuColors(): MenuColors {
 export function CodeEditor({
   path,
   ready,
+  readOnly,
   hidden,
   focusRequest
 }: {
   path: string
   /** The tab's model is loaded. */
   ready: boolean
+  /** Shows the text without letting it be edited: a large file's start. */
+  readOnly: boolean
   hidden: boolean
   /** Changes when the editor should take the keys, as when its tab is clicked. */
   focusRequest: number
@@ -125,6 +128,10 @@ export function CodeEditor({
     }
     shownPath.current = path
   }, [path, ready])
+
+  useEffect(() => {
+    editor.current?.updateOptions({ readOnly })
+  }, [readOnly])
 
   useEffect(() => {
     if (focusRequest > 0) editor.current?.focus()

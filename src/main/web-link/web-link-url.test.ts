@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { webLinkUrl } from './terminal-request'
+import { webLinkUrl } from './web-link-url'
 
 describe('webLinkUrl', () => {
   it('passes http and https links', () => {

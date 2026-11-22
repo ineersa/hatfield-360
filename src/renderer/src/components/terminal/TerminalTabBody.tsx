@@ -74,7 +74,7 @@ export function TerminalTabBody({
       onLinkClick: (event, url) => {
         // Ctrl/Cmd+click, as in VS Code, so selecting text across a link doesn't open it.
         if (!event.ctrlKey && !event.metaKey) return
-        void window.desktop.openTerminalLink(url).catch(() => undefined)
+        void window.desktop.openWebLink(url).catch(() => undefined)
       }
     })
     manager.current = panes

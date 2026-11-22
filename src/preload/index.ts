@@ -8,6 +8,7 @@ import { SETTINGS_CHANNELS, type SettingsView } from '../shared/settings-api'
 import { SHELL_LAYOUT_CHANNELS } from '../shared/shell-layout-api'
 import { TERMINAL_CHANNELS, type TerminalCommand, type TerminalExit } from '../shared/terminal-api'
 import { type WorkspaceView, WORKSPACE_CHANNELS } from '../shared/workspace-api'
+import { WEB_LINK_CHANNELS } from '../shared/web-link-api'
 import { type ProjectWorktrees, WORKTREE_CHANNELS } from '../shared/worktree-api'
 
 const desktopApi: DesktopApi = {
@@ -48,8 +49,14 @@ const desktopApi: DesktopApi = {
     return () => ipcRenderer.removeListener(FILE_TREE_CHANNELS.changed, listener)
   },
   readTextFile: (path) => ipcRenderer.invoke(EDITOR_CHANNELS.read, path),
-  writeTextFile: (path, contents) => ipcRenderer.invoke(EDITOR_CHANNELS.write, path, contents),
+  writeTextFile: (path, contents, base) =>
+    ipcRenderer.invoke(EDITOR_CHANNELS.write, path, contents, base),
   releaseTextFile: (path) => ipcRenderer.invoke(EDITOR_CHANNELS.release, path),
+  subscribeFileChanges: (callback) => {
+    const listener = (_event: unknown, paths: string[]): void => callback(paths)
+    ipcRenderer.on(EDITOR_CHANNELS.changed, listener)
+    return () => ipcRenderer.removeListener(EDITOR_CHANNELS.changed, listener)
+  },
   subscribeSaveCommand: (callback) => {
     const listener = (): void => callback()
     ipcRenderer.on(EDITOR_CHANNELS.save, listener)
@@ -80,7 +87,7 @@ const desktopApi: DesktopApi = {
   resizeTerminal: (id, cols, rows) => ipcRenderer.invoke(TERMINAL_CHANNELS.resize, id, cols, rows),
   killTerminal: (id) => ipcRenderer.invoke(TERMINAL_CHANNELS.kill, id),
   ackTerminalOutput: (id, bytes) => ipcRenderer.invoke(TERMINAL_CHANNELS.ack, id, bytes),
-  openTerminalLink: (url) => ipcRenderer.invoke(TERMINAL_CHANNELS.openLink, url),
+  openWebLink: (url) => ipcRenderer.invoke(WEB_LINK_CHANNELS.open, url),
   readTerminalClipboard: () => ipcRenderer.invoke(TERMINAL_CHANNELS.readClipboard),
   writeTerminalClipboard: (text) => ipcRenderer.invoke(TERMINAL_CHANNELS.writeClipboard, text),
   subscribeTerminalData: (callback) => {

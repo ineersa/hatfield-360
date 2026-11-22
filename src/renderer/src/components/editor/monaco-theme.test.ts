@@ -1,5 +1,7 @@
+import type { languages } from 'monaco-editor'
 import { describe, expect, it } from 'vitest'
 import type { EditorScheme } from '../../../../shared/themes/editor-scheme'
+import { markdownLanguage } from './markdown-tokens'
 import { monacoTheme } from './monaco-theme'
 
 // Loaded as the app loads them, typed as schemes.
@@ -73,5 +75,93 @@ describe('Monaco themes from editor schemes', () => {
     )
     expect(colours).not.toHaveLength(0)
     expect(colours.filter((colour) => !/^[0-9a-f]{6}$/.test(colour))).toEqual([])
+  })
+})
+
+// Monaco's Monarch languages; a few need a browser window to load and are left out below.
+const LANGUAGES = import.meta.glob<{ language?: languages.IMonarchLanguage }>(
+  '/node_modules/monaco-editor/esm/vs/languages/definitions/*/*.js'
+)
+const NEEDS_WINDOW = [
+  'freemarker2',
+  'handlebars',
+  'html',
+  'javascript',
+  'liquid',
+  'mdx',
+  'python',
+  'razor',
+  'typescript',
+  'xml',
+  'yaml'
+]
+
+/** The token classes a rule's action gives, without states, groups or whitespace. */
+function actionTokens(action: unknown, found: Set<string>): void {
+  if (typeof action === 'string') {
+    if (action !== '' && action !== 'white' && !action.startsWith('@') && !action.includes('$'))
+      found.add(action)
+  } else if (Array.isArray(action)) {
+    for (const each of action) actionTokens(each, found)
+  } else if (typeof action === 'object' && action !== null) {
+    if ('token' in action) actionTokens(action.token, found)
+    if ('cases' in action && typeof action.cases === 'object' && action.cases !== null)
+      for (const each of Object.values(action.cases)) actionTokens(each, found)
+  }
+}
+
+function languageTokens(language: languages.IMonarchLanguage, name: string): string[] {
+  const found = new Set<string>()
+  for (const rules of Object.values(language.tokenizer))
+    for (const each of rules) {
+      if (Array.isArray(each)) actionTokens(each[1], found)
+      else if ('action' in each) actionTokens(each.action, found)
+    }
+  return [...found].map((token) => `${token}${language.tokenPostfix ?? `.${name}`}`)
+}
+
+describe('Monaco token classes', () => {
+  it('all have a colour from the scheme, for every language Monaco highlights', async () => {
+    const rules = monacoTheme(islandsDark, MENU)
+      .rules.map((entry) => entry.token)
+      .filter(Boolean)
+    const covered = (token: string) =>
+      rules.some((ruled) => token === ruled || token.startsWith(`${ruled}.`))
+    const missing: string[] = []
+    const failed: string[] = []
+    const check = (language: languages.IMonarchLanguage, name: string) => {
+      for (const token of languageTokens(language, name)) if (!covered(token)) missing.push(token)
+    }
+    for (const [path, load] of Object.entries(LANGUAGES)) {
+      const name = /definitions\/([^/]+)\/\1\.js$/.exec(path)?.[1]
+      // Monaco's Markdown is replaced by the app's.
+      if (name === undefined || name === 'markdown') continue
+      const loaded = await load().catch(() => null)
+      if (!loaded) failed.push(name)
+      else if (loaded.language) check(loaded.language, name)
+    }
+    check(markdownLanguage, 'markdown')
+    expect(failed.toSorted()).toEqual(NEEDS_WINDOW)
+    expect(missing).toEqual([])
+  })
+
+  it('give Markdown the scheme Markdown colours, or bold and italic where it has none', () => {
+    const catppuccin = scheme('catppuccin-mocha')
+    const heading = catppuccin.attributes.MARKDOWN_HEADER_LEVEL_2
+    expect(rule(catppuccin, 'markup.heading.2')?.foreground).toBe(heading?.foreground?.slice(1))
+    expect(rule(catppuccin, 'markup.list')?.foreground).toBe(
+      catppuccin.attributes.MARKDOWN_LIST_MARKER?.foreground?.slice(1)
+    )
+    expect(rule(islandsDark, 'markup.code.span')?.background).toBe(
+      islandsDark.attributes.MARKDOWN_CODE_SPAN?.background?.slice(1)
+    )
+    // Darcula sets no Markdown colours.
+    const darcula = scheme('darcula')
+    expect(rule(darcula, 'markup.heading.1')).toMatchObject({
+      fontStyle: 'bold',
+      foreground: rule(darcula, 'keyword')?.foreground
+    })
+    expect(rule(darcula, 'markup.bold')?.fontStyle).toBe('bold')
+    expect(rule(darcula, 'markup.italic')?.fontStyle).toBe('italic')
   })
 })

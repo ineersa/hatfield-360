@@ -2,18 +2,9 @@ import { expect, test, type Page } from '@playwright/test'
 import { chmod, mkdir, readFile, realpath, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { clickMenuItem } from './app-menu'
+import { editor, item, lines, openFile, showView, tab, tabs, typeAtEnd } from './editor-page'
 import { makeTempDir, saveScreenshot, withApp } from './launch-app'
 import { seedWorkspace } from './workspace-seed'
-
-const tree = (page: Page) => page.getByRole('tree', { name: 'Files' })
-const item = (page: Page, name: string) => tree(page).getByRole('treeitem', { name, exact: true })
-const tabs = (page: Page) => page.getByRole('tablist', { name: 'Editor tabs' }).getByRole('tab')
-const tab = (page: Page, name: string) =>
-  page.getByRole('tablist', { name: 'Editor tabs' }).getByRole('tab', { name, exact: true })
-const editor = (page: Page) => page.locator('.monaco-editor')
-const lines = (page: Page) => editor(page).locator('.view-lines')
-const showView = (page: Page, name: 'Agents' | 'Files') =>
-  page.getByRole('navigation', { name: 'Views' }).getByRole('button', { name, exact: true }).click()
 
 const activeLine = (page: Page) => editor(page).locator('.line-numbers.active-line-number')
 const folded = (page: Page) => editor(page).locator('.codicon-folding-collapsed')
@@ -39,16 +30,6 @@ async function makeProject(): Promise<[string, () => Promise<void>]> {
   return [app, cleanup]
 }
 
-/** Opens a file from the tree with a double click, expanding the folders on the way. */
-async function openFile(page: Page, ...path: string[]): Promise<void> {
-  for (const folder of path.slice(0, -1)) {
-    if ((await item(page, folder).getAttribute('aria-expanded')) !== 'true') {
-      await item(page, folder).click()
-    }
-  }
-  await item(page, path.at(-1) ?? '').dblclick()
-}
-
 /** Opens the editor's context menu, checks its background and closes it. */
 async function expectMenuBackground(page: Page, color: string): Promise<void> {
   await lines(page).click({ button: 'right' })
@@ -59,13 +40,6 @@ async function expectMenuBackground(page: Page, color: string): Promise<void> {
     color
   )
   await page.keyboard.press('Escape')
-}
-
-/** Puts the caret at the end of the text and types there. */
-async function typeAtEnd(page: Page, text: string): Promise<void> {
-  await lines(page).click()
-  await page.keyboard.press('ControlOrMeta+End')
-  await page.keyboard.type(text)
 }
 
 test('files open in editor tabs that switch, reorder and close, with highlighting and running workers', async () => {
@@ -290,7 +264,7 @@ test('a closed tab can no longer write its file once the folder has left the wor
 
         // The page asks main directly, as a compromised page could. (A script string: the tests
         // are typed for Node, without the DOM.)
-        const write = `window.desktop.writeTextFile(${JSON.stringify(notes)}, 'overwritten')
+        const write = `window.desktop.writeTextFile(${JSON.stringify(notes)}, 'overwritten', null)
           .then(() => 'written', (error) => String(error))`
         expect(await page.evaluate<string>(write)).toContain('Not inside the workspace')
         expect(await readFile(notes, 'utf8')).toBe('first line\n')
