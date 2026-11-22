@@ -115,9 +115,8 @@ function ProjectWorktreeRows({
         now={now}
         sessions={sessions.filter(
           (session) =>
-            session.cwd === folder ||
             project?.status !== 'git' ||
-            !project.worktrees.some((tree) => !tree.project && tree.path === session.cwd)
+            !project.worktrees.some((tree) => !tree.project && tree.path === session.worktree)
         )}
       />
       {project?.status === 'git' &&
@@ -128,7 +127,7 @@ function ProjectWorktreeRows({
               <WorktreeRow worktree={worktree} project={folder} />
               <AgentSessionRows
                 now={now}
-                sessions={sessions.filter((session) => session.cwd === worktree.path)}
+                sessions={sessions.filter((session) => session.worktree === worktree.path)}
               />
             </Fragment>
           ))}

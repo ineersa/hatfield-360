@@ -1,4 +1,6 @@
 import { randomUUID } from 'node:crypto'
+import { realpath } from 'node:fs/promises'
+import { isPathInside } from '../files/path-containment'
 import type { WebContents } from 'electron'
 import type {
   AgentNotification,
@@ -13,7 +15,10 @@ import { terminalSessions } from '../terminal/terminal-sessions'
 import { AgentNotificationPolicy } from './agent-notifications'
 import { agentStatusServer } from './status-server'
 
-const records = new Map<string, { owner: WebContents; session: AgentSession }>()
+const records = new Map<
+  string,
+  { owner: WebContents; session: AgentSession; observedCwd: string | null }
+>()
 const trackedOwners = new WeakSet<WebContents>()
 const manualHistory = new WeakMap<WebContents, string[]>()
 const launches = new Map<
@@ -31,14 +36,18 @@ export function agentSnapshot(owner: WebContents): AgentSnapshot {
   }
 }
 
-function recordSession(owner: WebContents, session: AgentSession) {
+function recordSession(
+  owner: WebContents,
+  session: AgentSession,
+  observedCwd: string | null = null
+) {
   if (!trackedOwners.has(owner)) {
     trackedOwners.add(owner)
     owner.once('destroyed', () => {
       for (const [id, record] of records) if (record.owner === owner) records.delete(id)
     })
   }
-  records.set(session.id, { owner, session })
+  records.set(session.id, { owner, session, observedCwd })
 }
 
 function newSession(
@@ -53,6 +62,7 @@ function newSession(
     provider,
     providerSessionId: null,
     project,
+    worktree: project !== null && project !== cwd ? cwd : null,
     cwd,
     process: 'running',
     activity: 'unknown',
@@ -65,20 +75,28 @@ function newSession(
   }
 }
 
-async function observedProject(cwd: string) {
-  const folders = (await workspaceStore.view()).folders.filter((folder) => !folder.missing)
-  const contains = (path: string) => cwd === path || cwd.startsWith(path === '/' ? '/' : `${path}/`)
-  const candidates = folders
-    .filter((folder) => contains(folder.path))
-    .map((folder) => ({ path: folder.path, project: folder.path }))
+async function placementRoots() {
+  const folders = (await workspaceStore.view()).folders.filter(
+    (folder) => folder.kind === 'project' && !folder.missing
+  )
+  const projects = new Set(folders.map(({ path }) => path))
+  const candidates: { path: string; project: string; worktree: string | null }[] = folders.map(
+    ({ path }) => ({ path, project: path, worktree: null })
+  )
   for (const entry of worktreeStore.view()) {
-    if (entry.status !== 'git' || !folders.some((folder) => folder.path === entry.folder)) continue
+    if (entry.status !== 'git' || !projects.has(entry.folder)) continue
     for (const tree of entry.worktrees) {
-      if (!tree.prunable && contains(tree.path))
-        candidates.push({ path: tree.path, project: entry.folder })
+      if (!tree.prunable && !tree.project)
+        candidates.push({ path: tree.path, project: entry.folder, worktree: tree.path })
     }
   }
-  return candidates.toSorted((a, b) => b.path.length - a.path.length)[0]?.project ?? null
+  const canonical = await Promise.all(
+    candidates.map(async ({ path, project, worktree }) => {
+      const root = await realpath(path).catch(() => null)
+      return { root, project, worktree }
+    })
+  )
+  return canonical.toSorted((a, b) => (b.root?.length ?? 0) - (a.root?.length ?? 0))
 }
 
 export function trackAgentSessions(
@@ -92,6 +110,37 @@ export function trackAgentSessions(
     revision++
     if (!owner.isDestroyed()) publish(owner)
   }
+  let refreshPending = false
+  let refreshing = false
+  const refreshPlacements = async () => {
+    refreshPending = true
+    if (refreshing) return
+    refreshing = true
+    try {
+      while (refreshPending) {
+        refreshPending = false
+        const observed = [...records.values()].filter((record) => record.observedCwd !== null)
+        if (!observed.length) continue
+        const roots = await placementRoots().catch(() => null)
+        if (!roots || refreshPending) continue
+        const owners = new Set<WebContents>()
+        for (const { owner, session, observedCwd } of observed) {
+          if (observedCwd === null || !records.has(session.id)) continue
+          const match = roots.find(({ root }) => root !== null && isPathInside(observedCwd, root))
+          const project = match?.project ?? null
+          const worktree = match?.worktree ?? null
+          if (session.project === project && session.worktree === worktree) continue
+          Object.assign(session, { project, worktree })
+          owners.add(owner)
+        }
+        for (const owner of owners) changed(owner)
+      }
+    } finally {
+      refreshing = false
+    }
+  }
+  worktreeStore.onChange(() => void refreshPlacements())
+  workspaceStore.onChange(() => void refreshPlacements())
   agentStatusServer.subscribe((change) => {
     if (change.kind === 'manual-registered') {
       const placement = terminalSessions.manualPlacement(change.terminalId)
@@ -109,18 +158,9 @@ export function trackAgentSessions(
         policy: new AgentNotificationPolicy(),
         manual: true
       })
-      recordSession(owner, session)
+      recordSession(owner, session, change.cwd)
       changed(owner)
-      if (change.cwd !== null) {
-        void observedProject(change.cwd)
-          .then((project) => {
-            if (records.has(session.id) && session.project !== project) {
-              session.project = project
-              changed(owner)
-            }
-          })
-          .catch(() => undefined)
-      }
+      if (change.cwd !== null) void refreshPlacements()
       return
     }
     if (change.kind === 'manual-ended') {

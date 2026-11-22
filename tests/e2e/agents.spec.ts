@@ -1,7 +1,7 @@
 import type { AgentSnapshot } from '../../src/shared/agent-api'
 import type { DesktopApi } from '../../src/shared/desktop-api'
 import { expect, test, type Locator, type Page, type Video } from '@playwright/test'
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, rename, rmdir, symlink, writeFile } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 import { git, makeRepo } from './git-repository'
@@ -462,7 +462,8 @@ function expectPublicSnapshot(snapshot: AgentSnapshot): void {
       'terminalId',
       'tool',
       'updatedAt',
-      'wait'
+      'wait',
+      'worktree'
     ])
   }
 }
@@ -805,6 +806,7 @@ test('a linked worktree launches into its own tab and publishes only public sess
               providerSessionId: 'claude-e2e',
               project: repo,
               cwd: worktree,
+              worktree,
               wait: 'permission',
               terminalId: worktreeId
             }
@@ -936,5 +938,155 @@ test('manually launched agents follow the managed shell pane and observed direct
     )
   } finally {
     await cleanup()
+  }
+})
+
+async function placementWorkspace(userDataDir: string, project: string, folder?: string) {
+  await writeFile(
+    join(userDataDir, 'workspaces/default.hatfield-workspace'),
+    JSON.stringify({
+      version: 1,
+      folders: [
+        { path: project, kind: 'project' },
+        ...(folder ? [{ path: folder, kind: 'folder' }] : [])
+      ]
+    })
+  )
+}
+
+async function launchManualPlacement(
+  page: Page,
+  projectName: string,
+  cwd: string,
+  session: string
+) {
+  const folders = page.getByRole('list', { name: 'Workspace folders' })
+  await folders.getByRole('listitem', { name: projectName, exact: true }).click({ button: 'right' })
+  await page.getByRole('menuitem', { name: 'Open Terminal Here' }).click()
+  const pane = page.getByTestId('terminal-pane').filter({ visible: true })
+  await expect(pane.locator('textarea')).toBeFocused()
+  await page.keyboard.type(
+    `cd ${shellQuote(cwd)} && ${shellQuote(process.execPath)} ${shellQuote(fixture)} hatfield ${session} ${session}`
+  )
+  await page.keyboard.press('Enter')
+  await expect(output(pane)).toContainText(`Scenario ready: ${session}`)
+  await command(page, pane, 'start')
+  return folders.getByRole('button', { name: `Hatfield session · ${session}` })
+}
+
+async function readManualPlacement(page: Page, sessionId: string) {
+  const snapshot = await page.evaluate(() => globalThis.desktop.getAgentSessions())
+  return snapshot.sessions.find((session) => session.providerSessionId === sessionId)
+}
+
+test('manual placement keeps a nested plain folder under its parent project', async () => {
+  test.skip(process.platform !== 'linux', 'Manual registration uses Linux process identity')
+  const { project, userDataDir, cleanup } = await seed()
+  try {
+    const src = join(project, 'src')
+    await mkdir(src)
+    await placementWorkspace(userDataDir, project, src)
+    await withApp(
+      async (_app, page) => {
+        const row = await launchManualPlacement(page, 'agent-project', src, 'nested-folder')
+        await expect
+          .poll(async () => {
+            const session = await readManualPlacement(page, 'nested-folder')
+            return { cwd: session?.cwd, project: session?.project }
+          })
+          .toEqual({ cwd: src, project })
+        const folders = page.getByRole('list', { name: 'Workspace folders' })
+        await folders.getByRole('button', { name: 'Collapse agent-project' }).click()
+        await expect(row).toHaveCount(0)
+      },
+      { userDataDir }
+    )
+  } finally {
+    await cleanup()
+  }
+})
+
+test('manual placement retains the workspace alias for a symlinked project', async () => {
+  test.skip(process.platform !== 'linux', 'Manual registration uses Linux process identity')
+  const { project, userDataDir, cleanup } = await seed()
+  try {
+    const alias = join(project, '..', 'aliased-project')
+    await symlink(project, alias, 'dir')
+    await placementWorkspace(userDataDir, alias)
+    await withApp(
+      async (_app, page) => {
+        const row = await launchManualPlacement(page, 'aliased-project', alias, 'alias')
+        await expect
+          .poll(async () => {
+            const session = await readManualPlacement(page, 'alias')
+            return { cwd: session?.cwd, project: session?.project }
+          })
+          .toEqual({ cwd: project, project: alias })
+        await expect(row).toBeVisible()
+      },
+      { userDataDir }
+    )
+  } finally {
+    await cleanup()
+  }
+})
+
+test('manual placement groups linked worktree subdirectories after Git discovery recovers', async () => {
+  test.skip(process.platform !== 'linux', 'Manual registration uses Linux process identity')
+  const { repo, projects, cleanup: cleanRepo } = await makeRepo()
+  const { userDataDir, cleanup } = await seed(repo)
+  try {
+    const tree = join(repo, 'feature')
+    git(repo, 'worktree', 'add', '-b', 'feature', tree)
+    const src = join(tree, 'src')
+    const boundary = join(repo, 'feature-other')
+    const alias = join(projects, 'feature-alias')
+    await mkdir(src)
+    await mkdir(boundary)
+    await symlink(tree, alias, 'dir')
+    const gitDir = join(repo, '.git')
+    const backup = join(repo, 'git-backup')
+    await rename(gitDir, backup)
+    await mkdir(gitDir)
+    await withApp(
+      async (_app, page) => {
+        const folders = page.getByRole('list', { name: 'Workspace folders' })
+        await expect(folders.getByRole('alert').filter({ hasText: 'Git:' })).toBeVisible()
+        const child = await launchManualPlacement(page, 'app', join(alias, 'src'), 'linked-subdir')
+        await expect(child).toBeVisible()
+        await rmdir(gitDir)
+        await rename(backup, gitDir)
+        const feature = folders.getByRole('listitem', { name: 'feature worktree', exact: true })
+        await expect(feature).toBeVisible()
+        const adjacent = feature
+          .locator('xpath=following-sibling::li[1]')
+          .getByRole('button', { name: /linked-subdir/ })
+        await expect(adjacent).toBeVisible()
+        const outside = await launchManualPlacement(page, 'app', boundary, 'boundary')
+        await expect(outside).toBeVisible()
+        await expect
+          .poll(async () => {
+            const session = await readManualPlacement(page, 'linked-subdir')
+            return { cwd: session?.cwd, project: session?.project, worktree: session?.worktree }
+          })
+          .toEqual({ cwd: src, project: repo, worktree: tree })
+        await expect
+          .poll(async () => {
+            const session = await readManualPlacement(page, 'boundary')
+            return { cwd: session?.cwd, project: session?.project, worktree: session?.worktree }
+          })
+          .toEqual({ cwd: boundary, project: repo, worktree: null })
+        await expect(adjacent).toBeVisible()
+        await folders.getByRole('button', { name: 'Collapse app' }).click()
+        await expect(child).toHaveCount(0)
+        await expect(outside).toHaveCount(0)
+        await folders.getByRole('button', { name: 'Expand app' }).click()
+        await expect(adjacent).toBeVisible()
+      },
+      { userDataDir }
+    )
+  } finally {
+    await cleanup()
+    await cleanRepo()
   }
 })
