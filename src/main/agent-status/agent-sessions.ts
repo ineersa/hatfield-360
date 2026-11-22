@@ -126,8 +126,8 @@ export function trackAgentSessions(
         for (const [id, record] of records) if (record.owner === owner) records.delete(id)
       })
     }
-    if (credential)
-      launches.set(credential.launchId, { owner, session, policy: new AgentNotificationPolicy() })
+    const policy = new AgentNotificationPolicy()
+    if (credential) launches.set(credential.launchId, { owner, session, policy })
     const release = () => {
       if (!credential) return
       launches.delete(credential.launchId)
@@ -146,6 +146,7 @@ export function trackAgentSessions(
               H360_STATUS_LAUNCH_ID: credential.launchId
             }
           : {},
+        onClosing: () => policy.beginClosing(),
         onExit: () => {
           release()
           Object.assign(session, {

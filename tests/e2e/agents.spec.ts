@@ -566,6 +566,73 @@ test('agent notifications follow accepted transitions and open only the owning t
   }
 })
 
+test('an announced child blocks completion before reporting its first turn', async () => {
+  test.skip(process.platform === 'win32', 'The agent reporting transport is Unix only')
+  const { userDataDir, cleanup } = await seed()
+  try {
+    await withApp(
+      async (_app, page) => {
+        await launch(page, 'Hatfield')
+        const pane = page.getByRole('tabpanel', { name: 'Hatfield' }).getByTestId('terminal-pane')
+        await startFocusedScenario(page, pane)
+        await page.getByRole('button', { name: 'Notifications', exact: true }).click()
+        const panel = page.getByRole('complementary', { name: 'Notifications panel' })
+        const completion = panel.getByRole('listitem', { name: 'Agent turn completed' })
+        await command(page, pane, 'child-start-only')
+        await command(page, pane, 'completed')
+        await expect(page.getByRole('button', { name: /^Hatfield session/ })).toContainText(
+          'Last turn: completed'
+        )
+        await expect(completion).toHaveCount(0)
+        await command(page, pane, 'child-done')
+        await expect(completion).toHaveCount(1)
+        await command(page, pane, 'duplicate', 'duplicate')
+        await expect(completion).toHaveCount(1)
+      },
+      { userDataDir }
+    )
+  } finally {
+    await cleanup()
+  }
+})
+
+test('closing an agent terminal suppresses a real hangup failure report', async () => {
+  test.skip(process.platform === 'win32', 'The agent reporting transport is Unix only')
+  const { project, userDataDir, cleanup } = await seed()
+  try {
+    await withApp(
+      async (_app, page) => {
+        await launch(page, 'Hatfield')
+        const pane = page.getByRole('tabpanel', { name: 'Hatfield' }).getByTestId('terminal-pane')
+        await startFocusedScenario(page, pane)
+        await command(page, pane, 'report-failure-on-hangup', 'armed')
+        await page.getByRole('button', { name: 'Notifications', exact: true }).click()
+        const panel = page.getByRole('complementary', { name: 'Notifications panel' })
+        await page.getByRole('button', { name: 'Close Hatfield', exact: true }).click()
+        await expect
+          .poll(() => readFile(join(project, 'hangup-report'), 'utf8').catch(() => null))
+          .toBe('accepted')
+        await expect(page.getByRole('button', { name: /^Hatfield session/ })).toContainText(
+          'Stopped · Last turn: failed'
+        )
+        await expect
+          .poll(() =>
+            page.evaluate(async () =>
+              (await globalThis.desktop.getAgentSessions()).sessions.map(
+                ({ process, outcome }) => ({ process, outcome })
+              )
+            )
+          )
+          .toEqual([{ process: 'exited', outcome: 'failed' }])
+        await expect(panel.getByText('No notifications.', { exact: true })).toBeVisible()
+      },
+      { userDataDir }
+    )
+  } finally {
+    await cleanup()
+  }
+})
+
 test('a newer main turn supersedes a pending agent completion', async () => {
   test.skip(process.platform === 'win32', 'The agent reporting transport is Unix only')
   const { userDataDir, cleanup } = await seed()

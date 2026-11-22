@@ -1,3 +1,5 @@
+import { writeFile } from 'node:fs/promises'
+import { join } from 'node:path'
 import { createConnection } from 'node:net'
 import { createInterface } from 'node:readline'
 
@@ -103,11 +105,31 @@ for await (const command of input) {
       case 'script-done':
         reply = await emit('script.ended', { scriptId: 'background', scriptStart })
         break
+      case 'report-failure-on-hangup':
+        process.once('SIGHUP', () => {
+          void emit('turn.ended', { ...turn, outcome: 'failed' })
+            .then((status) => writeFile(join(process.cwd(), 'hangup-report'), status))
+            .then(
+              () => process.exit(0),
+              (error) => {
+                console.error(error)
+                process.exit(1)
+              }
+            )
+        })
+        reply = 'armed'
+        break
+      case 'child-start-only':
       case 'child-working':
       case 'child': {
         const actor = { actorId: 'child', actorStart: sequence + 1 }
-        await emit('actor.started', { actorId: actor.actorId, parentId: 'main', parentStart: 1 })
+        reply = await emit('actor.started', {
+          actorId: actor.actorId,
+          parentId: 'main',
+          parentStart: 1
+        })
         childTurn = { ...actor, turnId: 'child-turn', turnStart: sequence + 1 }
+        if (command === 'child-start-only') break
         reply = await emit('turn.started', { ...actor, turnId: childTurn.turnId })
         if (command === 'child')
           reply = await emit('wait.started', {

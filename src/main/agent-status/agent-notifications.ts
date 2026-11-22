@@ -8,6 +8,11 @@ export class AgentNotificationPolicy {
   #waiting = false
   #epoch = 0
   #completion: number | undefined
+  #closing = false
+
+  beginClosing(): void {
+    this.#closing = true
+  }
 
   accept(event: StatusEvent, session: NonNullable<ReturnType<StatusState['snapshot']>>): Message[] {
     if (session.epoch !== this.#epoch) {
@@ -18,6 +23,8 @@ export class AgentNotificationPolicy {
     if (session.ended) return []
     if (event.kind === 'notification')
       return [{ kind: 'explicit', title: event.title, body: event.body }]
+
+    if (this.#closing) return []
 
     const messages: Message[] = []
     const actors = [...session.actors.values()]
@@ -36,7 +43,9 @@ export class AgentNotificationPolicy {
       this.#completion !== undefined &&
       !waiting &&
       session.scripts.size === 0 &&
-      !actors.some((actor) => actor.turn?.activity === 'working')
+      ![...session.actors].some(
+        ([id, actor]) => actor.turn?.activity === 'working' || (id !== 'main' && !actor.turn)
+      )
     ) {
       this.#completion = undefined
       messages.push({ kind: 'completed' })
