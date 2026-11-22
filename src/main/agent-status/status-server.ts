@@ -5,7 +5,14 @@ import { createServer, type Server, type Socket } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { TextDecoder } from 'node:util'
-import { parseStatusRequest, type StatusEvent, type StatusReply } from './status-protocol'
+import {
+  parseRegistration,
+  parseStatusRequest,
+  type Registration,
+  type StatusEvent,
+  type StatusReply
+} from './status-protocol'
+import { findOwner, observeProcess, pinProcess, type PinnedProcess } from './linux-process-identity'
 import { StatusState } from './status-state'
 
 const maxFrameBytes = 16 * 1024
@@ -18,13 +25,39 @@ const maxRequestsPerSecond = 128
 type Placement = { terminalId: string; cwd: string }
 type Launch = {
   placement: Placement
+  provider?: Registration['provider']
   token: Buffer | undefined
   status: StatusState
   rate: { second: number; count: number }
 }
+type Credential = { launchId: string; token: string; endpoint: string }
+type ManualOwner = {
+  identity: string
+  credential: Credential
+  process: PinnedProcess
+  timer?: NodeJS.Timeout
+  errors: number
+  retired: boolean
+}
+type Bootstrap = {
+  placement: Placement
+  root?: PinnedProcess
+  lookup?: AbortController
+  owners: Map<string, ManualOwner>
+  attempts: number[]
+}
+type RegistrationReply = StatusReply | { ok: true; launchId: string; token: string }
 type Change =
   | { launchId: string; kind: 'registered' | 'exited' | 'revoked' }
   | { launchId: string; kind: 'event'; event: StatusEvent }
+  | {
+      launchId: string
+      kind: 'manual-registered'
+      terminalId: string
+      provider: Registration['provider']
+      cwd: string | null
+    }
+  | { launchId: string; kind: 'manual-ended'; exited: boolean }
 type Listener = (change: Change) => void
 type Endpoint = { server: Server; directory: string; path: string }
 
@@ -33,15 +66,18 @@ export class AgentStatusServer {
   #endpoint: Endpoint | undefined
   #clients = new Set<Socket>()
   #launches = new Map<string, Launch>()
+  #bootstraps = new Map<string, Bootstrap>()
   #listeners = new Set<Listener>()
 
-  start(parent = process.platform === 'darwin' ? '/tmp' : tmpdir()): Promise<string | undefined> {
+  start(
+    parent = process.platform === 'darwin' || process.platform === 'linux' ? '/tmp' : tmpdir()
+  ): Promise<string | undefined> {
     const start = this.#transition.then(async () => {
       if (process.platform === 'win32') return undefined
       if (this.#endpoint) return this.#endpoint.path
       const directory = await mkdtemp(join(await realpath(parent), 'h360-'))
       const path = join(directory, 'status')
-      const server = createServer((socket) => this.#connect(socket))
+      const server = createServer({ allowHalfOpen: true }, (socket) => this.#connect(socket))
       server.maxConnections = maxConnections
       try {
         if (Buffer.byteLength(path) > 103)
@@ -72,6 +108,7 @@ export class AgentStatusServer {
     const stop = this.#transition.then(async () => {
       const endpoint = this.#endpoint
       this.#endpoint = undefined
+      for (const token of this.#bootstraps.keys()) this.closeBootstrap(token)
       for (const id of this.#launches.keys()) this.revokeLaunch(id)
       if (endpoint) await this.#close(endpoint.server, endpoint.directory)
     })
@@ -79,13 +116,138 @@ export class AgentStatusServer {
     return stop
   }
 
-  registerLaunch(placement: Placement) {
+  async prepareBootstrap(placement: Placement) {
+    if (process.platform !== 'linux') return undefined
+    const endpoint = await this.start()
+    if (!endpoint || this.#bootstraps.size >= maxLaunches) return undefined
+    const token = randomBytes(32).toString('hex')
+    this.#bootstraps.set(token, { placement, owners: new Map(), attempts: [] })
+    return { endpoint, token }
+  }
+
+  async bindBootstrap(token: string, pid: number) {
+    const bootstrap = this.#bootstraps.get(token)
+    if (!bootstrap) return
+    const root = await pinProcess(pid)
+    if (root.tty !== '0' && this.#bootstraps.get(token) === bootstrap) bootstrap.root = root
+    else await root.handle.close()
+  }
+
+  closeBootstrap(token: string) {
+    const bootstrap = this.#bootstraps.get(token)
+    if (!bootstrap) return
+    this.#bootstraps.delete(token)
+    bootstrap.lookup?.abort()
+    void bootstrap.root?.handle.close().catch(() => undefined)
+    for (const owner of bootstrap.owners.values()) this.#retireManual(owner, false)
+    bootstrap.owners.clear()
+  }
+
+  #retireManual(owner: ManualOwner, exited: boolean) {
+    if (owner.retired) return
+    owner.retired = true
+    clearTimeout(owner.timer)
+    void owner.process.handle.close().catch(() => undefined)
+    this.revokeLaunch(owner.credential.launchId)
+    this.#emit({ launchId: owner.credential.launchId, kind: 'manual-ended', exited })
+  }
+
+  #watchManual(bootstrap: Bootstrap, instanceId: string, owner: ManualOwner) {
+    owner.timer = setTimeout(() => {
+      void this.#pollManual(bootstrap, instanceId, owner)
+    }, 1000).unref()
+  }
+
+  async #pollManual(bootstrap: Bootstrap, instanceId: string, owner: ManualOwner) {
+    let exited: boolean
+    try {
+      exited = !(await observeProcess(owner.process.handle)).alive
+      owner.errors = 0
+    } catch (error) {
+      exited = error instanceof Error && 'code' in error && error.code === 'ESRCH'
+      if (!exited) owner.errors++
+    }
+    if (owner.retired) return
+    if (exited) {
+      bootstrap.owners.delete(instanceId)
+      this.#retireManual(owner, true)
+    } else if (owner.errors >= 3) this.#retireManual(owner, false)
+    else this.#watchManual(bootstrap, instanceId, owner)
+  }
+
+  async #registerManual(request: Registration, signal: AbortSignal): Promise<RegistrationReply> {
+    const bootstrap = this.#bootstraps.get(request.token)
+    if (!bootstrap) return { ok: false, error: 'unauthorized' }
+    const now = performance.now()
+    bootstrap.attempts = bootstrap.attempts.filter((time) => now - time < 1000)
+    if (bootstrap.attempts.length >= 4) return { ok: false, error: 'limit' }
+    bootstrap.attempts.push(now)
+    if (!bootstrap.root) return { ok: false, error: 'unavailable' }
+    if (bootstrap.lookup) return { ok: false, error: 'limit' }
+    const controller = new AbortController()
+    bootstrap.lookup = controller
+    const lookup = AbortSignal.any([signal, controller.signal])
+    const identity = JSON.stringify(request.owner)
+    try {
+      const prior = bootstrap.owners.get(request.instanceId)
+      if (prior && prior.identity !== identity) return { ok: false, error: 'conflict' }
+      if (prior?.retired) return { ok: false, error: 'unavailable' }
+      if (
+        [...bootstrap.owners.values()].some(
+          (owner) => owner !== prior && owner.identity === identity
+        )
+      )
+        return { ok: false, error: 'conflict' }
+      if (prior) {
+        if (this.#launches.get(prior.credential.launchId)?.provider !== request.provider)
+          return { ok: false, error: 'conflict' }
+        if (!(await observeProcess(prior.process.handle)).alive || lookup.aborted)
+          return { ok: false, error: 'unavailable' }
+        return { ok: true, launchId: prior.credential.launchId, token: prior.credential.token }
+      }
+      if (bootstrap.owners.size >= 4 || this.#launches.size >= maxLaunches)
+        return { ok: false, error: 'limit' }
+      const process = await findOwner(bootstrap.root, request.owner, lookup)
+      if (!process) return { ok: false, error: 'unavailable' }
+      let keep = false
+      try {
+        if (lookup.aborted || this.#bootstraps.get(request.token) !== bootstrap)
+          return { ok: false, error: 'unavailable' }
+        if (this.#launches.size >= maxLaunches) return { ok: false, error: 'limit' }
+        const credential = this.registerLaunch(
+          { ...bootstrap.placement, cwd: process.cwd ?? bootstrap.placement.cwd },
+          request.provider
+        )
+        const owner = { identity, credential, process, errors: 0, retired: false }
+        bootstrap.owners.set(request.instanceId, owner)
+        keep = true
+        this.#watchManual(bootstrap, request.instanceId, owner)
+        this.#emit({
+          launchId: credential.launchId,
+          kind: 'manual-registered',
+          terminalId: bootstrap.placement.terminalId,
+          provider: request.provider,
+          cwd: process.cwd
+        })
+        return { ok: true, launchId: credential.launchId, token: credential.token }
+      } finally {
+        if (!keep) await process.handle.close()
+      }
+    } catch {
+      return { ok: false, error: 'unavailable' }
+    } finally {
+      delete bootstrap.lookup
+    }
+  }
+
+  registerLaunch(placement: Placement, provider?: Registration['provider']) {
     if (!this.#endpoint) throw new Error('Agent status server not available')
     if (this.#launches.size >= maxLaunches) throw new Error('Agent status launch limit reached')
     const launchId = randomUUID()
     const token = randomBytes(32).toString('hex')
     this.#launches.set(launchId, {
       placement: { ...placement },
+      ...(provider ? { provider } : {}),
       token: Buffer.from(token),
       status: new StatusState(),
       rate: { second: 0, count: 0 }
@@ -145,9 +307,14 @@ export class AgentStatusServer {
 
   #connect(socket: Socket): void {
     this.#clients.add(socket)
-    const deadline = setTimeout(() => socket.destroy(), requestDeadlineMs)
+    const pending = new AbortController()
+    const deadline = setTimeout(() => {
+      pending.abort()
+      socket.destroy()
+    }, requestDeadlineMs)
     socket.on('error', () => socket.destroy())
     socket.on('close', () => {
+      pending.abort()
       clearTimeout(deadline)
       this.#clients.delete(socket)
     })
@@ -155,6 +322,9 @@ export class AgentStatusServer {
     let used = 0
     let frames = 0
     let closed = false
+    socket.on('end', () => {
+      if (!closed) socket.end()
+    })
     socket.on('data', (chunk: Buffer) => {
       let start = 0
       while (start < chunk.length && !closed) {
@@ -167,7 +337,14 @@ export class AgentStatusServer {
         }
         used += chunk.copy(frame, used, start, end)
         if (newline === -1) break
-        const reply = this.#receive(frame.subarray(0, used))
+        const reply = this.#receive(frame.subarray(0, used), pending.signal)
+        if (reply instanceof Promise) {
+          closed = true
+          void reply.then((result) => {
+            if (!socket.destroyed) socket.end(`${JSON.stringify(result)}\n`)
+          })
+          return
+        }
         socket.write(`${JSON.stringify(reply)}\n`)
         used = 0
         frames += 1
@@ -176,12 +353,25 @@ export class AgentStatusServer {
     })
   }
 
-  #receive(frame: Buffer): StatusReply {
+  #receive(frame: Buffer, signal: AbortSignal): RegistrationReply | Promise<RegistrationReply> {
     let input: unknown
     try {
       input = JSON.parse(new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(frame))
     } catch {
       return { ok: false, error: 'invalid' }
+    }
+    if (
+      typeof input === 'object' &&
+      input !== null &&
+      !Array.isArray(input) &&
+      'kind' in input &&
+      input.kind === 'launch.register'
+    ) {
+      if (!('version' in input) || input.version !== 1) return { ok: false, error: 'version' }
+      const registration = parseRegistration(input)
+      return registration
+        ? this.#registerManual(registration, signal)
+        : { ok: false, error: 'invalid' }
     }
     const request = parseStatusRequest(input)
     if (typeof request === 'string') return { ok: false, error: request }
@@ -200,6 +390,8 @@ export class AgentStatusServer {
     launch.rate.count += 1
     const fields = Object.entries(event).toSorted(([a], [b]) => a.localeCompare(b))
     const digest = createHash('sha256').update(JSON.stringify(fields)).digest('hex')
+    if (launch.provider && event.kind === 'session.started' && event.provider !== launch.provider)
+      return { ok: false, error: 'state' }
     const reply = launch.status.accept(event, digest)
     if (reply.ok && reply.status === 'accepted')
       this.#emit({ launchId: event.launchId, kind: 'event', event })

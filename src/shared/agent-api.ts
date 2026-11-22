@@ -11,8 +11,9 @@ export type AgentSession = {
   provider: AgentProvider
   providerSessionId: string | null
   project: string | null
+  worktree: string | null
   cwd: string
-  process: 'running' | 'exited'
+  process: 'running' | 'exited' | 'unknown'
   activity: 'working' | 'idle' | 'unknown'
   runningChildren: number | null
   runningScripts: number | null

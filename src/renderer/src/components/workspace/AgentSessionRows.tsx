@@ -35,6 +35,7 @@ export function useAgentSessions() {
 }
 
 function sessionDescription(session: AgentSession): string {
+  if (session.process === 'unknown') return 'Process status unavailable'
   if (session.wait) return `Needs input: ${waitLabel(session)}`
   if (session.activity === 'working') return session.tool ? `Working · ${session.tool}` : 'Working'
   if (session.activity === 'idle') return 'Idle'
