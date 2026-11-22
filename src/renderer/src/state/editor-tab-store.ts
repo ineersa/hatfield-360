@@ -25,6 +25,8 @@ type EditorTabState = {
   close: (path: string) => void
   setLoad: (path: string, load: EditorTabLoad) => void
   setDirty: (path: string, dirty: boolean) => void
+  /** Puts back a workspace's saved tabs in place of the open ones; tabs with unsaved changes stay. */
+  restore: (paths: string[], activePath: string | null) => void
 }
 
 const update = (tabs: EditorTab[], path: string, change: Partial<EditorTab>): EditorTab[] =>
@@ -63,5 +65,21 @@ export const useEditorTabStore = create<EditorTabState>((set) => ({
       return { tabs, activePath }
     }),
   setLoad: (path, load) => set((state) => ({ tabs: update(state.tabs, path, { load }) })),
-  setDirty: (path, dirty) => set((state) => ({ tabs: update(state.tabs, path, { dirty }) }))
+  setDirty: (path, dirty) => set((state) => ({ tabs: update(state.tabs, path, { dirty }) })),
+  restore: (paths, activePath) =>
+    set((state) => {
+      const restored = [...new Set(paths)].map(
+        (path): EditorTab =>
+          state.tabs.find((tab) => tab.path === path) ?? {
+            path,
+            load: { status: 'loading' },
+            dirty: false
+          }
+      )
+      const unsaved = state.tabs.filter((tab) => tab.dirty && !paths.includes(tab.path))
+      const tabs = [...restored, ...unsaved]
+      const open = (path: string | null): boolean => tabs.some((tab) => tab.path === path)
+      const active = [activePath, state.activePath].find(open) ?? tabs[0]?.path ?? null
+      return { tabs, activePath: active }
+    })
 }))

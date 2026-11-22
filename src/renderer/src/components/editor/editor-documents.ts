@@ -12,8 +12,6 @@ type EditorDocument = {
 
 const documents = new Map<string, EditorDocument>()
 const loading = new Set<string>()
-/** Scroll position, cursor and folds of each tab, kept while another tab is shown. */
-export const viewStates = new Map<string, monaco.editor.ICodeEditorViewState>()
 
 const isOpen = (path: string): boolean =>
   useEditorTabStore.getState().tabs.some((tab) => tab.path === path)
@@ -77,6 +75,5 @@ useEditorTabStore.subscribe((state) => {
     if (state.tabs.some((tab) => tab.path === path)) continue
     document.model.dispose()
     documents.delete(path)
-    viewStates.delete(path)
   }
 })

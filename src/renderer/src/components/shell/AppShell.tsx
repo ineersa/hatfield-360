@@ -9,6 +9,7 @@ import { TerminalTabs } from '@/components/terminal/TerminalTabs'
 import { useTerminalCommands } from '@/components/terminal/use-terminal-commands'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { WelcomeScreen } from '@/components/workspace/WelcomeScreen'
+import { connectFilesSession } from '@/state/files-session'
 import { useEditorTabStore } from '@/state/editor-tab-store'
 import { useNotificationStore } from '@/state/notification-store'
 import { useSettingsStore } from '@/state/settings-store'
@@ -51,6 +52,7 @@ export function AppShell(): React.JSX.Element {
   useEffect(() => connectWorktrees(), [connectWorktrees])
   useEffect(() => connectSettings(), [connectSettings])
   useEffect(() => connectLayout(), [connectLayout])
+  useEffect(() => connectFilesSession(), [])
   useEffect(() => window.desktop.subscribeShowSettings(openSettings), [openSettings])
   useEffect(() => {
     if (activeView === 'files') void loadEditorTabs()

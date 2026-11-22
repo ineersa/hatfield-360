@@ -3,7 +3,8 @@ import { cssFontFamily } from '@/lib/css-font-family'
 import { useEditorScheme } from '@/lib/editor-scheme'
 import { useEditorTabStore } from '@/state/editor-tab-store'
 import { useSettingsStore } from '@/state/settings-store'
-import { editorDocument, saveDocument, viewStates } from './editor-documents'
+import { editorViewState, setEditorViewState } from '@/state/editor-view-states'
+import { editorDocument, saveDocument } from './editor-documents'
 import { monaco } from './monaco-environment'
 import { type MenuColors, monacoTheme } from './monaco-theme'
 
@@ -81,6 +82,16 @@ export function CodeEditor({
       const active = useEditorTabStore.getState().activePath
       if (active) void saveDocument(active)
     })
+    // Cursor, scroll and folds are kept as they change, so a restart finds them as they were left.
+    // Not while hidden, where the editor lays out at no size, nor while the model is being swapped.
+    const record = (): void => {
+      const shown = shownPath.current
+      const state = instance.saveViewState()
+      if (shown && state && element.offsetParent !== null) setEditorViewState(shown, state)
+    }
+    instance.onDidChangeCursorPosition(record)
+    instance.onDidScrollChange(record)
+    instance.onDidChangeHiddenAreas(record)
     editor.current = instance
     return () => {
       instance.dispose()
@@ -100,10 +111,18 @@ export function CodeEditor({
     if (!instance || !model || instance.getModel() === model) return
     const previous = shownPath.current
     const state = instance.saveViewState()
-    if (previous && state) viewStates.set(previous, state)
+    if (previous && state) setEditorViewState(previous, state)
+    shownPath.current = null
     instance.setModel(model)
-    const saved = viewStates.get(path)
-    if (saved) instance.restoreViewState(saved)
+    // Saved by an older session, it may no longer fit; the file then opens at its top.
+    const saved = editorViewState(path)
+    if (saved) {
+      try {
+        instance.restoreViewState(saved)
+      } catch (error) {
+        console.error('Restoring the editor position failed:', error)
+      }
+    }
     shownPath.current = path
   }, [path, ready])
 

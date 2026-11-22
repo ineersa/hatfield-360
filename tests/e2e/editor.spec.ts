@@ -15,6 +15,17 @@ const lines = (page: Page) => editor(page).locator('.view-lines')
 const showView = (page: Page, name: 'Agents' | 'Files') =>
   page.getByRole('navigation', { name: 'Views' }).getByRole('button', { name, exact: true }).click()
 
+const activeLine = (page: Page) => editor(page).locator('.line-numbers.active-line-number')
+const folded = (page: Page) => editor(page).locator('.codicon-folding-collapsed')
+// Where the text sits in the editor: above its top once the file is scrolled. (A script string:
+// the tests are typed for Node, without the DOM.)
+const scrollTop = async (page: Page): Promise<number> =>
+  Number(
+    await page.evaluate(
+      `document.querySelector('.monaco-editor .lines-content').getBoundingClientRect().top`
+    )
+  )
+
 /** A plain folder `app` with two files of the same name and a few others. */
 async function makeProject(): Promise<[string, () => Promise<void>]> {
   const [dir, cleanup] = await makeTempDir('editor')
@@ -66,7 +77,11 @@ test('files open in editor tabs that switch, reorder and close, with highlightin
         // Anything the CSP refuses, such as a worker started from a blob: URL, is logged.
         const refused: string[] = []
         page.on('console', (message) => {
-          if (/Content Security Policy|Could not create web worker/i.test(message.text())) {
+          if (
+            /Content Security Policy|Could not create web worker|Failed to load worker/i.test(
+              message.text()
+            )
+          ) {
             refused.push(message.text())
           }
         })
@@ -271,6 +286,69 @@ test('the editor follows the editor theme and font settings as they change', asy
         // Islands Light's popover.
         await expectMenuBackground(page, 'rgb(255, 255, 255)')
         await saveScreenshot(page, 'editor-light')
+      },
+      { userDataDir: userData }
+    )
+  } finally {
+    await cleanUserData()
+    await cleanProject()
+  }
+})
+
+test('after a restart the Files view has the same folders expanded and tabs open, each where it was left', async () => {
+  const [app, cleanProject] = await makeProject()
+  const body = Array.from({ length: 60 }, (_, index) => `  const value${index} = ${index}`)
+  const after = Array.from({ length: 60 }, (_, index) => `export const after${index} = ${index}`)
+  await writeFile(
+    join(app, 'src', 'long.ts'),
+    ['function outer() {', ...body, '}', ...after, ''].join('\n')
+  )
+  const [userData, cleanUserData] = await seedWorkspace([{ path: app, kind: 'folder' }])
+  let scrolledTop = 0
+  try {
+    await withApp(
+      async (_app, page) => {
+        await showView(page, 'Files')
+        await openFile(page, 'app', 'notes.txt')
+        await openFile(page, 'app', 'src', 'long.ts')
+        await expect(lines(page)).toContainText('function outer()')
+        // Folds `outer`, then goes to the last line, which scrolls the file.
+        await lines(page).getByText('function outer()').click()
+        await page.keyboard.press('ControlOrMeta+Shift+BracketLeft')
+        await expect(folded(page)).toHaveCount(1)
+        await page.keyboard.press('ControlOrMeta+End')
+        await expect(activeLine(page)).toHaveText('123')
+        scrolledTop = await scrollTop(page)
+        expect(scrolledTop).toBeLessThan(0)
+        // Written once the editor settles; then the app quits.
+        await expect
+          .poll(async () => readFile(join(userData, 'files-sessions.json'), 'utf8').catch(() => ''))
+          .toContain('"lineNumber":123')
+      },
+      { userDataDir: userData }
+    )
+
+    await withApp(
+      async (_app, page) => {
+        // The shell layout already reopens the Files view.
+        await expect(
+          page.getByRole('navigation', { name: 'Views' }).getByRole('button', { name: 'Files' })
+        ).toHaveAttribute('aria-pressed', 'true')
+        await expect(item(page, 'app')).toHaveAttribute('aria-expanded', 'true')
+        await expect(item(page, 'src')).toHaveAttribute('aria-expanded', 'true')
+        await expect(item(page, 'test')).toHaveAttribute('aria-expanded', 'false')
+        await expect(item(page, 'long.ts')).toBeVisible()
+        await expect(tabs(page)).toHaveText(['notes.txt', 'long.ts'])
+        await expect(tab(page, 'long.ts')).toHaveAttribute('aria-selected', 'true')
+        await expect(activeLine(page)).toHaveText('123')
+        expect(await scrollTop(page)).toBe(scrolledTop)
+        // Back at the top, `outer` is still folded: its body isn't shown.
+        await lines(page).click()
+        await page.keyboard.press('ControlOrMeta+Home')
+        await expect(folded(page)).toHaveCount(1)
+        await expect(lines(page)).toContainText('export const after0 = 0')
+        await expect(lines(page)).not.toContainText('const value0 = 0')
+        await saveScreenshot(page, 'editor-restored')
       },
       { userDataDir: userData }
     )

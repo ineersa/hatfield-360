@@ -2,7 +2,9 @@ import { app, BrowserWindow } from 'electron'
 import { agentStatusServer } from './agent-status/status-server'
 import { separateDevAppData } from './app-data-folder'
 import { registerAppInfoIpc } from './ipc/app-info-ipc'
+import { filesSessionStore } from './files/files-session-store'
 import { registerEditorIpc } from './ipc/editor-ipc'
+import { registerFilesSessionIpc } from './ipc/files-session-ipc'
 import { registerFileTreeIpc } from './ipc/file-tree-ipc'
 import { registerSettingsIpc } from './ipc/settings-ipc'
 import { registerShellLayoutIpc } from './ipc/shell-layout-ipc'
@@ -31,6 +33,7 @@ void app.whenReady().then(async () => {
   registerWorktreeIpc()
   registerFileTreeIpc()
   registerEditorIpc()
+  registerFilesSessionIpc()
   registerSettingsIpc()
   registerShellLayoutIpc()
   registerTerminalIpc()
@@ -63,6 +66,9 @@ app.on('before-quit', (event) => {
     windowStateStore
       .flush()
       .catch((error: unknown) => console.error('Saving window state failed:', error)),
+    filesSessionStore
+      .flush()
+      .catch((error: unknown) => console.error('Saving Files sessions failed:', error)),
     terminalSessions.killAll()
   ]).finally(() => {
     readyToQuit = true

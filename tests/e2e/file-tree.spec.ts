@@ -120,6 +120,9 @@ test('folders added to the workspace become projects or plain folders, and can b
         // The kinds were saved: app stays out of Projects, and with it its worktree.
         await expect(projectRows(page)).toHaveText(['notestrunk'])
         await showView(page, 'Files')
+        // app was left expanded, and reopens so.
+        await expect(item(page, 'app')).toHaveAttribute('aria-expanded', 'true')
+        await item(page, 'app').click()
         await expect(tree(page).getByRole('treeitem')).toHaveText(['app', 'notestrunk'])
 
         // Adding a plain folder again brings it back into Projects.
