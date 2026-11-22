@@ -1,3 +1,5 @@
+import { registerLanguageServerIpc } from './ipc/language-server-ipc'
+import { languageServerSessions } from './language-servers/language-server-sessions'
 import { registerAgentIpc } from './ipc/agent-ipc'
 import { app, BrowserWindow } from 'electron'
 import { agentStatusServer } from './agent-status/status-server'
@@ -42,6 +44,7 @@ void app.whenReady().then(async () => {
   registerTerminalIpc()
   registerWebLinkIpc()
   registerAgentIpc()
+  registerLanguageServerIpc()
   installAppMenu()
   followAppTheme()
   // The window opens where it was left and in the chosen theme, so both are read first.
@@ -76,7 +79,8 @@ app.on('before-quit', (event) => {
     filesSessionStore
       .flush()
       .catch((error: unknown) => console.error('Saving Files sessions failed:', error)),
-    terminalSessions.killAll()
+    terminalSessions.killAll(),
+    languageServerSessions.stopAll()
   ]).finally(() => {
     readyToQuit = true
     app.quit()

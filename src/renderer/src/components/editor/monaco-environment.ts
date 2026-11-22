@@ -1,4 +1,5 @@
-// The editor on VS Code's own services: TextMate grammars, VS Code themes and configuration.
+// The editor on VS Code's own services: TextMate grammars, VS Code themes, configuration and the
+// extension API that language clients run on (in this page, with no extension host worker).
 import { getService, initialize, IWorkbenchThemeService } from '@codingame/monaco-vscode-api'
 import EditorWorker from '@codingame/monaco-vscode-api/workers/editor.worker?worker'
 import getConfigurationServiceOverride from '@codingame/monaco-vscode-configuration-service-override'
@@ -6,6 +7,7 @@ import {
   registerExtension,
   type RegisterExtensionResult
 } from '@codingame/monaco-vscode-api/extensions'
+import getExtensionsServiceOverride from '@codingame/monaco-vscode-extensions-service-override'
 import getFilesServiceOverride, {
   RegisteredMemoryFile,
   registerExtensionFile
@@ -44,6 +46,7 @@ import { whenReady as typescriptBasicsReady } from '@codingame/monaco-vscode-typ
 import { whenReady as xmlReady } from '@codingame/monaco-vscode-xml-default-extension'
 import { whenReady as yamlReady } from '@codingame/monaco-vscode-yaml-default-extension'
 import * as monaco from 'monaco-editor'
+import { defaultApi } from 'vscode/localExtensionHost'
 import type { ColorTheme } from './editor-color-theme'
 
 // Vite's ?worker imports, so the build emits each worker as its own file (a data: URL can't load imports).
@@ -58,8 +61,10 @@ await initialize({
   ...getModelServiceOverride(),
   ...getLanguagesServiceOverride(),
   ...getThemeServiceOverride(),
-  ...getTextmateServiceOverride()
+  ...getTextmateServiceOverride(),
+  ...getExtensionsServiceOverride({ enableWorkerExtensionHost: false })
 })
+if (!defaultApi) throw new Error("VS Code's extension API didn't start")
 // VS Code's grammars and language definitions, registered before the first file opens.
 await Promise.all([
   batReady(),

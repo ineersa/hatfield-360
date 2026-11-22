@@ -5,3 +5,5 @@ allowBuilds:
   node-pty: true
   # Squirrel.Windows installer support; the release uses NSIS, so its install script never needs to run.
   electron-winstaller: false
+  # Its install script only prints a funding notice (pulled in by the bundled JSON/CSS/HTML language servers).
+  core-js: false

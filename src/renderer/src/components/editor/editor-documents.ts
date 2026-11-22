@@ -4,6 +4,7 @@ import { notify } from '@/state/notification-store'
 import type { EditorFile } from '../../../../shared/editor-api'
 import { monaco } from './monaco-environment'
 import { fileName } from './editor-tab-labels'
+import { attachLanguageServer, detachLanguageServer } from './language-clients'
 
 type EditorDocument = {
   model: monaco.editor.ITextModel
@@ -67,6 +68,7 @@ export async function loadDocument(path: string): Promise<void> {
     }
     model.onDidChangeContent(() => setDirty(path, isEdited(document)))
     documents.set(path, document)
+    if (!document.readOnly) void attachLanguageServer(path, model.getLanguageId())
     setLoad(path, {
       status: 'ready',
       file: file.kind,
@@ -178,6 +180,7 @@ function showDisk(path: string, document: EditorDocument, file: EditorFile): voi
   if (file.kind === 'missing') return
   if (file.kind === 'binary' || (file.kind === 'large') !== document.readOnly) {
     // Now another kind of file: opened afresh.
+    detachLanguageServer(path)
     document.model.dispose()
     documents.delete(path)
     setLoad(path, { status: 'loading' })
@@ -269,6 +272,7 @@ export function cancelConflict(path: string): void {
 useEditorTabStore.subscribe((state) => {
   for (const path of held) {
     if (state.tabs.some((tab) => tab.path === path)) continue
+    detachLanguageServer(path)
     documents.get(path)?.model.dispose()
     documents.delete(path)
     held.delete(path)
