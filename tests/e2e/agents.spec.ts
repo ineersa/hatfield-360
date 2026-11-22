@@ -596,6 +596,39 @@ test('an announced child blocks completion before reporting its first turn', asy
   }
 })
 
+test('an idle child with an open turn still blocks agent completion', async () => {
+  test.skip(process.platform === 'win32', 'The agent reporting transport is Unix only')
+  const { userDataDir, cleanup } = await seed()
+  try {
+    await withApp(
+      async (_app, page) => {
+        await launch(page, 'Hatfield')
+        const pane = page.getByRole('tabpanel', { name: 'Hatfield' }).getByTestId('terminal-pane')
+        await startFocusedScenario(page, pane)
+        await page.getByRole('button', { name: 'Notifications', exact: true }).click()
+        const panel = page.getByRole('complementary', { name: 'Notifications panel' })
+        const completion = panel.getByRole('listitem', { name: 'Agent turn completed' })
+        const session = page.getByRole('button', { name: /^Hatfield session/ })
+        await command(page, pane, 'child-working')
+        await command(page, pane, 'completed')
+        await expect(session).toContainText('Working · Last turn: completed')
+        await expect(completion).toHaveCount(0)
+        await command(page, pane, 'child-idle')
+        await expect(session).toContainText('Idle · Last turn: completed')
+        await expect(completion).toHaveCount(0)
+        await command(page, pane, 'child-turn-done')
+        await expect(completion).toHaveCount(1)
+        await command(page, pane, 'child-done')
+        await command(page, pane, 'duplicate', 'duplicate')
+        await expect(completion).toHaveCount(1)
+      },
+      { userDataDir }
+    )
+  } finally {
+    await cleanup()
+  }
+})
+
 test('closing an agent terminal suppresses a real hangup failure report', async () => {
   test.skip(process.platform === 'win32', 'The agent reporting transport is Unix only')
   const { project, userDataDir, cleanup } = await seed()

@@ -145,6 +145,12 @@ for await (const command of input) {
           actorStart: childTurn.actorStart
         })
         break
+      case 'child-idle':
+        reply = await emit('activity.changed', { ...childTurn, activity: 'idle' })
+        break
+      case 'child-turn-done':
+        reply = await emit('turn.ended', { ...childTurn, outcome: 'completed' })
+        break
       case 'completed':
       case 'failed':
       case 'cancelled':
@@ -167,7 +173,7 @@ for await (const command of input) {
         break
       default:
         print(
-          'Commands: start, again, tool, wait, resolve, child, child-done, completed, failed, cancelled, message, duplicate, stale, quit'
+          'Commands: start, again, tool, wait, resolve, child, child-start-only, child-working, child-idle, child-turn-done, child-done, completed, failed, cancelled, message, duplicate, stale, report-failure-on-hangup, quit'
         )
     }
     if (reply) print(`ACK ${command}: ${reply}`)

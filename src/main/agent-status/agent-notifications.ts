@@ -44,7 +44,8 @@ export class AgentNotificationPolicy {
       !waiting &&
       session.scripts.size === 0 &&
       ![...session.actors].some(
-        ([id, actor]) => actor.turn?.activity === 'working' || (id !== 'main' && !actor.turn)
+        ([id, actor]) =>
+          actor.turn?.activity === 'working' || (id !== 'main' && !actor.turn?.outcome)
       )
     ) {
       this.#completion = undefined

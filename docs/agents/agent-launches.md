@@ -19,6 +19,10 @@ The status filters are **Working**, **Needs input**, **Idle**, and **Stopped**. 
 
 The test-only `tests/e2e/fixtures/agent-scenario.mjs` is a real Unix-socket reporter, not a provider plugin. To try it manually, temporarily configure the executable as an absolute path to Node and the arguments as `["/absolute/path/to/tests/e2e/fixtures/agent-scenario.mjs", "hatfield", "demo", "manual"]`. Launch Hatfield from the project context menu. After `Scenario ready`, type one command per line in the new terminal: `start`, `tool`, `wait`, `resolve`, `message`, `completed`, `again`, `failed`, `quit`. `message` sends an explicit in-app notification. Each event step prints an acknowledgement without printing the credential. The fixture also supports `child`, `child-done`, `cancelled`, `duplicate` and `stale`. Restore your profile afterward.
 
+To check completion timing in a fresh scenario, run `start`, `child-working`, `completed`, then `child-idle`. The child is idle but its turn is still open, so there is no completion notice yet. `child-turn-done` ends the turn and releases the notice while the child actor remains alive. Alternatively, use `child-start-only` instead of `child-working` to announce a child without starting a turn; that also blocks completion until the child settles or `child-done` ends the actor.
+
+In a disposable project, `report-failure-on-hangup` arms the fixture to report a failed turn when you close the terminal during an open turn. It writes the server acknowledgement to `hangup-report` in the working directory. The report is accepted, but intentional closure suppresses the failure notice.
+
 Run the hidden Electron tests and record the representative scenario:
 
 ```sh
