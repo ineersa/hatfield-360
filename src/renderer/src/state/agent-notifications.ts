@@ -1,5 +1,6 @@
 import { isTerminalShown, selectTerminal } from '@/components/terminal/terminal-tab-controllers'
 import { AGENT_PROVIDERS, type AgentNotification } from '../../../shared/agent-api'
+import { shouldShowAgentToast } from './agent-toast-policy'
 import { notify, type NotificationSeverity } from './notification-store'
 
 const stateNotices = {
@@ -12,6 +13,7 @@ export function receiveAgentNotification({
   provider,
   providerSessionId,
   terminalId,
+  ownerWindowFocusedAndVisible,
   message
 }: AgentNotification): void {
   const source = `${AGENT_PROVIDERS[provider]} · ${providerSessionId}`
@@ -32,6 +34,12 @@ export function receiveAgentNotification({
         }
       }
     },
-    { showToast: explicit || !document.hasFocus() || !isTerminalShown(terminalId) }
+    {
+      showToast: shouldShowAgentToast(
+        message.kind,
+        ownerWindowFocusedAndVisible,
+        isTerminalShown(terminalId)
+      )
+    }
   )
 }

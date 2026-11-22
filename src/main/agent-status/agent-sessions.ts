@@ -30,7 +30,10 @@ export function agentSnapshot(owner: WebContents): AgentSnapshot {
 
 export function trackAgentSessions(
   publish: (owner: WebContents) => void,
-  notify: (owner: WebContents, notice: AgentNotification) => void
+  notify: (
+    owner: WebContents,
+    notice: Omit<AgentNotification, 'ownerWindowFocusedAndVisible'>
+  ) => void
 ) {
   const changed = (owner: WebContents) => {
     revision++

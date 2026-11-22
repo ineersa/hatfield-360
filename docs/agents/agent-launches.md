@@ -17,7 +17,7 @@ The status filters are **Working**, **Needs input**, **Idle**, and **Stopped**. 
 
 ## Protocol walkthrough and test recording
 
-The test-only `tests/e2e/fixtures/agent-scenario.mjs` is a real Unix-socket reporter, not a provider plugin. To try it manually, temporarily configure the executable as an absolute path to Node and the arguments as `["/absolute/path/to/tests/e2e/fixtures/agent-scenario.mjs", "hatfield", "demo", "manual"]`. Launch Hatfield from the project context menu. After `Scenario ready`, type one command per line in the new terminal: `start`, `tool`, `wait`, `resolve`, `completed`, `again`, `failed`, `quit`. Each event step prints an acknowledgement without printing the credential. The fixture also supports `child`, `child-done`, `cancelled`, `duplicate` and `stale`. Restore your profile afterward.
+The test-only `tests/e2e/fixtures/agent-scenario.mjs` is a real Unix-socket reporter, not a provider plugin. To try it manually, temporarily configure the executable as an absolute path to Node and the arguments as `["/absolute/path/to/tests/e2e/fixtures/agent-scenario.mjs", "hatfield", "demo", "manual"]`. Launch Hatfield from the project context menu. After `Scenario ready`, type one command per line in the new terminal: `start`, `tool`, `wait`, `resolve`, `message`, `completed`, `again`, `failed`, `quit`. `message` sends an explicit in-app notification. Each event step prints an acknowledgement without printing the credential. The fixture also supports `child`, `child-done`, `cancelled`, `duplicate` and `stale`. Restore your profile afterward.
 
 Run the hidden Electron tests and record the representative scenario:
 

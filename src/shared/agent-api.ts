@@ -23,6 +23,7 @@ export type AgentSession = {
 }
 export type AgentSnapshot = { revision: number; sessions: AgentSession[] }
 export type AgentNotification = {
+  ownerWindowFocusedAndVisible: boolean
   provider: AgentProvider
   providerSessionId: string
   terminalId: string

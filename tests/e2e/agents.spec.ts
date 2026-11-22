@@ -566,6 +566,36 @@ test('agent notifications follow accepted transitions and open only the owning t
   }
 })
 
+test('a newer main turn supersedes a pending agent completion', async () => {
+  test.skip(process.platform === 'win32', 'The agent reporting transport is Unix only')
+  const { userDataDir, cleanup } = await seed()
+  try {
+    await withApp(
+      async (_app, page) => {
+        await launch(page, 'Hatfield')
+        const pane = page.getByRole('tabpanel', { name: 'Hatfield' }).getByTestId('terminal-pane')
+        await startFocusedScenario(page, pane)
+        await page.getByRole('button', { name: 'Notifications', exact: true }).click()
+        const panel = page.getByRole('complementary', { name: 'Notifications panel' })
+        const completed = panel.getByRole('listitem', { name: 'Agent turn completed' })
+        await command(page, pane, 'script')
+        await command(page, pane, 'completed')
+        await expect(completed).toHaveCount(0)
+        await command(page, pane, 'again')
+        await command(page, pane, 'cancelled')
+        await command(page, pane, 'script-done')
+        await expect(completed).toHaveCount(0)
+        await command(page, pane, 'again')
+        await command(page, pane, 'completed')
+        await expect(completed).toHaveCount(1)
+      },
+      { userDataDir }
+    )
+  } finally {
+    await cleanup()
+  }
+})
+
 test('a project with broken Git metadata still displays its launched session', async () => {
   test.skip(process.platform === 'win32', 'The agent reporting transport is Unix only')
   const { project, userDataDir, cleanup } = await seed()
