@@ -1,4 +1,4 @@
-import { CircleAlert, X } from 'lucide-react'
+import { CircleAlert, Eye, FileX, X } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { FileTreeIcon } from '@/components/icons/FileTreeIcon'
 import {
@@ -15,10 +15,38 @@ import { type EditorTab, useEditorTabStore } from '@/state/editor-tab-store'
 import { CodeEditor } from './CodeEditor'
 import { loadDocument, saveDocument } from './editor-documents'
 import { fileName, type TabLabel, tabLabels } from './editor-tab-labels'
+import { EDITOR_FILE_LIMITS } from '../../../../shared/editor-api'
+import { ExternalChangeDialog } from './ExternalChangeDialog'
+import { MarkdownPreview } from './MarkdownPreview'
+
+const isMarkdown = (path: string): boolean => /\.(md|markdown)$/i.test(path)
+
+function fileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} bytes`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
 
 function TabStatus({ tab }: { tab: EditorTab }): React.JSX.Element | null {
   if (tab.load.status === 'loading') {
     return <p className="type-description m-auto">Loading…</p>
+  }
+  if (tab.load.status === 'ready' && tab.load.file === 'binary') {
+    return (
+      <div
+        role="status"
+        className="m-auto flex max-w-md flex-col items-center gap-3 p-8 text-center"
+      >
+        <FileX
+          className="size-empty-state-icon text-muted-foreground"
+          strokeWidth={1.5}
+          aria-hidden
+        />
+        <p className="type-description">
+          {fileName(tab.path)} is a binary file ({fileSize(tab.load.size)}), not shown.
+        </p>
+      </div>
+    )
   }
   if (tab.load.status === 'error') {
     return (
@@ -65,11 +93,13 @@ function Tab({
   onDragEnd: () => void
 }): React.JSX.Element {
   const title = label.folder ? `${label.name} ${label.folder}` : label.name
+  const state = [tab.dirty && 'unsaved', tab.deleted && 'deleted on disk'].filter(Boolean)
   return (
     <div
       draggable
       data-path={tab.path}
       data-dirty={tab.dirty || undefined}
+      data-deleted={tab.deleted || undefined}
       onDragStart={(event) => {
         event.dataTransfer.effectAllowed = 'move'
         event.dataTransfer.setData('text/plain', tab.path)
@@ -97,12 +127,12 @@ function Tab({
         type="button"
         role="tab"
         aria-selected={active}
-        aria-label={tab.dirty ? `${title}, unsaved` : title}
-        title={tab.path}
+        aria-label={[title, ...state].join(', ')}
+        title={tab.deleted ? `${tab.path} (deleted on disk)` : tab.path}
         onClick={onActivate}
         className="flex min-w-0 items-baseline gap-1.5 outline-none focus-visible:underline"
       >
-        <span className="truncate">{label.name}</span>
+        <span className={cn('truncate', tab.deleted && 'line-through')}>{label.name}</span>
         {label.folder ? <span className="type-hint truncate">{label.folder}</span> : null}
       </button>
       <button
@@ -135,11 +165,16 @@ export function EditorTabs({ hidden }: { hidden: boolean }): React.JSX.Element {
   const activate = useEditorTabStore((state) => state.activate)
   const move = useEditorTabStore((state) => state.move)
   const close = useEditorTabStore((state) => state.close)
+  const togglePreview = useEditorTabStore((state) => state.togglePreview)
   const [closing, setClosing] = useState<string | null>(null)
   const [dragged, setDragged] = useState<string | null>(null)
   const [focusRequest, setFocusRequest] = useState(0)
   const labels = useMemo(() => tabLabels(tabs.map((tab) => tab.path)), [tabs])
   const active = tabs.find((tab) => tab.path === activePath)
+  const activeFile = active?.load.status === 'ready' ? active.load : null
+  const showsText = activeFile !== null && activeFile.file !== 'binary'
+  const canPreview = active !== undefined && showsText && isMarkdown(active.path)
+  const previewing = canPreview && active.preview
 
   useEffect(() => {
     for (const tab of tabs) if (tab.load.status === 'loading') void loadDocument(tab.path)
@@ -191,18 +226,45 @@ export function EditorTabs({ hidden }: { hidden: boolean }): React.JSX.Element {
             />
           ))}
         </div>
+        {canPreview ? (
+          <button
+            type="button"
+            aria-pressed={active.preview}
+            aria-label="Preview"
+            title={active.preview ? 'Show the Markdown source' : 'Preview the rendered Markdown'}
+            onClick={() => togglePreview(active.path)}
+            className={cn(
+              'my-auto mr-1.5 ml-auto flex size-small-icon-button shrink-0 items-center justify-center rounded-button text-muted-foreground hover:bg-hover hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none',
+              active.preview && 'bg-pressed text-foreground'
+            )}
+          >
+            <Eye className="size-4" aria-hidden />
+          </button>
+        ) : null}
       </div>
       <div className="flex min-h-0 flex-1 flex-col bg-island">
         {active ? <TabStatus tab={active} /> : null}
+        {active && activeFile?.file === 'large' ? (
+          <p
+            role="status"
+            className="type-description mx-2 mt-2 rounded-banner border border-warning-border bg-warning-background px-3 py-1.5"
+          >
+            {fileName(active.path)} is {fileSize(activeFile.size)}: only its first{' '}
+            {fileSize(EDITOR_FILE_LIMITS.editable)} are shown, read-only.
+          </p>
+        ) : null}
+        {previewing ? <MarkdownPreview path={active.path} /> : null}
         {active ? (
           <CodeEditor
             path={active.path}
-            ready={active.load.status === 'ready'}
-            hidden={hidden}
+            ready={showsText}
+            readOnly={activeFile?.file === 'large'}
+            hidden={hidden || previewing}
             focusRequest={focusRequest}
           />
         ) : null}
       </div>
+      <ExternalChangeDialog />
       <AlertDialog
         open={closing !== null}
         onOpenChange={(open) => {

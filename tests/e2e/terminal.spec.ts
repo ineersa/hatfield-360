@@ -215,7 +215,7 @@ test('main refuses terminal requests it cannot trust', async () => {
       'Invalid terminal request'
     )
     expect(await refusal(page, "writeTerminal('../etc', 'x')")).toContain('Invalid terminal input')
-    expect(await refusal(page, "openTerminalLink('file:///etc/passwd')")).toContain(
+    expect(await refusal(page, "openWebLink('file:///etc/passwd')")).toContain(
       'Only http and https'
     )
   })

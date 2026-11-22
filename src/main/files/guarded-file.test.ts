@@ -13,7 +13,7 @@ import {
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { readFileInRoots, writeFileInRoots, writeFileReadAs } from './guarded-file'
+import { locateEditorFile, writeFileInRoots, writeFileReadAs } from './guarded-file'
 
 describe('guarded file access', () => {
   let dir: string
@@ -32,15 +32,22 @@ describe('guarded file access', () => {
 
   afterEach(() => rm(dir, { recursive: true, force: true }))
 
-  it('reads files inside the roots and refuses ones outside', async () => {
-    expect(await readFileInRoots(join(root, 'notes.md'), [root])).toEqual({
-      text: 'inside',
-      real: join(root, 'notes.md')
-    })
-    await expect(readFileInRoots(join(outside, 'secret'), [root])).rejects.toThrow(
+  it('locates files inside the roots and refuses ones outside', async () => {
+    expect(await locateEditorFile(join(root, 'notes.md'), [root], undefined)).toBe(
+      join(root, 'notes.md')
+    )
+    await expect(locateEditorFile(join(outside, 'secret'), [root], undefined)).rejects.toThrow(
       'Not inside the workspace'
     )
-    await expect(readFileInRoots(join(root, '..', 'outside', 'secret'), [root])).rejects.toThrow(
+    await expect(
+      locateEditorFile(join(root, '..', 'outside', 'secret'), [root], undefined)
+    ).rejects.toThrow('Not inside the workspace')
+  })
+
+  it('says a file is missing only where that reveals nothing outside the roots', async () => {
+    expect(await locateEditorFile(join(root, 'gone.md'), [root], undefined)).toBeNull()
+    expect(await locateEditorFile(join(outside, 'gone'), [root], join(outside, 'gone'))).toBeNull()
+    await expect(locateEditorFile(join(outside, 'gone'), [root], undefined)).rejects.toThrow(
       'Not inside the workspace'
     )
   })
@@ -78,7 +85,7 @@ describe('guarded file access', () => {
       await writeFileInRoots(join(root, 'alias.md'), 'through link', [root])
       expect(await readFile(join(root, 'notes.md'), 'utf8')).toBe('through link')
 
-      await expect(readFileInRoots(join(root, 'escape'), [root])).rejects.toThrow(
+      await expect(locateEditorFile(join(root, 'escape'), [root], undefined)).rejects.toThrow(
         'Not inside the workspace'
       )
       await expect(writeFileInRoots(join(root, 'escape'), 'x', [root])).rejects.toThrow(
@@ -118,7 +125,9 @@ describe('guarded file access', () => {
   )
 
   it('saves a file read earlier to that same file, outside the roots now', async () => {
-    const { real } = await readFileInRoots(join(root, 'notes.md'), [root])
+    const real = await locateEditorFile(join(root, 'notes.md'), [root], undefined)
+    if (real === null) throw new Error('notes.md is missing')
+    expect(await locateEditorFile(join(root, 'notes.md'), [], real)).toBe(real)
     await writeFileReadAs(join(root, 'notes.md'), 'kept', real)
     expect(await readFile(join(root, 'notes.md'), 'utf8')).toBe('kept')
   })
@@ -127,9 +136,11 @@ describe('guarded file access', () => {
     'refuses a file read earlier that has since become a link elsewhere',
     async () => {
       const notes = join(root, 'notes.md')
-      const { real } = await readFileInRoots(notes, [root])
+      const real = await locateEditorFile(notes, [root], undefined)
+      if (real === null) throw new Error('notes.md is missing')
       await rm(notes)
       await symlink(join(outside, 'secret'), notes)
+      await expect(locateEditorFile(notes, [], real)).rejects.toThrow('Not inside the workspace')
       await expect(writeFileReadAs(notes, 'edited', real)).rejects.toThrow(
         'Not inside the workspace'
       )

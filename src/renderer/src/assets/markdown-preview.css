@@ -1,0 +1,117 @@
+/*
+ * The Markdown preview's rendered text, in the app theme's roles. Sizes follow the app font; code
+ * uses the editor font (--editor-font-family, set on the preview from the editor settings).
+ */
+.markdown-preview {
+  color: var(--foreground);
+  font-size: var(--type-body-size);
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.markdown-preview > * + * {
+  margin-top: 0.85em;
+}
+
+.markdown-preview :is(h1, h2, h3, h4, h5, h6) {
+  font-weight: 600;
+  line-height: 1.3;
+  margin-top: 1.4em;
+}
+
+.markdown-preview > :first-child {
+  margin-top: 0;
+}
+
+.markdown-preview h1 {
+  font-size: 1.75em;
+  padding-bottom: 0.3em;
+  border-bottom: 1px solid var(--separator);
+}
+
+.markdown-preview h2 {
+  font-size: 1.4em;
+  padding-bottom: 0.3em;
+  border-bottom: 1px solid var(--separator);
+}
+
+.markdown-preview h3 {
+  font-size: 1.2em;
+}
+
+.markdown-preview :is(ul, ol) {
+  padding-left: 1.75em;
+}
+
+.markdown-preview ul {
+  list-style: disc;
+}
+
+.markdown-preview ol {
+  list-style: decimal;
+}
+
+.markdown-preview li + li {
+  margin-top: 0.25em;
+}
+
+/* GFM task lists draw their own checkbox. */
+.markdown-preview li:has(> input[type='checkbox']) {
+  list-style: none;
+}
+
+.markdown-preview a {
+  color: var(--link);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.markdown-preview blockquote {
+  padding-left: 1em;
+  border-left: 3px solid var(--separator);
+  color: var(--muted-foreground);
+}
+
+.markdown-preview :is(code, pre) {
+  font-family: var(--editor-font-family, ui-monospace, monospace);
+  font-size: 0.9em;
+}
+
+.markdown-preview :not(pre) > code {
+  padding: 0.1em 0.35em;
+  border-radius: var(--component-radius);
+  background: var(--frame);
+}
+
+.markdown-preview pre {
+  padding: 0.85em 1em;
+  overflow-x: auto;
+  border-radius: var(--component-radius);
+  background: var(--frame);
+  line-height: 1.45;
+}
+
+.markdown-preview hr {
+  border: 0;
+  border-top: 1px solid var(--separator);
+}
+
+.markdown-preview table {
+  border-collapse: collapse;
+}
+
+.markdown-preview :is(th, td) {
+  padding: 0.35em 0.75em;
+  border: 1px solid var(--separator);
+}
+
+.markdown-preview th {
+  font-weight: 600;
+  background: var(--frame);
+}
+
+/* An image the preview doesn't load: its description, marked as standing in for it. */
+.markdown-preview .markdown-image {
+  color: var(--muted-foreground);
+  font-style: italic;
+}

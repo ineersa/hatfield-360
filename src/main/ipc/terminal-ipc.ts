@@ -1,4 +1,4 @@
-import { app, clipboard, shell, type BrowserWindow } from 'electron'
+import { app, clipboard, type BrowserWindow } from 'electron'
 import { stat } from 'node:fs/promises'
 import { isAbsolute } from 'node:path'
 import { TERMINAL_CHANNELS, type TerminalCommand } from '../../shared/terminal-api'
@@ -6,8 +6,7 @@ import {
   gridSize,
   isTerminalId,
   isTerminalInput,
-  parseSpawnRequest,
-  webLinkUrl
+  parseSpawnRequest
 } from '../terminal/terminal-request'
 import { terminalSessions } from '../terminal/terminal-sessions'
 import { handleTrusted } from './trusted-ipc'
@@ -47,12 +46,6 @@ export function registerTerminalIpc(): void {
   handleTrusted(TERMINAL_CHANNELS.kill, (event, id) => {
     if (!isTerminalId(id)) throw new Error('Invalid terminal.')
     return terminalSessions.kill(event.sender, id)
-  })
-
-  handleTrusted(TERMINAL_CHANNELS.openLink, (_event, value) => {
-    const url = webLinkUrl(value)
-    if (!url) throw new Error('Only http and https links can be opened.')
-    return shell.openExternal(url)
   })
 
   handleTrusted(TERMINAL_CHANNELS.readClipboard, () => clipboard.readText())
