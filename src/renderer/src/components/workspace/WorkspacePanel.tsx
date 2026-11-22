@@ -291,79 +291,72 @@ export function WorkspacePanel(): React.JSX.Element {
         />
       ) : (
         <div className="min-h-0 overflow-y-auto">
-          {sessions.length > 0 && (
-            <div className="px-2 pb-2">
-              <select
-                aria-label="Filter by project"
-                value={scope}
-                onChange={(event) => setProject(event.target.value)}
-                className="type-body h-control w-full rounded-component border border-input-border bg-input px-2 text-input-foreground"
+          <div className="px-2 pb-2">
+            <select
+              aria-label="Filter by project"
+              value={scope}
+              onChange={(event) => setProject(event.target.value)}
+              className="type-body h-control w-full rounded-component border border-input-border bg-input px-2 text-input-foreground"
+            >
+              <option value="">All projects</option>
+              {folders.map((folder) => (
+                <option key={folder.path} value={folder.path}>
+                  {folder.name}
+                </option>
+              ))}
+            </select>
+            <div
+              role="group"
+              aria-label="Filter sessions by status"
+              className="flex flex-wrap gap-1 py-2"
+            >
+              <button
+                type="button"
+                aria-pressed={!filters.length}
+                onClick={() => setFilters([])}
+                className={cn(filterClass, !filters.length && 'border-ring bg-hover')}
               >
-                <option value="">All projects</option>
-                {folders.map((folder) => (
-                  <option key={folder.path} value={folder.path}>
-                    {folder.name}
-                  </option>
-                ))}
-              </select>
-              <div
-                role="group"
-                aria-label="Filter sessions by status"
-                className="flex flex-wrap gap-1 py-2"
-              >
-                <button
-                  type="button"
-                  aria-pressed={!filters.length}
-                  onClick={() => setFilters([])}
-                  className={cn(filterClass, !filters.length && 'border-ring bg-hover')}
-                >
-                  All
-                </button>
-                {(
-                  [
-                    'working',
-                    'attention',
-                    'idle',
-                    'unknown',
-                    'completed',
-                    'failed',
-                    'cancelled',
-                    'exited'
-                  ] as const
-                ).map((key) => {
-                  const { icon: Icon, label, color } = statuses[key]
-                  const pressed = filters.includes(key)
-                  return (
-                    <button
-                      type="button"
-                      key={key}
-                      aria-pressed={pressed}
-                      onClick={() =>
-                        setFilters((current) =>
-                          pressed ? current.filter((value) => value !== key) : [...current, key]
-                        )
-                      }
-                      className={cn(filterClass, color, pressed && 'border-ring bg-hover')}
-                    >
-                      <Icon aria-hidden className="size-3" />
-                      {label}
-                    </button>
-                  )
-                })}
-              </div>
-              {attention.length > 0 && (
-                <AgentAttention
-                  sessions={attention}
-                  projectName={(path) =>
-                    folders.find((folder) => folder.path === path)?.name ?? 'Other terminals'
-                  }
-                />
-              )}
-              {visible.length === 0 && (
-                <p className="type-hint px-2 pt-2">No sessions match this filter.</p>
-              )}
+                All
+              </button>
+              {(
+                [
+                  'working',
+                  'attention',
+                  'idle',
+                  'unknown',
+                  'completed',
+                  'failed',
+                  'cancelled',
+                  'exited'
+                ] as const
+              ).map((key) => {
+                const { icon: Icon, label, color } = statuses[key]
+                const pressed = filters.includes(key)
+                return (
+                  <button
+                    type="button"
+                    key={key}
+                    aria-pressed={pressed}
+                    onClick={() =>
+                      setFilters((current) =>
+                        pressed ? current.filter((value) => value !== key) : [...current, key]
+                      )
+                    }
+                    className={cn(filterClass, color, pressed && 'border-ring bg-hover')}
+                  >
+                    <Icon aria-hidden className="size-3" />
+                    {label}
+                  </button>
+                )
+              })}
             </div>
-          )}
+            <AgentAttention
+              sessions={attention}
+              projectName={(path) =>
+                folders.find((folder) => folder.path === path)?.name ?? 'Other terminals'
+              }
+            />
+          </div>
           <ul aria-label="Workspace folders" className="flex min-h-0 flex-col gap-0.5 px-2">
             {folders
               .filter((folder) => !scope || folder.path === scope)
@@ -383,6 +376,9 @@ export function WorkspacePanel(): React.JSX.Element {
                 </Fragment>
               ))}
           </ul>
+          {sessions.length > 0 && visible.length === 0 && (
+            <p className="type-hint px-2 pt-2">No sessions match this filter.</p>
+          )}
           {ungrouped.length > 0 && (
             <div className="px-2 py-2">
               <h3 className="type-section-title px-2">Other terminals</h3>

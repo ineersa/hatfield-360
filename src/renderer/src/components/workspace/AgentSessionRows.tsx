@@ -2,7 +2,6 @@ import { cn } from '@/lib/class-names'
 import {
   Activity,
   Check,
-  ChevronDown,
   CircleHelp,
   Clock,
   HatGlasses,
@@ -123,19 +122,25 @@ export function AgentAttention({
   projectName: (project: string | null) => string
 }): React.JSX.Element {
   return (
-    <details open className="group border-b border-separator px-2 pb-1">
-      <summary className="type-section-title flex cursor-pointer list-none items-center gap-2 rounded-component px-2 py-1.5 text-warning focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none">
-        <ChevronDown className="size-3 group-not-open:-rotate-90" aria-hidden /> Needs input (
-        {sessions.length})
-      </summary>
-      <ul aria-label="Sessions needing input">
+    <section aria-label="Attention" className="border-b border-separator px-2 pb-1">
+      <h3 className="type-section-title flex h-tree-row items-center gap-2 px-2 text-warning">
+        <MessageCircle className="size-3" aria-hidden /> Needs input ({sessions.length})
+      </h3>
+      <ul
+        aria-label="Sessions needing input"
+        className="h-control overflow-y-auto"
+        tabIndex={sessions.length > 1 ? 0 : undefined}
+      >
+        {sessions.length === 0 && (
+          <li className="type-hint flex h-tree-row items-center px-2">No sessions need input</li>
+        )}
         {sessions.map((session) => (
           <li key={session.id}>
             <button
               type="button"
               aria-label={`${AGENT_PROVIDERS[session.provider]} session · Needs input: ${waitLabel(session)}`}
               onClick={() => selectTerminal(session.terminalId)}
-              className="type-hint flex w-full items-center gap-2 rounded-component px-2 py-1 text-left hover:bg-row-hover focus-visible:bg-selection-inactive focus-visible:outline-none"
+              className="type-hint flex h-tree-row w-full items-center gap-2 rounded-component px-2 text-left hover:bg-row-hover focus-visible:bg-selection-inactive focus-visible:outline-none"
             >
               <MessageCircle className="size-3.5 shrink-0 text-warning" aria-hidden />
               <span className="min-w-0 flex-1 truncate">Needs input: {waitLabel(session)}</span>
@@ -144,7 +149,7 @@ export function AgentAttention({
           </li>
         ))}
       </ul>
-    </details>
+    </section>
   )
 }
 
@@ -216,16 +221,14 @@ export function AgentSessionRows({
                 >
                   {detail}
                 </span>
-                {counts && (
-                  <span
-                    className={cn(
-                      'type-hint block',
-                      current ? 'text-selection-foreground' : 'text-info'
-                    )}
-                  >
-                    {counts}
-                  </span>
-                )}
+                <span
+                  className={cn(
+                    'type-hint block truncate',
+                    current ? 'text-selection-foreground' : 'text-info'
+                  )}
+                >
+                  {counts || '\u00a0'}
+                </span>
               </span>
               <Icon className={cn('size-3.5 shrink-0', color)} aria-hidden />
               <time
