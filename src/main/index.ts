@@ -15,6 +15,7 @@ import { installAppMenu } from './menu/app-menu'
 import { terminalSessions } from './terminal/terminal-sessions'
 import { createMainWindow } from './window/main-window'
 import { installPermissionPolicy } from './window/permission-policy'
+import { quitWaitsForUnsavedChanges } from './window/unsaved-changes-guard'
 import { windowStateStore } from './window/window-state-store'
 import { chosenAppTheme, followAppTheme } from './window/window-theme'
 
@@ -58,6 +59,8 @@ app.on('before-quit', (event) => {
   if (readyToQuit) return
   event.preventDefault()
   if (quitting) return
+  // Unsaved edits are saved or discarded first; a cancelled quit leaves everything running.
+  if (quitWaitsForUnsavedChanges()) return
   quitting = true
   void Promise.allSettled([
     agentStatusServer.stop().catch((error: unknown) => {

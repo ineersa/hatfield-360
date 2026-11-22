@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import appIcon from '../../../resources/icon.png?asset'
 import { rendererEntryUrl } from './renderer-entry'
 import { MIN_WINDOW_SIZE } from './window-state-document'
+import { guardUnsavedChanges } from './unsaved-changes-guard'
 import { windowStateStore } from './window-state-store'
 import { isBackgroundLaunch } from './window-launch-mode'
 import { appThemeFrame } from './window-theme'
@@ -43,6 +44,7 @@ export function createMainWindow(theme: AppThemeId): BrowserWindow {
     })
   }
   windowStateStore.track(window, { background, requested: bounds })
+  guardUnsavedChanges(window)
 
   // The window only ever shows the app. Opening external links needs an explicit, validated IPC capability.
   window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))

@@ -229,6 +229,7 @@ export function EditorTabs({ hidden }: { hidden: boolean }): React.JSX.Element {
               autoFocus
               onClick={() => {
                 const path = closing
+                // Closed only once the file holds the tab's text: edits made while saving stay open.
                 if (path) void saveDocument(path).then((saved) => saved && close(path))
               }}
             >

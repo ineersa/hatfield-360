@@ -113,7 +113,9 @@ export function monacoTheme(scheme: EditorScheme, menu: MenuColors): editor.ISta
   ]
   return {
     base: scheme.dark ? 'vs-dark' : 'vs',
-    inherit: true,
+    // Inherited token rules are more specific than ours (`string.value.json`, `keyword.flow`) and
+    // would win over the scheme; colours missing here still come from the base's defaults.
+    inherit: false,
     rules: [
       rule('', text, text),
       ...TOKEN_KEYS.map(([token, keys]) => rule(token, tokenAttributes(scheme, keys), text))

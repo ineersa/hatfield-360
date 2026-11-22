@@ -1,4 +1,5 @@
 import { lazy, Suspense, useEffect, useRef } from 'react'
+import { UnsavedChangesDialog } from '@/components/editor/UnsavedChangesDialog'
 import { SettingsPage } from '@/components/settings/SettingsPage'
 import { useAppFont } from '@/components/settings/use-app-font'
 import { useColorThemes } from '@/components/settings/use-color-themes'
@@ -74,8 +75,9 @@ export function AppShell(): React.JSX.Element {
   if (!layoutLoaded) return <div className="h-screen bg-frame" />
   // Terminal tabs stay mounted behind other views and Settings, so their shells keep running.
   const showTerminals = hasTerminals && !settingsOpen && view.id === 'agents'
-  // Editor tabs stay mounted the same way, keeping unsaved edits, undo history and scroll positions.
-  const showEditor = hasEditorTabs && !settingsOpen && !workspaceEmpty && view.id === 'files'
+  // Editor tabs stay mounted the same way, keeping unsaved edits, undo history and scroll positions;
+  // they stay on screen when the workspace's last folder goes, so unsaved ones can still be saved.
+  const showEditor = hasEditorTabs && !settingsOpen && view.id === 'files'
 
   return (
     <TooltipProvider>
@@ -130,6 +132,7 @@ export function AppShell(): React.JSX.Element {
               className="flex min-w-0 flex-1 rounded-island bg-island"
             >
               {hasTerminals ? <TerminalTabs hidden={!showTerminals} /> : null}
+              <UnsavedChangesDialog />
               {hasEditorTabs ? (
                 <Suspense fallback={null}>
                   <EditorTabs hidden={!showEditor} />

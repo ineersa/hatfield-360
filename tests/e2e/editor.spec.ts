@@ -229,6 +229,49 @@ test('edits save to disk, survive switching views, and an unsaved tab asks befor
   }
 })
 
+const closeDialog = (page: Page) =>
+  page.getByRole('alertdialog', { name: 'Save changes to notes.txt before closing?' })
+
+test('closing the window or quitting with unsaved changes asks first, even after their folder is removed', async () => {
+  const [app, cleanProject] = await makeProject()
+  const notes = join(app, 'notes.txt')
+  const [userData, cleanUserData] = await seedWorkspace([{ path: app, kind: 'folder' }])
+  try {
+    await withApp(
+      async (electronApp, page) => {
+        await showView(page, 'Files')
+        await openFile(page, 'app', 'notes.txt')
+        await typeAtEnd(page, 'unsaved')
+        await expect(tab(page, 'notes.txt, unsaved')).toBeVisible()
+
+        // Closing the window asks; Cancel keeps it open with the changes.
+        await electronApp.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.close())
+        await expect(closeDialog(page)).toBeVisible()
+        await closeDialog(page).getByRole('button', { name: 'Cancel' }).click()
+        await expect(closeDialog(page)).toBeHidden()
+        await expect(lines(page)).toContainText('first lineunsaved')
+
+        // The tab stays, and can still be saved, once its folder leaves the workspace.
+        await item(page, 'app').click({ button: 'right' })
+        await page.getByRole('menuitem', { name: 'Remove from Workspace' }).click()
+        await expect(item(page, 'app')).toBeHidden()
+        await expect(tab(page, 'notes.txt, unsaved')).toBeVisible()
+
+        // Quitting asks too; Save writes the file, then the app quits.
+        const closed = electronApp.waitForEvent('close')
+        await electronApp.evaluate(({ app: electron }) => electron.quit())
+        await closeDialog(page).getByRole('button', { name: 'Save', exact: true }).click()
+        await closed
+        expect(await readFile(notes, 'utf8')).toBe('first line\nunsaved')
+      },
+      { userDataDir: userData }
+    )
+  } finally {
+    await cleanUserData()
+    await cleanProject()
+  }
+})
+
 test('a failed save says why and keeps the changes', async () => {
   // A read-only folder refuses the new file; Windows has no such folder mode, and root ignores it.
   test.skip(process.platform === 'win32' || process.getuid?.() === 0, 'needs folder permissions')
@@ -236,7 +279,7 @@ test('a failed save says why and keeps the changes', async () => {
   const [userData, cleanUserData] = await seedWorkspace([{ path: app, kind: 'folder' }])
   try {
     await withApp(
-      async (_app, page) => {
+      async (electronApp, page) => {
         await showView(page, 'Files')
         await openFile(page, 'app', 'notes.txt')
         await typeAtEnd(page, 'unsaved')
@@ -249,6 +292,21 @@ test('a failed save says why and keeps the changes', async () => {
         } finally {
           await chmod(app, 0o755)
         }
+        expect(await readFile(join(app, 'notes.txt'), 'utf8')).toBe('first line\n')
+
+        // Quitting asks about the unsaved changes; Don't Save quits and leaves the file as it was.
+        const closed = electronApp.waitForEvent('close')
+        await electronApp.evaluate(({ app: electron }) => electron.quit())
+        const asked = closeDialog(page)
+        await expect(asked).toBeVisible()
+        await expect(asked.getByRole('button', { name: "Don't Save" })).toBeVisible()
+        // The app is gone right after the click, so the page clicks once this call has returned.
+        // (A script string: the tests are typed for Node, without the DOM.)
+        await page.evaluate(`setTimeout(() => {
+          const buttons = document.querySelectorAll('[role="alertdialog"] button')
+          ;[...buttons].find((button) => button.textContent === "Don't Save").click()
+        })`)
+        await closed
         expect(await readFile(join(app, 'notes.txt'), 'utf8')).toBe('first line\n')
       },
       { userDataDir: userData }
@@ -267,6 +325,11 @@ test('the editor follows the editor theme and font settings as they change', asy
       async (_app, page) => {
         const background = editor(page).locator('.monaco-editor-background')
         await showView(page, 'Files')
+        await writeFile(join(app, 'data.json'), '{ "name": "app" }\n')
+        await openFile(page, 'app', 'data.json')
+        // A JSON string value in the scheme's string colour, not one Monaco's own theme adds.
+        const value = lines(page).locator('span', { hasText: /^"app"$/ })
+        await expect(value).toHaveCSS('color', 'rgb(106, 171, 115)')
         await openFile(page, 'app', 'src', 'index.ts')
         // The TEXT background of the Islands Dark editor scheme, then of Light.
         await expect(background).toHaveCSS('background-color', 'rgb(25, 26, 28)')

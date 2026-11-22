@@ -1,7 +1,10 @@
 export const EDITOR_CHANNELS = {
   read: 'editor:read-file',
   write: 'editor:write-file',
-  save: 'editor:save'
+  save: 'editor:save',
+  setUnsaved: 'editor:set-unsaved',
+  closeRequested: 'editor:close-requested',
+  answerClose: 'editor:answer-close'
 } as const
 
 export type EditorApi = {
@@ -11,4 +14,10 @@ export type EditorApi = {
   writeTextFile: (path: string, contents: string) => Promise<void>
   /** File > Save was chosen; save the active editor tab. */
   subscribeSaveCommand: (callback: () => void) => () => void
+  /** Whether any editor tab has unsaved changes; while it does, closing the window or quitting asks first. */
+  setUnsavedChanges: (unsaved: boolean) => Promise<void>
+  /** The window is closing or the app quitting with unsaved changes; answer with `answerCloseRequest`. */
+  subscribeCloseRequest: (callback: () => void) => () => void
+  /** Go on closing (the changes were saved or discarded), or cancel it. */
+  answerCloseRequest: (proceed: boolean) => Promise<void>
 }

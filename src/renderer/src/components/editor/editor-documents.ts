@@ -47,8 +47,31 @@ export async function loadDocument(path: string): Promise<void> {
   }
 }
 
-/** Writes the tab's text to disk; on failure it says why and keeps the changes. */
-export async function saveDocument(path: string): Promise<boolean> {
+/** Each file's latest save; a save starts once the one before it has finished. */
+const saves = new Map<string, Promise<boolean>>()
+
+/**
+ * Writes the tab's text to disk, after any save of the same file still running, so an older text
+ * never lands last. Resolves true when the file then holds the tab's text: false when the write
+ * failed (it says why and keeps the changes) or the text was edited during it.
+ */
+export function saveDocument(path: string): Promise<boolean> {
+  const save = (saves.get(path) ?? Promise.resolve(true)).then(() => writeDocument(path))
+  saves.set(path, save)
+  void save.finally(() => {
+    if (saves.get(path) === save) saves.delete(path)
+  })
+  return save
+}
+
+/** Saves every tab with unsaved changes; true when all of them are saved. */
+export async function saveAllDocuments(): Promise<boolean> {
+  const dirty = useEditorTabStore.getState().tabs.filter((tab) => tab.dirty)
+  const saved = await Promise.all(dirty.map((tab) => saveDocument(tab.path)))
+  return saved.every(Boolean)
+}
+
+async function writeDocument(path: string): Promise<boolean> {
   const document = documents.get(path)
   if (!document) return false
   const { model } = document
@@ -65,8 +88,9 @@ export async function saveDocument(path: string): Promise<boolean> {
   }
   document.savedVersion = version
   // Typing during the write leaves the tab dirty.
-  useEditorTabStore.getState().setDirty(path, model.getAlternativeVersionId() !== version)
-  return true
+  const edited = model.getAlternativeVersionId() !== version
+  useEditorTabStore.getState().setDirty(path, edited)
+  return !edited
 }
 
 // A model lives as long as its tab.

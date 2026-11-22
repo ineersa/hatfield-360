@@ -46,6 +46,13 @@ const desktopApi: DesktopApi = {
     ipcRenderer.on(EDITOR_CHANNELS.save, listener)
     return () => ipcRenderer.removeListener(EDITOR_CHANNELS.save, listener)
   },
+  setUnsavedChanges: (unsaved) => ipcRenderer.invoke(EDITOR_CHANNELS.setUnsaved, unsaved),
+  subscribeCloseRequest: (callback) => {
+    const listener = (): void => callback()
+    ipcRenderer.on(EDITOR_CHANNELS.closeRequested, listener)
+    return () => ipcRenderer.removeListener(EDITOR_CHANNELS.closeRequested, listener)
+  },
+  answerCloseRequest: (proceed) => ipcRenderer.invoke(EDITOR_CHANNELS.answerClose, proceed),
   getFilesSession: (workspace) => ipcRenderer.invoke(FILES_SESSION_CHANNELS.get, workspace),
   saveFilesSession: (workspace, session) =>
     ipcRenderer.invoke(FILES_SESSION_CHANNELS.save, workspace, session),
