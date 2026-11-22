@@ -67,11 +67,19 @@ for await (const command of input) {
       case 'start':
         await emit('session.started', {
           provider,
-          capabilities: ['waits', 'actors', ...(provider === 'hatfield' ? ['scripts'] : [])]
+          capabilities: [
+            'waits',
+            'actors',
+            'session-end',
+            ...(provider === 'hatfield' ? ['scripts'] : [])
+          ]
         })
         turn = { ...main, turnId: 'turn', turnStart: sequence + 1 }
         reply = await emit('turn.started', { ...main, turnId: turn.turnId })
         initial = last
+        break
+      case 'end-reporting':
+        reply = await emit('session.ended')
         break
       case 'again':
         turn = { ...main, turnId: 'turn', turnStart: sequence + 1 }

@@ -1,15 +1,5 @@
 import { cn } from '@/lib/class-names'
-import {
-  Activity,
-  Check,
-  CircleHelp,
-  Clock,
-  HatGlasses,
-  MessageCircle,
-  Minus,
-  Sun,
-  X
-} from 'lucide-react'
+import { Activity, Check, HatGlasses, MessageCircle, Sun, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import {
   AGENT_PROVIDERS,
@@ -51,11 +41,10 @@ function selectTerminal(id: string): void {
 }
 
 function sessionDescription(session: AgentSession): string {
-  if (session.process === 'exited') return 'Exited'
   if (session.wait) return `Needs input: ${waitLabel(session)}`
   if (session.activity === 'working') return session.tool ? `Working · ${session.tool}` : 'Working'
   if (session.activity === 'idle') return 'Idle'
-  return 'Running · status unavailable'
+  return 'Running'
 }
 
 function waitLabel(session: AgentSession): string {
@@ -72,33 +61,31 @@ const outcomes = {
 export const statuses = {
   working: { icon: Activity, color: 'text-info', label: 'Working' },
   attention: { icon: MessageCircle, color: 'text-warning', label: 'Needs input' },
-  idle: { icon: Clock, color: 'text-muted-foreground', label: 'Idle' },
-  unknown: { icon: CircleHelp, color: 'text-muted-foreground', label: 'Unavailable' },
-  exited: { icon: Minus, color: 'text-muted-foreground', label: 'Exited' },
-  completed: { icon: Check, color: 'text-success', label: 'Completed' },
-  failed: { icon: X, color: 'text-error', label: 'Failed' },
-  cancelled: { icon: Minus, color: 'text-warning', label: 'Cancelled' }
+  idle: { icon: Check, color: 'text-success', label: 'Idle' },
+  stopped: { icon: X, color: 'text-muted-foreground', label: 'Stopped' }
 } as const
 
-function hasActiveWorkOrWait(session: AgentSession): boolean {
-  return session.activity === 'working' || session.wait !== null
+function isStopped(session: AgentSession): boolean {
+  return (
+    session.process === 'exited' ||
+    (session.activity === 'idle' &&
+      !session.wait &&
+      (session.outcome === 'failed' || session.outcome === 'cancelled'))
+  )
 }
 
 export type SessionFilter = keyof typeof statuses
 export function matchesStatus(session: AgentSession, filter: SessionFilter): boolean {
+  if (session.process === 'exited') return filter === 'stopped'
   switch (filter) {
     case 'attention':
       return session.wait !== null
     case 'working':
       return session.activity === 'working'
     case 'idle':
-      return session.activity === 'idle' && !session.wait
-    case 'unknown':
-      return session.process === 'running' && session.activity === 'unknown' && !session.wait
-    case 'exited':
-      return session.process === 'exited'
+      return session.activity === 'idle' && !session.wait && !isStopped(session)
     default:
-      return !hasActiveWorkOrWait(session) && session.outcome === filter
+      return isStopped(session)
   }
 }
 
@@ -167,16 +154,14 @@ export function AgentSessionRows({
         const provider = AGENT_PROVIDERS[session.provider]
         const title = `${provider} session${session.providerSessionId ? ` · ${session.providerSessionId}` : ''}`
         const Provider = session.provider === 'hatfield' ? HatGlasses : Sun
-        const state = session.wait
-          ? 'attention'
-          : session.activity === 'working'
-            ? 'working'
-            : session.outcome && session.outcome !== 'unknown'
-              ? session.outcome
-              : session.process === 'exited'
-                ? 'exited'
-                : session.activity
-        const { icon: Icon, color } = statuses[state]
+        const state = isStopped(session)
+          ? 'stopped'
+          : session.wait
+            ? 'attention'
+            : session.activity === 'unknown'
+              ? null
+              : session.activity
+        const status = state ? statuses[state] : null
         const counts = [
           session.runningChildren
             ? `${session.runningChildren} ${session.runningChildren === 1 ? 'agent' : 'agents'} running`
@@ -189,11 +174,8 @@ export function AgentSessionRows({
           .join(' · ')
         const detail = [
           provider,
-          sessionDescription(session),
-          session.outcome &&
-            (hasActiveWorkOrWait(session)
-              ? `Last turn: ${outcomes[session.outcome].toLowerCase()}`
-              : outcomes[session.outcome])
+          state === 'stopped' ? 'Stopped' : sessionDescription(session),
+          session.outcome && `Last turn: ${outcomes[session.outcome].toLowerCase()}`
         ]
           .filter(Boolean)
           .join(' · ')
@@ -226,11 +208,16 @@ export function AgentSessionRows({
                     'type-hint block truncate',
                     current ? 'text-selection-foreground' : 'text-info'
                   )}
+                  title={counts || undefined}
                 >
                   {counts || '\u00a0'}
                 </span>
               </span>
-              <Icon className={cn('size-3.5 shrink-0', color)} aria-hidden />
+              {status ? (
+                <status.icon className={cn('size-3.5 shrink-0', status.color)} aria-hidden />
+              ) : (
+                <span className="size-3.5 shrink-0" aria-hidden />
+              )}
               <time
                 className={cn(
                   'type-hint shrink-0 tabular-nums',

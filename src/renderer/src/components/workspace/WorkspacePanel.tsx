@@ -318,18 +318,7 @@ export function WorkspacePanel(): React.JSX.Element {
               >
                 All
               </button>
-              {(
-                [
-                  'working',
-                  'attention',
-                  'idle',
-                  'unknown',
-                  'completed',
-                  'failed',
-                  'cancelled',
-                  'exited'
-                ] as const
-              ).map((key) => {
+              {(['working', 'attention', 'idle', 'stopped'] as const).map((key) => {
                 const { icon: Icon, label, color } = statuses[key]
                 const pressed = filters.includes(key)
                 return (
