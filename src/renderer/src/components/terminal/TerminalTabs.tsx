@@ -59,33 +59,46 @@ export function TerminalTabs({ hidden }: { hidden: boolean }): React.JSX.Element
               <div
                 key={tab.id}
                 className={cn(
-                  'type-tab group flex max-w-60 min-w-0 shrink-0 items-center gap-2 border-r border-separator pr-2 pl-3.5 select-none',
+                  'type-tab group flex max-w-60 min-w-0 shrink-0 items-stretch border-r border-separator select-none',
                   active
                     ? 'bg-island text-foreground'
                     : 'text-muted-foreground hover:bg-tab-hover hover:text-foreground'
                 )}
               >
-                <SquareTerminal className="size-4 shrink-0" aria-hidden />
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={active}
-                  title={tab.cwd ?? undefined}
-                  onClick={() => activateTab(tab.id)}
-                  className="min-w-0 truncate outline-none focus-visible:underline"
-                >
-                  {tab.title}
-                </button>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={active}
+                      onClick={() => activateTab(tab.id)}
+                      className="flex min-w-0 flex-1 items-center gap-2 pr-2 pl-3.5 leading-none outline-none focus-visible:underline"
+                    >
+                      <SquareTerminal className="size-4 shrink-0" aria-hidden />
+                      <span className="truncate">{tab.title}</span>
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom">
+                    <div>{tab.cwd ?? tab.title}</div>
+                    <div className="text-tooltip-muted-foreground">
+                      Previous tab: {terminalShortcutLabel('previous-tab')}
+                      {' · '}
+                      Next tab: {terminalShortcutLabel('next-tab')}
+                    </div>
+                  </TooltipContent>
+                </Tooltip>
                 <button
                   type="button"
                   aria-label={`Close ${tab.title}`}
                   onClick={() => closeTab(tab.id)}
                   className={cn(
-                    'flex size-5 shrink-0 items-center justify-center rounded-button text-muted-foreground hover:bg-hover hover:text-foreground focus-visible:opacity-100',
+                    'group/close flex shrink-0 items-center pr-2 text-muted-foreground hover:text-foreground focus-visible:opacity-100',
                     active ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
                   )}
                 >
-                  <X className="size-3.5" aria-hidden />
+                  <span className="flex size-5 items-center justify-center rounded-button group-hover/close:bg-hover">
+                    <X className="size-3.5" aria-hidden />
+                  </span>
                 </button>
               </div>
             )

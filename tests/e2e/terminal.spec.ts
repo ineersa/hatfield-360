@@ -1,5 +1,5 @@
 import { expect, test, type Locator, type Page } from '@playwright/test'
-import { mkdir, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { makeTempDir, saveScreenshot, withApp } from './launch-app'
 import { keepUserClipboard } from './user-clipboard'
@@ -150,6 +150,49 @@ test('splits and tabs each get their own shell; closing them ends it, and so doe
   }
 })
 
+test('terminal tab upper edge and icon activate it, with shortcuts visible on hover', async () => {
+  const { userData, cleanup } = await seedProject()
+  try {
+    await withApp(
+      async (_app, page) => {
+        await openProjectTerminal(page)
+        await page.getByRole('button', { name: 'New Terminal' }).click()
+        const tabs = page.getByRole('tab', { name: 'pty-project' })
+        await expect(tabs).toHaveCount(2)
+        const first = tabs.first()
+        const second = tabs.last()
+        await expect(second).toHaveAttribute('aria-selected', 'true')
+        const bounds = await first.locator('..').boundingBox()
+        if (!bounds) throw new Error('Terminal tab is not rendered')
+        await page.mouse.click(bounds.x + bounds.width / 2, bounds.y + 2)
+        await expect(first).toHaveAttribute('aria-selected', 'true')
+        await second.locator('svg').click()
+        await expect(second).toHaveAttribute('aria-selected', 'true')
+        await page.getByRole('button', { name: 'Close pty-project' }).last().hover()
+        await second.hover()
+        const tooltip = page.getByRole('tooltip')
+        await expect(tooltip).toContainText(process.platform === 'darwin' ? '⌘⇧[' : 'Ctrl+PageUp')
+        await expect(tooltip).toContainText(process.platform === 'darwin' ? '⌘⇧]' : 'Ctrl+PageDown')
+        await saveScreenshot(page, 'terminal-tab-shortcuts')
+
+        await second.locator('svg').click()
+        await page.keyboard.press(
+          process.platform === 'darwin' ? 'Meta+Shift+BracketRight' : 'Control+PageDown'
+        )
+        await expect(first).toHaveAttribute('aria-selected', 'true')
+        await page.keyboard.press(
+          process.platform === 'darwin' ? 'Meta+Shift+BracketLeft' : 'Control+PageUp'
+        )
+        await expect(second).toHaveAttribute('aria-selected', 'true')
+        await expect(page.getByRole('tabpanel').locator('textarea')).toBeFocused()
+      },
+      { userDataDir: userData }
+    )
+  } finally {
+    await cleanup()
+  }
+})
+
 test('the system keys paste into the terminal and copy its selection', async () => {
   const { userData, cleanup } = await seedProject()
   const modifier = process.platform === 'darwin' ? 'Meta' : 'Control'
@@ -182,6 +225,86 @@ test('the system keys paste into the terminal and copy its selection', async () 
           await expect
             .poll(() => app.evaluate(({ clipboard }) => clipboard.readText()))
             .toBe('pasted-77')
+        } finally {
+          await restoreClipboard?.()
+        }
+      },
+      { userDataDir: userData }
+    )
+  } finally {
+    await cleanup()
+  }
+})
+
+test('terminal copy optionally trims indentation without changing output', async () => {
+  const { userData, cleanup } = await seedProject()
+  const modifier = process.platform === 'darwin' ? 'Meta' : 'Control'
+  try {
+    await withApp(
+      async (app, page) => {
+        const restoreClipboard = await keepUserClipboard(app)
+        test.skip(restoreClipboard === null, 'The clipboard contains non-text data.')
+        try {
+          await openProjectTerminal(page)
+          const pane = panes(page)
+          await panePid(pane)
+          const command = isWindows
+            ? 'Write-Output "    copy-first  inner  " "" "  copy-last" "copy-end"'
+            : "printf '    copy-first  inner  \\n\\n  copy-last\\ncopy-end\\n'"
+          await run(page, pane, command)
+          const screen = screenText(pane)
+          const outputRow = (text: string) =>
+            screen.locator(':scope > div').filter({ hasText: text })
+          const start = outputRow('copy-first').last()
+          const end = outputRow('copy-end').last()
+          await expect(end).toContainText('copy-end')
+          const select = async (): Promise<{ x: number; y: number }> => {
+            const from = await start.boundingBox()
+            const to = await end.boundingBox()
+            if (!from || !to) throw new Error('Could not locate terminal output rows')
+            const point = { x: from.x + 1, y: from.y + from.height / 2 }
+            await page.mouse.move(point.x, point.y)
+            await page.mouse.down()
+            await page.mouse.move(to.x + 1, to.y + to.height / 2, { steps: 5 })
+            await page.mouse.up()
+            return point
+          }
+          const copied = async (): Promise<string> =>
+            (await app.evaluate(({ clipboard }) => clipboard.readText())).replaceAll('\r\n', '\n')
+          const settings = page
+            .getByRole('navigation', { name: 'Views' })
+            .getByRole('button', { name: 'Settings' })
+          await settings.click()
+          const trim = page.getByRole('checkbox', { name: 'Trim leading whitespace on copy' })
+          await expect(trim).not.toBeChecked()
+          await page.getByRole('button', { name: 'Close Settings' }).click()
+          await select()
+          await page.keyboard.press(`${modifier}+C`)
+          await expect.poll(copied).toBe('    copy-first  inner  \n\n  copy-last\n')
+
+          await settings.click()
+          await trim.check()
+          await expect
+            .poll(() => readFile(join(userData, 'settings.json'), 'utf8'))
+            .toContain('"terminal.trimLeadingWhitespaceOnCopy": true')
+          await page.getByRole('button', { name: 'Close Settings' }).click()
+          await select()
+          await page.keyboard.press(`${modifier}+C`)
+          await expect.poll(copied).toBe('copy-first  inner  \n\ncopy-last\n')
+          await app.evaluate(({ clipboard }) => clipboard.writeText('before context copy'))
+          const point = await select()
+          await page.mouse.click(point.x + 30, point.y, { button: 'right' })
+          await page.getByRole('menuitem', { name: /^Copy/ }).click()
+          await expect.poll(copied).toBe('copy-first  inner  \n\ncopy-last\n')
+          if (process.platform !== 'darwin') {
+            await app.evaluate(({ clipboard }) => clipboard.writeText('before native copy'))
+            await select()
+            await app.evaluate(({ BrowserWindow }) =>
+              BrowserWindow.getAllWindows()[0]?.webContents.copy()
+            )
+            await expect.poll(copied).toBe('copy-first  inner  \n\ncopy-last\n')
+          }
+          await expect(start).toContainText('copy-first')
         } finally {
           await restoreClipboard?.()
         }

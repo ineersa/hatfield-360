@@ -55,6 +55,23 @@ test('clicking the active view button collapses and expands its side panel', asy
   })
 })
 
+test('the Settings rail button toggles Settings without losing the previous view', async () => {
+  await withApp(async (_app, page) => {
+    const files = viewButton(page, 'Files')
+    const settings = viewButton(page, 'Settings')
+    await files.click()
+    await files.click()
+    await expect(files).toHaveAttribute('aria-expanded', 'false')
+    await settings.click()
+    await expect(page.getByRole('main', { name: 'Settings' })).toBeVisible()
+    await settings.click()
+    await expect(page.getByRole('main', { name: 'Files' })).toBeVisible()
+    await expect(files).toHaveAttribute('aria-expanded', 'false')
+    await settings.click()
+    await expect(page.getByRole('main', { name: 'Settings' })).toBeVisible()
+  })
+})
+
 async function mainWidth(page: Page, view: string): Promise<number> {
   const box = await page.getByRole('main', { name: view }).boundingBox()
   if (!box) throw new Error(`${view} main area is not rendered`)

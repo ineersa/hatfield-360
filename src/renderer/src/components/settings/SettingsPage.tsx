@@ -228,9 +228,16 @@ function ResetAllButton(): React.JSX.Element | null {
 const HEADER_BUTTON_CLASS =
   'type-button flex h-control shrink-0 items-center gap-2 rounded-button px-2.5 whitespace-nowrap text-muted-foreground hover:bg-hover hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none disabled:opacity-50'
 
-/** The settings in settings.json as a form; every change is written to the file right away. */
-function TerminalGpuSetting(): React.JSX.Element {
-  const enabled = useSettingsStore((state) => state.values['terminal.gpuAcceleration'])
+function TerminalFlagSetting({
+  settingKey,
+  label,
+  description
+}: {
+  settingKey: 'terminal.gpuAcceleration' | 'terminal.trimLeadingWhitespaceOnCopy'
+  label: string
+  description: string
+}): React.JSX.Element {
+  const enabled = useSettingsStore((state) => state.values[settingKey])
   const editable = useSettingsStore((state) => state.editable)
   const update = useSettingsStore((state) => state.update)
   const descriptionId = useId()
@@ -242,17 +249,17 @@ function TerminalGpuSetting(): React.JSX.Element {
           checked={enabled}
           disabled={!editable}
           aria-describedby={descriptionId}
-          onChange={(event) => void update('terminal.gpuAcceleration', event.target.checked)}
+          onChange={(event) => void update(settingKey, event.target.checked)}
           className="mt-1 size-4 shrink-0 accent-primary"
         />
         <span>
-          <span className="type-section-title block">Terminal GPU rendering</span>
+          <span className="type-section-title block">{label}</span>
           <span id={descriptionId} className="type-description block">
-            Draws terminals with WebGL. Turn it off if terminal text looks garbled or flickers.
+            {description}
           </span>
         </span>
       </label>
-      <ResetButton settingKey="terminal.gpuAcceleration" label="Terminal GPU rendering" />
+      <ResetButton settingKey={settingKey} label={label} />
     </section>
   )
 }
@@ -311,7 +318,16 @@ export function SettingsPage(): React.JSX.Element {
           {FONT_SETTINGS.map((setting) => (
             <FontSetting key={setting.familyKey} {...setting} />
           ))}
-          <TerminalGpuSetting />
+          <TerminalFlagSetting
+            settingKey="terminal.gpuAcceleration"
+            label="Terminal GPU rendering"
+            description="Draws terminals with WebGL. Turn it off if terminal text looks garbled or flickers."
+          />
+          <TerminalFlagSetting
+            settingKey="terminal.trimLeadingWhitespaceOnCopy"
+            label="Trim leading whitespace on copy"
+            description="Remove spaces and tabs at the start of each copied line. Terminal output stays unchanged."
+          />
           <AgentLaunchSettings />
         </div>
       </div>

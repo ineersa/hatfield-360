@@ -102,6 +102,7 @@ const CHECKS: { [K in SettingKey]: (value: unknown) => Checked<Settings[K]> } = 
   'terminal.fontSize': fontSize,
   'terminal.lineHeight': lineHeight,
   'terminal.gpuAcceleration': flag,
+  'terminal.trimLeadingWhitespaceOnCopy': flag,
   'editor.fontFamily': fontFamily,
   'editor.fontSize': fontSize,
   'editor.lineHeight': lineHeight,

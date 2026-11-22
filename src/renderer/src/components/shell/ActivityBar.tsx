@@ -10,6 +10,7 @@ export function ActivityBar(): React.JSX.Element {
   const activateView = useShellLayoutStore((state) => state.activateView)
   const settingsOpen = useShellLayoutStore((state) => state.settingsOpen)
   const openSettings = useShellLayoutStore((state) => state.openSettings)
+  const closeSettings = useShellLayoutStore((state) => state.closeSettings)
 
   return (
     <nav
@@ -51,7 +52,7 @@ export function ActivityBar(): React.JSX.Element {
             type="button"
             aria-label="Settings"
             aria-pressed={settingsOpen}
-            onClick={openSettings}
+            onClick={settingsOpen ? closeSettings : openSettings}
             className={cn(
               'mt-auto flex size-activity-button items-center justify-center rounded-button text-muted-foreground transition-colors hover:bg-hover hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none',
               settingsOpen &&
