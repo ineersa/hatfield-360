@@ -1,5 +1,6 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
+import { receiveAgentNotification } from './state/agent-notifications'
 import { App } from './App'
 import { applyAppTheme } from './lib/app-theme'
 import './assets/main.css'
@@ -11,6 +12,9 @@ const root = document.getElementById('root')
 if (!root) {
   throw new Error('Missing #root element')
 }
+const stopAgentNotifications = window.desktop.subscribeAgentNotifications(receiveAgentNotification)
+if (import.meta.hot) import.meta.hot.dispose(stopAgentNotifications)
+
 createRoot(root).render(
   <StrictMode>
     <App />

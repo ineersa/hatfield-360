@@ -467,6 +467,235 @@ function expectPublicSnapshot(snapshot: AgentSnapshot): void {
   }
 }
 
+test('agent notifications follow accepted transitions and open only the owning terminal', async () => {
+  test.skip(process.platform === 'win32', 'The agent reporting transport is Unix only')
+  const { userDataDir, cleanup } = await seed()
+  try {
+    await withApp(
+      async (_app, page) => {
+        await launch(page, 'Hatfield')
+        const hatfield = page
+          .getByRole('tabpanel', { name: 'Hatfield' })
+          .getByTestId('terminal-pane')
+        await startFocusedScenario(page, hatfield)
+        await command(page, hatfield, 'tool')
+        const bell = page.getByRole('button', { name: /^Notifications(?: \(\d+\))?$/ })
+        await expect(bell).toHaveAccessibleName('Notifications')
+        await command(page, hatfield, 'wait')
+        await expect(page.getByRole('alert', { name: 'Agent needs input' })).toBeVisible()
+        await bell.click()
+        const panel = page.getByRole('complementary', { name: 'Notifications panel' })
+        const history = panel.getByRole('listitem')
+        const needsInput = panel.getByRole('listitem', { name: 'Agent needs input' })
+        const completed = panel.getByRole('listitem', { name: 'Agent turn completed' })
+        await command(page, hatfield, 'duplicate', 'duplicate')
+        await command(page, hatfield, 'stale', 'stale')
+        await command(page, hatfield, 'child')
+        await command(page, hatfield, 'resolve')
+        await expect(needsInput).toHaveCount(1)
+        await command(page, hatfield, 'child-done')
+        const hatfieldId = await hatfield.getAttribute('data-terminal-id')
+        if (!hatfieldId) throw new Error('Hatfield terminal missing')
+        const send = (input: string) =>
+          page.evaluate(({ id, text }) => globalThis.desktop.writeTerminal(id, `${text}\r`), {
+            id: hatfieldId,
+            text: input
+          })
+        await send('child')
+        await expect(needsInput).toHaveCount(2)
+        await command(page, hatfield, 'script')
+        await command(page, hatfield, 'completed')
+        await expect(completed).toHaveCount(0)
+        await send('child-done')
+        await expect(page.getByRole('button', { name: /^Hatfield session/ })).not.toContainText(
+          'Needs input'
+        )
+        await expect(completed).toHaveCount(0)
+        await command(page, hatfield, 'child-working')
+        await command(page, hatfield, 'script-done')
+        await expect(completed).toHaveCount(0)
+        await send('child-done')
+        await expect(completed).toHaveCount(1)
+        await command(page, hatfield, 'again')
+        await command(page, hatfield, 'failed')
+        await expect(panel.getByRole('listitem', { name: 'Agent turn failed' })).toHaveCount(1)
+
+        await launch(page, 'Claude')
+        const claude = page.getByRole('tabpanel', { name: 'Claude' }).getByTestId('terminal-pane')
+        await startFocusedScenario(page, claude)
+        await command(page, claude, 'cancelled')
+        await expect(history).toHaveCount(4)
+        await expect(page.getByRole('tab', { name: 'Claude', selected: true })).toBeVisible()
+        const beforeMessage = await page.evaluate(() => globalThis.desktop.getAgentSessions())
+        const openSettings = page.getByRole('button', { name: 'Settings', exact: true })
+        const settings = page.getByRole('main', { name: 'Settings', exact: true })
+        await openSettings.click()
+        await send('message')
+        const message = panel.getByRole('listitem', { name: 'Review available' })
+        await expect(message).toContainText('Hatfield · hatfield-e2e')
+        await expect(message).toContainText('The report is ready.')
+        await expect(settings).toBeVisible()
+        expect(await page.evaluate(() => globalThis.desktop.getAgentSessions())).toEqual(
+          beforeMessage
+        )
+        await send('duplicate')
+        await message.getByRole('button', { name: 'Open terminal' }).click()
+        await expect(settings).toHaveCount(0)
+        await expect(page.getByRole('tab', { name: 'Hatfield', selected: true })).toBeVisible()
+        await expect(hatfield.locator('textarea')).toBeFocused()
+        await expect(output(hatfield)).toContainText(
+          /ACK message: accepted.*ACK duplicate: duplicate/s
+        )
+        await expect(message).toHaveCount(1)
+        await page.getByRole('button', { name: 'Close Hatfield', exact: true }).click()
+        await openSettings.click()
+        await message.getByRole('button', { name: 'Open terminal' }).click()
+        await expect(
+          panel.getByRole('listitem', { name: 'Terminal no longer available' })
+        ).toBeVisible()
+        await expect(settings).toBeVisible()
+        await expect(page.getByRole('tab', { name: 'Hatfield', includeHidden: true })).toHaveCount(
+          0
+        )
+        await expect(panel.getByRole('listitem', { name: 'Agent turn failed' })).toHaveCount(1)
+      },
+      { userDataDir }
+    )
+  } finally {
+    await cleanup()
+  }
+})
+
+test('an announced child blocks completion before reporting its first turn', async () => {
+  test.skip(process.platform === 'win32', 'The agent reporting transport is Unix only')
+  const { userDataDir, cleanup } = await seed()
+  try {
+    await withApp(
+      async (_app, page) => {
+        await launch(page, 'Hatfield')
+        const pane = page.getByRole('tabpanel', { name: 'Hatfield' }).getByTestId('terminal-pane')
+        await startFocusedScenario(page, pane)
+        await page.getByRole('button', { name: 'Notifications', exact: true }).click()
+        const panel = page.getByRole('complementary', { name: 'Notifications panel' })
+        const completion = panel.getByRole('listitem', { name: 'Agent turn completed' })
+        await command(page, pane, 'child-start-only')
+        await command(page, pane, 'completed')
+        await expect(page.getByRole('button', { name: /^Hatfield session/ })).toContainText(
+          'Last turn: completed'
+        )
+        await expect(completion).toHaveCount(0)
+        await command(page, pane, 'child-done')
+        await expect(completion).toHaveCount(1)
+        await command(page, pane, 'duplicate', 'duplicate')
+        await expect(completion).toHaveCount(1)
+      },
+      { userDataDir }
+    )
+  } finally {
+    await cleanup()
+  }
+})
+
+test('an idle child with an open turn still blocks agent completion', async () => {
+  test.skip(process.platform === 'win32', 'The agent reporting transport is Unix only')
+  const { userDataDir, cleanup } = await seed()
+  try {
+    await withApp(
+      async (_app, page) => {
+        await launch(page, 'Hatfield')
+        const pane = page.getByRole('tabpanel', { name: 'Hatfield' }).getByTestId('terminal-pane')
+        await startFocusedScenario(page, pane)
+        await page.getByRole('button', { name: 'Notifications', exact: true }).click()
+        const panel = page.getByRole('complementary', { name: 'Notifications panel' })
+        const completion = panel.getByRole('listitem', { name: 'Agent turn completed' })
+        const session = page.getByRole('button', { name: /^Hatfield session/ })
+        await command(page, pane, 'child-working')
+        await command(page, pane, 'completed')
+        await expect(session).toContainText('Working · Last turn: completed')
+        await expect(completion).toHaveCount(0)
+        await command(page, pane, 'child-idle')
+        await expect(session).toContainText('Idle · Last turn: completed')
+        await expect(completion).toHaveCount(0)
+        await command(page, pane, 'child-turn-done')
+        await expect(completion).toHaveCount(1)
+        await command(page, pane, 'child-done')
+        await command(page, pane, 'duplicate', 'duplicate')
+        await expect(completion).toHaveCount(1)
+      },
+      { userDataDir }
+    )
+  } finally {
+    await cleanup()
+  }
+})
+
+test('closing an agent terminal suppresses a real hangup failure report', async () => {
+  test.skip(process.platform === 'win32', 'The agent reporting transport is Unix only')
+  const { project, userDataDir, cleanup } = await seed()
+  try {
+    await withApp(
+      async (_app, page) => {
+        await launch(page, 'Hatfield')
+        const pane = page.getByRole('tabpanel', { name: 'Hatfield' }).getByTestId('terminal-pane')
+        await startFocusedScenario(page, pane)
+        await command(page, pane, 'report-failure-on-hangup', 'armed')
+        await page.getByRole('button', { name: 'Notifications', exact: true }).click()
+        const panel = page.getByRole('complementary', { name: 'Notifications panel' })
+        await page.getByRole('button', { name: 'Close Hatfield', exact: true }).click()
+        await expect
+          .poll(() => readFile(join(project, 'hangup-report'), 'utf8').catch(() => null))
+          .toBe('accepted')
+        await expect(page.getByRole('button', { name: /^Hatfield session/ })).toContainText(
+          'Stopped · Last turn: failed'
+        )
+        await expect
+          .poll(() =>
+            page.evaluate(async () =>
+              (await globalThis.desktop.getAgentSessions()).sessions.map(
+                ({ process, outcome }) => ({ process, outcome })
+              )
+            )
+          )
+          .toEqual([{ process: 'exited', outcome: 'failed' }])
+        await expect(panel.getByText('No notifications.', { exact: true })).toBeVisible()
+      },
+      { userDataDir }
+    )
+  } finally {
+    await cleanup()
+  }
+})
+
+test('a newer main turn supersedes a pending agent completion', async () => {
+  test.skip(process.platform === 'win32', 'The agent reporting transport is Unix only')
+  const { userDataDir, cleanup } = await seed()
+  try {
+    await withApp(
+      async (_app, page) => {
+        await launch(page, 'Hatfield')
+        const pane = page.getByRole('tabpanel', { name: 'Hatfield' }).getByTestId('terminal-pane')
+        await startFocusedScenario(page, pane)
+        await page.getByRole('button', { name: 'Notifications', exact: true }).click()
+        const panel = page.getByRole('complementary', { name: 'Notifications panel' })
+        const completed = panel.getByRole('listitem', { name: 'Agent turn completed' })
+        await command(page, pane, 'script')
+        await command(page, pane, 'completed')
+        await expect(completed).toHaveCount(0)
+        await command(page, pane, 'again')
+        await command(page, pane, 'cancelled')
+        await command(page, pane, 'script-done')
+        await expect(completed).toHaveCount(0)
+        await command(page, pane, 'again')
+        await command(page, pane, 'completed')
+        await expect(completed).toHaveCount(1)
+      },
+      { userDataDir }
+    )
+  } finally {
+    await cleanup()
+  }
+})
+
 test('a project with broken Git metadata still displays its launched session', async () => {
   test.skip(process.platform === 'win32', 'The agent reporting transport is Unix only')
   const { project, userDataDir, cleanup } = await seed()

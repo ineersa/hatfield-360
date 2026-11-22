@@ -44,6 +44,7 @@ type Session = {
   detached: boolean
   exited: Promise<void>
   ending: Promise<void> | null
+  onClosing: (() => void) | undefined
 }
 
 /** Packaged macOS builds can lose node-pty's spawn-helper exec bit, which breaks every spawn. */
@@ -108,6 +109,7 @@ class TerminalSessions {
       executable: string
       args: string[]
       env: Record<string, string>
+      onClosing: () => void
       onExit: () => void
     }
   ): Promise<TerminalSession> {
@@ -143,7 +145,8 @@ class TerminalSessions {
       paused: false,
       detached: false,
       exited: new Promise((resolve) => pty.onExit(() => resolve())),
-      ending: null
+      ending: null,
+      onClosing: agent?.onClosing
     }
     this.sessions.set(id, session)
     this.endWithOwner(owner)
@@ -199,6 +202,7 @@ class TerminalSessions {
 
   private end(session: Session): Promise<void> {
     if (!session.ending) {
+      session.onClosing?.()
       const ending = this.terminate(session).finally(() => this.endings.delete(ending))
       this.endings.add(ending)
       session.ending = ending

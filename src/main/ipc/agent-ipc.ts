@@ -1,4 +1,5 @@
-import { AGENT_CHANNELS } from '../../shared/agent-api'
+import { BrowserWindow } from 'electron'
+import { AGENT_CHANNELS, type AgentNotification } from '../../shared/agent-api'
 import { isPlainObject } from '../../shared/plain-object'
 import { agentSnapshot, trackAgentSessions } from '../agent-status/agent-sessions'
 import { worktreeStore } from '../git/worktree-store'
@@ -10,8 +11,15 @@ import { existingDirectory } from './terminal-ipc'
 import { handleTrusted } from './trusted-ipc'
 
 export function registerAgentIpc(): void {
-  const launch = trackAgentSessions((owner) =>
-    owner.send(AGENT_CHANNELS.changed, agentSnapshot(owner))
+  const launch = trackAgentSessions(
+    (owner) => owner.send(AGENT_CHANNELS.changed, agentSnapshot(owner)),
+    (owner, notice) => {
+      const window = BrowserWindow.fromWebContents(owner)
+      owner.send(AGENT_CHANNELS.notification, {
+        ...notice,
+        ownerWindowFocusedAndVisible: window?.isVisible() === true && window.isFocused()
+      } satisfies AgentNotification)
+    }
   )
   handleTrusted(AGENT_CHANNELS.get, (event) => agentSnapshot(event.sender))
   handleTrusted(AGENT_CHANNELS.launch, async (event, value) => {
