@@ -57,6 +57,13 @@ async function command(page: Page, pane: Locator, text: string, reply = 'accepte
   await expect(output(pane)).toContainText(`ACK ${text}: ${reply}`)
 }
 
+async function startFocusedScenario(page: Page, pane: Locator) {
+  await expect(pane.locator('textarea')).toBeFocused()
+  await page.keyboard.type('start')
+  await page.keyboard.press('Enter')
+  await expect(output(pane)).toContainText('ACK start: accepted')
+}
+
 async function launch(page: Page, provider: string) {
   await projectRow(page).click({ button: 'right' })
   await page.getByRole('menuitem', { name: `Launch ${provider}`, exact: true }).click()
@@ -145,7 +152,7 @@ test('agent launches report through the real socket and sidebar rows select exac
           await expect(output(first)).toContainText(`Directory: ${project}`)
           await expect(hatfield).toContainText('Running · status unavailable')
 
-          await command(page, first, 'start')
+          await startFocusedScenario(page, first)
           await expect(hatfield).toContainText('hatfield-e2e')
           await expect(hatfield).toContainText('Hatfield · Working')
           await command(page, first, 'tool')
@@ -357,7 +364,7 @@ test('a linked worktree launches into its own tab and publishes only public sess
               .getByRole('tabpanel', { name: 'Hatfield' })
               .getByTestId('terminal-pane')
             await expect(output(rootPane)).toContainText(`Directory: ${repo}`)
-            await command(page, rootPane, 'start')
+            await startFocusedScenario(page, rootPane)
 
             await page
               .getByRole('listitem', { name: 'feature worktree' })
@@ -367,7 +374,7 @@ test('a linked worktree launches into its own tab and publishes only public sess
               .getByRole('tabpanel', { name: 'Claude' })
               .getByTestId('terminal-pane')
             await expect(output(worktreePane)).toContainText(`Directory: ${worktree}`)
-            await command(page, worktreePane, 'start')
+            await startFocusedScenario(page, worktreePane)
             const worktreeId = await worktreePane.getAttribute('data-terminal-id')
             if (!worktreeId) throw new Error('Linked worktree terminal missing')
             await page.getByRole('button', { name: /^Hatfield session/ }).click()

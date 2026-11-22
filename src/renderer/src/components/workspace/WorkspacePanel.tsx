@@ -6,7 +6,7 @@ import {
   type SessionFilter,
   useAgentSessions
 } from './AgentSessionRows'
-import { AGENT_PROVIDERS, type AgentSession } from '../../../../shared/agent-api'
+import { type AgentSession } from '../../../../shared/agent-api'
 import {
   ChevronRight,
   CircleAlert,
@@ -14,16 +14,10 @@ import {
   FolderPlus,
   FolderX,
   GitBranch,
-  Lock,
-  SquareTerminal
+  Lock
 } from 'lucide-react'
 import { RootFolderIcon } from '@/components/icons/RootFolderIcon'
-import {
-  ContextMenu,
-  ContextMenuContent,
-  ContextMenuItem,
-  ContextMenuTrigger
-} from '@/components/ui/context-menu'
+import { ContextMenu, ContextMenuItem, ContextMenuTrigger } from '@/components/ui/context-menu'
 import {
   PATH_TOOLTIP_DELAY_MS,
   Tooltip,
@@ -32,9 +26,8 @@ import {
   usePointerTooltip
 } from '@/components/ui/tooltip'
 import { cn } from '@/lib/class-names'
-import { Fragment, type ReactNode, useEffect, useRef, useState } from 'react'
-import { focusActiveTerminal } from '@/components/terminal/use-terminal-commands'
-import { useTerminalStore } from '@/state/terminal-store'
+import { Fragment, useEffect, useState } from 'react'
+import { OpenTerminalMenuContent } from '@/components/terminal/OpenTerminalMenuContent'
 import {
   OpenFolderEmptyState,
   WorkspaceProblemBanner
@@ -43,57 +36,6 @@ import { useWorkspaceStore } from '@/state/workspace-store'
 import { useWorktreeStore } from '@/state/worktree-store'
 import type { WorkspaceFolder } from '../../../../shared/workspace-api'
 import type { ProjectWorktrees, Worktree } from '../../../../shared/worktree-api'
-
-/** A tree row's right-click menu: Open Terminal Here first, then the row's own items. */
-function RowMenuContent({
-  cwd,
-  project,
-  disabled,
-  children
-}: {
-  cwd: string
-  project: string
-  disabled: boolean
-  children?: ReactNode
-}): React.JSX.Element {
-  const openTerminal = useTerminalStore((state) => state.openTerminal)
-  const openedTerminal = useRef(false)
-  return (
-    <ContextMenuContent
-      onCloseAutoFocus={(event) => {
-        if (!openedTerminal.current) return
-        // The new terminal gets the keys, not the row the menu would return them to.
-        event.preventDefault()
-        openedTerminal.current = false
-        setTimeout(focusActiveTerminal, 0)
-      }}
-    >
-      <ContextMenuItem
-        disabled={disabled}
-        onSelect={() => {
-          openedTerminal.current = true
-          openTerminal(cwd)
-        }}
-      >
-        <SquareTerminal aria-hidden />
-        Open Terminal Here
-      </ContextMenuItem>
-      {(['hatfield', 'claude'] as const).map((provider) => (
-        <ContextMenuItem
-          key={provider}
-          disabled={disabled}
-          onSelect={() => {
-            openedTerminal.current = true
-            openTerminal(cwd, { provider, target: { project, cwd } })
-          }}
-        >
-          Launch {AGENT_PROVIDERS[provider]}
-        </ContextMenuItem>
-      ))}
-      {children}
-    </ContextMenuContent>
-  )
-}
 
 const worktreeLabel = (worktree: Worktree): string =>
   worktree.branch ?? `detached ${worktree.head.slice(0, 7)}`
@@ -138,7 +80,7 @@ function WorktreeRow({
         </ContextMenuTrigger>
         <TooltipContent {...pathTip.placement}>{worktree.path}</TooltipContent>
       </Tooltip>
-      <RowMenuContent cwd={worktree.path} project={project} disabled={worktree.prunable} />
+      <OpenTerminalMenuContent cwd={worktree.path} project={project} disabled={worktree.prunable} />
     </ContextMenu>
   )
 }
@@ -270,7 +212,7 @@ function ProjectRow({
         </ContextMenuTrigger>
         <TooltipContent {...pathTip.placement}>{folder.path}</TooltipContent>
       </Tooltip>
-      <RowMenuContent cwd={folder.path} project={folder.path} disabled={folder.missing}>
+      <OpenTerminalMenuContent cwd={folder.path} project={folder.path} disabled={folder.missing}>
         <ContextMenuItem onSelect={() => void setFolderKind(folder.path, 'folder')}>
           <FolderMinus aria-hidden />
           Hide from Projects
@@ -279,7 +221,7 @@ function ProjectRow({
           <FolderX aria-hidden />
           Remove from Workspace
         </ContextMenuItem>
-      </RowMenuContent>
+      </OpenTerminalMenuContent>
     </ContextMenu>
   )
 }

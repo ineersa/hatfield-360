@@ -1,3 +1,4 @@
+import { AGENT_PROVIDERS } from '../../../../shared/agent-api'
 import { SquareTerminal } from 'lucide-react'
 import { type ReactNode, useRef } from 'react'
 import { focusActiveTerminal } from '@/components/terminal/use-terminal-commands'
@@ -7,10 +8,12 @@ import { useTerminalStore } from '@/state/terminal-store'
 /** A tree row's right-click menu: Open Terminal Here first, then the row's own items. */
 export function OpenTerminalMenuContent({
   cwd,
+  project,
   disabled,
   children
 }: {
   cwd: string
+  project?: string
   disabled: boolean
   children?: ReactNode
 }): React.JSX.Element {
@@ -36,6 +39,20 @@ export function OpenTerminalMenuContent({
         <SquareTerminal aria-hidden />
         Open Terminal Here
       </ContextMenuItem>
+      {project === undefined
+        ? null
+        : (['hatfield', 'claude'] as const).map((provider) => (
+            <ContextMenuItem
+              key={provider}
+              disabled={disabled}
+              onSelect={() => {
+                openedTerminal.current = true
+                openTerminal(cwd, { provider, target: { project, cwd } })
+              }}
+            >
+              Launch {AGENT_PROVIDERS[provider]}
+            </ContextMenuItem>
+          ))}
       {children}
     </ContextMenuContent>
   )
