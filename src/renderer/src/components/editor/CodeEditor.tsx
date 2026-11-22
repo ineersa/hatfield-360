@@ -97,7 +97,9 @@ export function CodeEditor({
       data-path={path}
       // Shown once its theme is set, never in Monaco's own colours first.
       hidden={hidden || !ready || !scheme}
-      className="min-h-0 flex-1"
+      // Monaco's theme colours are set on `.monaco-component`; its context menu, drawn in a shadow root
+      // beside the editor, inherits them only from here.
+      className="monaco-component min-h-0 flex-1"
     />
   )
 }

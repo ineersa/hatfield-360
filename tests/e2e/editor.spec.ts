@@ -236,6 +236,13 @@ test('the editor follows the editor theme and font settings as they change', asy
         await openFile(page, 'app', 'src', 'index.ts')
         // The TEXT background of the Islands Dark editor scheme, then of Light.
         await expect(background).toHaveCSS('background-color', 'rgb(25, 26, 28)')
+        // The context menu takes the theme's colours too, not a see-through default.
+        await lines(page).click({ button: 'right' })
+        await expect(page.getByRole('menuitem', { name: /Go to Definition/ })).toBeVisible()
+        await expect(
+          page.locator('.monaco-menu-container > .monaco-scrollable-element')
+        ).not.toHaveCSS('background-color', 'rgba(0, 0, 0, 0)')
+        await page.keyboard.press('Escape')
 
         await writeFile(
           join(userData, 'settings.json'),
