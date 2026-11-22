@@ -10,6 +10,8 @@ export default defineConfig({
     resolve: {
       alias: { '@': resolve(import.meta.dirname, 'src/renderer/src') }
     },
+    // VS Code's extensions fetch their grammars and manifests; the CSP refuses them as inlined data: URLs.
+    build: { assetsInlineLimit: 0 },
     plugins: [react(), tailwindcss()]
   }
 })

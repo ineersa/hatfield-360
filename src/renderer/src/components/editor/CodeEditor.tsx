@@ -1,12 +1,12 @@
-import { useEffect, useLayoutEffect, useRef, useSyncExternalStore } from 'react'
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { cssFontFamily } from '@/lib/css-font-family'
 import { useEditorScheme } from '@/lib/editor-scheme'
 import { useEditorTabStore } from '@/state/editor-tab-store'
 import { useSettingsStore } from '@/state/settings-store'
 import { editorViewState, setEditorViewState } from '@/state/editor-view-states'
 import { editorDocument, saveDocument } from './editor-documents'
-import { monaco } from './monaco-environment'
-import { type MenuColors, monacoTheme } from './monaco-theme'
+import { editorColorTheme, type MenuColors } from './editor-color-theme'
+import { monaco, setColorTheme } from './monaco-environment'
 
 /** The page's app theme (`data-theme`), which changes after the editor's own effects run. */
 function subscribeAppTheme(onChange: () => void): () => void {
@@ -60,12 +60,21 @@ export function CodeEditor({
   const scheme = useEditorScheme(themeId)
   const appTheme = useSyncExternalStore(subscribeAppTheme, appThemeId)
 
-  // Monaco has one theme for all its editors. Set before the editor is first painted with it.
-  useLayoutEffect(() => {
-    if (!scheme) return
-    const name = `hatfield-${themeId}-${appTheme ?? 'default'}`
-    monaco.editor.defineTheme(name, monacoTheme(scheme, menuColors()))
-    monaco.editor.setTheme(name)
+  // One theme for all editors, set before the editor is first shown with it.
+  const [themed, setThemed] = useState(false)
+  useEffect(() => {
+    if (!scheme) return undefined
+    let current = true
+    setColorTheme(
+      `${themeId} (${appTheme ?? 'default'})`,
+      editorColorTheme(scheme, menuColors())
+    ).then(
+      () => current && setThemed(true),
+      (error: unknown) => console.error('Setting the editor theme failed:', error)
+    )
+    return () => {
+      current = false
+    }
   }, [scheme, themeId, appTheme])
 
   useEffect(() => {
@@ -143,7 +152,7 @@ export function CodeEditor({
       aria-label="Editor"
       data-path={path}
       // Shown once its theme is set, never in Monaco's own colours first.
-      hidden={hidden || !ready || !scheme}
+      hidden={hidden || !ready || !themed}
       // Monaco's theme colours are set on `.monaco-component`; its context menu, drawn in a shadow root
       // beside the editor, inherits them only from here.
       className="monaco-component min-h-0 flex-1"

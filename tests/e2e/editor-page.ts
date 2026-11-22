@@ -10,6 +10,22 @@ export const tab = (page: Page, name: string) =>
   page.getByRole('tablist', { name: 'Editor tabs' }).getByRole('tab', { name, exact: true })
 export const editor = (page: Page) => page.locator('.monaco-editor')
 export const lines = (page: Page) => editor(page).locator('.view-lines')
+/** What the page script reads of a line (the tests are typed for Node, without the DOM). */
+type ShownLine = { style: { top: string }; textContent: string | null }
+
+/**
+ * The shown lines' text in document order. The editor reuses line elements, so their order in the
+ * page isn't the document's; each is placed by its `top`.
+ */
+export const editorText = (page: Page): Promise<string> =>
+  lines(page)
+    .locator('.view-line')
+    .evaluateAll((shown: ShownLine[]) =>
+      shown
+        .toSorted((a, b) => parseFloat(a.style.top) - parseFloat(b.style.top))
+        .map((line) => (line.textContent ?? '').replaceAll(String.fromCharCode(0xa0), ' '))
+        .join('\n')
+    )
 export const showView = (page: Page, name: 'Agents' | 'Files') =>
   page.getByRole('navigation', { name: 'Views' }).getByRole('button', { name, exact: true }).click()
 

@@ -2,7 +2,17 @@ import { expect, test, type Page } from '@playwright/test'
 import { chmod, mkdir, readFile, realpath, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { clickMenuItem } from './app-menu'
-import { editor, item, lines, openFile, showView, tab, tabs, typeAtEnd } from './editor-page'
+import {
+  editor,
+  editorText,
+  item,
+  lines,
+  openFile,
+  showView,
+  tab,
+  tabs,
+  typeAtEnd
+} from './editor-page'
 import { makeTempDir, saveScreenshot, withApp } from './launch-app'
 import { seedWorkspace } from './workspace-seed'
 
@@ -223,7 +233,7 @@ test('closing the window or quitting with unsaved changes asks first, even after
         await expect(closeDialog(page)).toBeVisible()
         await closeDialog(page).getByRole('button', { name: 'Cancel' }).click()
         await expect(closeDialog(page)).toBeHidden()
-        await expect(lines(page)).toContainText('first lineunsaved')
+        await expect.poll(() => editorText(page)).toBe('first line\nunsaved')
 
         // The tab stays, and can still be saved, once its folder leaves the workspace.
         await item(page, 'app').click({ button: 'right' })
@@ -293,7 +303,7 @@ test('a failed save says why and keeps the changes', async () => {
           await page.keyboard.press('ControlOrMeta+S')
           await expect(page.getByText("Couldn't save notes.txt").first()).toBeVisible()
           await expect(tab(page, 'notes.txt, unsaved')).toBeVisible()
-          await expect(lines(page)).toContainText('first lineunsaved')
+          await expect.poll(() => editorText(page)).toBe('first line\nunsaved')
         } finally {
           await chmod(app, 0o755)
         }
