@@ -1,15 +1,31 @@
-import { lstat, readFile, stat } from 'node:fs/promises'
+import { lstat, readFile, realpath, stat } from 'node:fs/promises'
 import { basename, dirname, join } from 'node:path'
 import { writeFileAtomic } from './atomic-write'
 import { resolveInsideRoots } from './path-containment'
 
 const outsideRoots = (path: string): Error => new Error(`Not inside the workspace: ${path}`)
 
-/** Reads a text file that is inside one of `roots` once symlinks are followed. */
-export async function readFileInRoots(path: string, roots: string[]): Promise<string> {
+/**
+ * Reads a text file that is inside one of `roots` once symlinks are followed, with `real`, the file
+ * it was read from.
+ */
+export async function readFileInRoots(
+  path: string,
+  roots: string[]
+): Promise<{ text: string; real: string }> {
   const real = await resolveInsideRoots(path, roots)
   if (real === null) throw outsideRoots(path)
-  return readFile(real, 'utf8')
+  return { text: await readFile(real, 'utf8'), real }
+}
+
+/**
+ * Replaces the file at `path` only while it still is `real`, the file it was read from, wherever the
+ * workspace's folders are now. A path since replaced by a link to another file is refused.
+ */
+export async function writeFileReadAs(path: string, contents: string, real: string): Promise<void> {
+  const current = await realpath(path).catch(() => null)
+  if (current !== real) throw outsideRoots(path)
+  await writeFileAtomic(real, contents)
 }
 
 /**

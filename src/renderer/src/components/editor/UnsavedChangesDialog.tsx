@@ -38,10 +38,16 @@ export function UnsavedChangesDialog(): React.JSX.Element {
 
   const saveAll = async (): Promise<void> => {
     setSaving(true)
-    // Loaded with the editor, which any unsaved tab already has.
-    const { saveAllDocuments } = await import('./editor-documents')
-    const saved = await saveAllDocuments()
-    setSaving(false)
+    let saved = false
+    try {
+      // Loaded with the editor, which any unsaved tab already has.
+      const { saveAllDocuments } = await import('./editor-documents')
+      saved = await saveAllDocuments()
+    } catch (error) {
+      console.error('Saving before closing failed:', error)
+    } finally {
+      setSaving(false)
+    }
     // A failed save has said why; the window stays open with the changes.
     if (!saved) return
     setOpen(false)

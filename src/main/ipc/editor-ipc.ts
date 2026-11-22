@@ -1,7 +1,8 @@
 import type { BrowserWindow } from 'electron'
 import { EDITOR_CHANNELS } from '../../shared/editor-api'
 import { fileRoots } from '../files/file-roots'
-import { readFileInRoots, writeFileInRoots } from '../files/guarded-file'
+import { readFileInRoots, writeFileInRoots, writeFileReadAs } from '../files/guarded-file'
+import { resolveInsideRoots } from '../files/path-containment'
 import { answerClose, setUnsaved } from '../window/unsaved-changes-guard'
 import { handleTrusted } from './trusted-ipc'
 
@@ -14,16 +15,17 @@ function checkedPath(path: unknown): string {
 }
 
 /**
- * Files the editor read from the workspace. Their tabs outlive a workspace switch or a removed folder
- * while they hold unsaved changes, so they can still be saved where they were read from.
+ * The real file each path the editor read from the workspace resolved to. Its tab outlives a
+ * workspace switch or a removed folder while it holds unsaved changes, so it can still be saved to
+ * that same file, and only to it.
  */
-const opened = new Set<string>()
+const opened = new Map<string, string>()
 
 export function registerEditorIpc(): void {
   handleTrusted(EDITOR_CHANNELS.read, async (_event, value) => {
     const path = checkedPath(value)
-    const text = await readFileInRoots(path, await rootPaths())
-    opened.add(path)
+    const { text, real } = await readFileInRoots(path, await rootPaths())
+    opened.set(path, real)
     return text
   })
 
@@ -31,7 +33,12 @@ export function registerEditorIpc(): void {
     if (typeof contents !== 'string') throw new Error('Expected the file contents as text')
     const file = checkedPath(path)
     const roots = await rootPaths()
-    await writeFileInRoots(file, contents, opened.has(file) ? [...roots, file] : roots)
+    const read = opened.get(file)
+    if (read !== undefined && (await resolveInsideRoots(file, roots)) === null) {
+      await writeFileReadAs(file, contents, read)
+    } else {
+      await writeFileInRoots(file, contents, roots)
+    }
   })
 
   handleTrusted(EDITOR_CHANNELS.setUnsaved, (event, unsaved) => {

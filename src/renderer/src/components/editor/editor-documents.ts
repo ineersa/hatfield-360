@@ -56,7 +56,9 @@ const saves = new Map<string, Promise<boolean>>()
  * failed (it says why and keeps the changes) or the text was edited during it.
  */
 export function saveDocument(path: string): Promise<boolean> {
-  const save = (saves.get(path) ?? Promise.resolve(true)).then(() => writeDocument(path))
+  // Whatever became of the save before, this one still runs.
+  const previous = saves.get(path)?.catch(() => false) ?? Promise.resolve(true)
+  const save = previous.then(() => writeDocument(path))
   saves.set(path, save)
   void save.finally(() => {
     if (saves.get(path) === save) saves.delete(path)
@@ -86,6 +88,8 @@ async function writeDocument(path: string): Promise<boolean> {
     })
     return false
   }
+  // Closed (and maybe reopened as a new document) during the write: there is nothing to update.
+  if (documents.get(path) !== document) return false
   document.savedVersion = version
   // Typing during the write leaves the tab dirty.
   const edited = model.getAlternativeVersionId() !== version
