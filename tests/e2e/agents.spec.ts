@@ -98,21 +98,38 @@ test('agent launches report through the real socket and sidebar rows select exac
         if (video) videos.push(video)
         if (demo) {
           expect(video, 'Electron window must support Playwright video').not.toBeNull()
-          await app.evaluate(({ BrowserWindow }, size) => {
-            const window = BrowserWindow.getAllWindows()[0]
-            if (!window) throw new Error('Demo window missing')
-            const [width, height] = window.getContentSize()
-            if (width !== size.width || height !== size.height)
-              window.setContentSize(size.width, size.height)
-          }, demoSize)
+          const rendererSize = () =>
+            page.evaluate(() => ({ width: globalThis.innerWidth, height: globalThis.innerHeight }))
+          const nativeSize = (request?: typeof demoSize) =>
+            app.evaluate(({ BrowserWindow }, size) => {
+              const window = BrowserWindow.getAllWindows()[0]
+              if (!window) throw new Error('Demo window missing')
+              const [width, height] = window.getContentSize()
+              if (size && (width !== size.width || height !== size.height))
+                window.setContentSize(size.width, size.height)
+              const [observedWidth, observedHeight] = window.getContentSize()
+              if (observedWidth === undefined || observedHeight === undefined)
+                throw new Error('Demo window content size missing')
+              return { width: observedWidth, height: observedHeight }
+            }, request)
+          await nativeSize(demoSize)
           await expect
-            .poll(() =>
-              page.evaluate(() => ({
-                width: globalThis.innerWidth,
-                height: globalThis.innerHeight
-              }))
-            )
-            .toEqual(demoSize)
+            .poll(async () => {
+              const viewport = await rendererSize()
+              const native = await nativeSize()
+              return viewport.width === native.width && viewport.height === native.height
+            })
+            .toBe(true)
+          const observed = await nativeSize()
+          if (observed.width !== demoSize.width || observed.height !== demoSize.height) {
+            // Fractional display scaling can round the requested size in either direction.
+            await nativeSize({
+              width: demoSize.width + (demoSize.width - observed.width),
+              height: demoSize.height + (demoSize.height - observed.height)
+            })
+          }
+          await expect.poll(rendererSize).toEqual(demoSize)
+          await expect.poll(() => nativeSize()).toEqual(demoSize)
           await page.context().tracing.start({ screenshots: true, snapshots: true })
         }
         try {
