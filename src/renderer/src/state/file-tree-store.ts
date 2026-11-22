@@ -22,6 +22,8 @@ type FileTreeState = {
   /** Lists the folder and its open subfolders again, for changes the watcher missed. */
   reload: (path: string) => void
   toggleHideIgnored: () => void
+  /** Puts back a workspace's saved tree: its expanded folders and whether ignored files are hidden. */
+  restore: (expanded: string[], hideIgnored: boolean) => void
   copyPath: (path: string, form: PathForm) => void
   reveal: (path: string) => void
   /** Follows changes main reports in watched folders; returns the unsubscribe. */
@@ -89,6 +91,14 @@ export const useFileTreeStore = create<FileTreeState>((set, get) => {
         if (requests.get(path) !== request) return
         requests.delete(path)
         set((state) => ({ listings: { ...state.listings, [path]: listing } }))
+        // A restored tree has expanded subfolders that were never listed; they open as they are reached.
+        if (listing.status === 'ok') {
+          for (const entry of listing.entries) {
+            const unlisted = !get().listings[entry.path] && !requests.has(entry.path)
+            if (entry.kind === 'directory' && get().expanded[entry.path] && unlisted)
+              load(entry.path)
+          }
+        }
         // A folder deleted while watched loses its watch; listing it again (once back) renews it.
         watched = ''
         syncWatches()
@@ -142,6 +152,12 @@ export const useFileTreeStore = create<FileTreeState>((set, get) => {
       for (const folder of open.length > 0 ? open : [path]) load(folder)
     },
     toggleHideIgnored: () => set((state) => ({ hideIgnored: !state.hideIgnored })),
+    restore: (expanded, hideIgnored) => {
+      set({ expanded: Object.fromEntries(expanded.map((path) => [path, true])), hideIgnored })
+      const roots = get().roots.map((root) => root.path)
+      for (const folder of openFolders(get(), roots)) load(folder)
+      syncWatches()
+    },
     copyPath: (path, form) => {
       window.desktop.copyPath(path, form).catch(failed)
     },

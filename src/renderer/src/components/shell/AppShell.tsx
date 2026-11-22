@@ -1,4 +1,5 @@
-import { useEffect, useRef } from 'react'
+import { lazy, Suspense, useEffect, useRef } from 'react'
+import { UnsavedChangesDialog } from '@/components/editor/UnsavedChangesDialog'
 import { SettingsPage } from '@/components/settings/SettingsPage'
 import { useAppFont } from '@/components/settings/use-app-font'
 import { useColorThemes } from '@/components/settings/use-color-themes'
@@ -9,6 +10,8 @@ import { TerminalTabs } from '@/components/terminal/TerminalTabs'
 import { useTerminalCommands } from '@/components/terminal/use-terminal-commands'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { WelcomeScreen } from '@/components/workspace/WelcomeScreen'
+import { connectFilesSession } from '@/state/files-session'
+import { useEditorTabStore } from '@/state/editor-tab-store'
 import { useNotificationStore } from '@/state/notification-store'
 import { useSettingsStore } from '@/state/settings-store'
 import { SIDE_PANEL_MIN_WIDTH, useShellLayoutStore } from '@/state/shell-layout-store'
@@ -19,6 +22,10 @@ import { ActivityBar } from './ActivityBar'
 import { SHELL_VIEWS } from './shell-views'
 import { SIDE_PANEL_HANDLE_WIDTH, SidePanelResizeHandle } from './SidePanelResizeHandle'
 import { StatusBar } from './StatusBar'
+
+// Monaco is large: it loads once the Files view is shown, so neither startup nor the first file waits.
+const loadEditorTabs = () => import('@/components/editor/EditorTabs')
+const EditorTabs = lazy(() => loadEditorTabs().then((module) => ({ default: module.EditorTabs })))
 
 /** Sliver of main area that stays visible however wide the side panel gets, as in JetBrains IDEs. */
 const MAIN_AREA_MIN_WIDTH = 120
@@ -39,13 +46,18 @@ export function AppShell(): React.JSX.Element {
   const connectLayout = useShellLayoutStore((state) => state.connect)
   const layoutLoaded = useShellLayoutStore((state) => state.loaded)
   const hasTerminals = useTerminalStore((state) => state.tabs.length > 0)
+  const hasEditorTabs = useEditorTabStore((state) => state.tabs.length > 0)
   const notificationsOpen = useNotificationStore((state) => state.panelOpen)
 
   useEffect(() => connectWorkspace(), [connectWorkspace])
   useEffect(() => connectWorktrees(), [connectWorktrees])
   useEffect(() => connectSettings(), [connectSettings])
   useEffect(() => connectLayout(), [connectLayout])
+  useEffect(() => connectFilesSession(), [])
   useEffect(() => window.desktop.subscribeShowSettings(openSettings), [openSettings])
+  useEffect(() => {
+    if (activeView === 'files') void loadEditorTabs()
+  }, [activeView])
   useAppFont()
   useColorThemes()
   useTerminalCommands()
@@ -63,6 +75,9 @@ export function AppShell(): React.JSX.Element {
   if (!layoutLoaded) return <div className="h-screen bg-frame" />
   // Terminal tabs stay mounted behind other views and Settings, so their shells keep running.
   const showTerminals = hasTerminals && !settingsOpen && view.id === 'agents'
+  // Editor tabs stay mounted the same way, keeping unsaved edits, undo history and scroll positions;
+  // they stay on screen when the workspace's last folder goes, so unsaved ones can still be saved.
+  const showEditor = hasEditorTabs && !settingsOpen && view.id === 'files'
 
   return (
     <TooltipProvider>
@@ -117,7 +132,13 @@ export function AppShell(): React.JSX.Element {
               className="flex min-w-0 flex-1 rounded-island bg-island"
             >
               {hasTerminals ? <TerminalTabs hidden={!showTerminals} /> : null}
-              {showTerminals ? null : settingsOpen ? (
+              <UnsavedChangesDialog />
+              {hasEditorTabs ? (
+                <Suspense fallback={null}>
+                  <EditorTabs hidden={!showEditor} />
+                </Suspense>
+              ) : null}
+              {showTerminals || showEditor ? null : settingsOpen ? (
                 <SettingsPage />
               ) : workspaceEmpty ? (
                 <WelcomeScreen />

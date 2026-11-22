@@ -11,7 +11,7 @@ Electron desktop app: React renderer, Node main process, sandboxed preload bridg
 | Complete gate             | `pnpm verify` = `pnpm check` + `pnpm test:e2e` (what the task hooks run)        |
 | Fast gate                 | `pnpm check` (format, lint incl. type-aware rules, typecheck, knip, unit tests) |
 | Unit tests                | `pnpm test [path]`                                                              |
-| E2E (builds first)        | `pnpm test:e2e` (Linux without a display: `xvfb-run -a pnpm test:e2e`)          |
+| E2E (builds first)        | `pnpm test:e2e` (Linux: `xvfb-run -a pnpm test:e2e`, own display and clipboard) |
 | Package installers        | `pnpm package` (current OS only, into `release/`)                               |
 | Format fix                | `pnpm format`                                                                   |
 | Single tools              | `pnpm lint`, `pnpm typecheck`, `pnpm knip`                                      |

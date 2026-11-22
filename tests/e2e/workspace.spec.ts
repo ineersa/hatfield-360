@@ -48,6 +48,7 @@ test('File menu has the workspace actions', async () => {
       'Open Folder…',
       'Open Workspace from File…',
       'Open Recent',
+      'Save',
       'Add Folder to Workspace…',
       'Save Workspace As…',
       'Duplicate Workspace…',

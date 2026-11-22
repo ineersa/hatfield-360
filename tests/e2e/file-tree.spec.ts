@@ -14,6 +14,8 @@ import {
 import { join } from 'node:path'
 import type { DirectoryListing } from '../../src/shared/file-tree-api'
 import { makeTempDir, saveScreenshot, withApp } from './launch-app'
+import { keepUserClipboard } from './user-clipboard'
+import { seedWorkspace } from './workspace-seed'
 
 function git(cwd: string, ...args: string[]): void {
   execFileSync(
@@ -42,19 +44,6 @@ function makeRepo(parent: string, name: string): string {
   git(parent, 'init', '-q', '-b', 'main', repo)
   git(repo, 'commit', '-q', '--allow-empty', '-m', 'first')
   return repo
-}
-
-/** A user data folder whose workspace holds `folders`. */
-async function seedWorkspace(
-  folders: { path: string; kind: 'project' | 'folder' }[]
-): Promise<[string, () => Promise<void>]> {
-  const [userData, cleanup] = await makeTempDir('user-data')
-  await mkdir(join(userData, 'workspaces'))
-  await writeFile(
-    join(userData, 'workspaces', 'default.hatfield-workspace'),
-    JSON.stringify({ version: 1, folders })
-  )
-  return [userData, cleanup]
 }
 
 /** The OS folder picker can't be driven by Playwright (user-authorized for #8): answer it from the test. */
@@ -132,6 +121,9 @@ test('folders added to the workspace become projects or plain folders, and can b
         // The kinds were saved: app stays out of Projects, and with it its worktree.
         await expect(projectRows(page)).toHaveText(['notestrunk'])
         await showView(page, 'Files')
+        // app was left expanded, and reopens so.
+        await expect(item(page, 'app')).toHaveAttribute('aria-expanded', 'true')
+        await item(page, 'app').click()
         await expect(tree(page).getByRole('treeitem')).toHaveText(['app', 'notestrunk'])
 
         // Adding a plain folder again brings it back into Projects.
@@ -333,56 +325,65 @@ test('the file tree is driven from the keyboard and copies paths', async () => {
   try {
     await withApp(
       async (electronApp, page) => {
-        await showView(page, 'Files')
-        const root = item(page, 'app main')
-        await root.click()
-        await expect(root).toBeFocused()
-        await expect(tree(page).getByRole('treeitem')).toHaveText([
-          'appmain',
-          'docs',
-          'src',
-          'package.json',
-          'README.md'
-        ])
-        await expect(item(page, 'src')).toHaveAttribute('aria-posinset', '2')
-        await expect(item(page, 'src')).toHaveAttribute('aria-setsize', '4')
+        const restoreClipboard = await keepUserClipboard(electronApp)
+        test.skip(
+          restoreClipboard === null,
+          "The clipboard holds more than text, which the test couldn't put back."
+        )
+        try {
+          await showView(page, 'Files')
+          const root = item(page, 'app main')
+          await root.click()
+          await expect(root).toBeFocused()
+          await expect(tree(page).getByRole('treeitem')).toHaveText([
+            'appmain',
+            'docs',
+            'src',
+            'package.json',
+            'README.md'
+          ])
+          await expect(item(page, 'src')).toHaveAttribute('aria-posinset', '2')
+          await expect(item(page, 'src')).toHaveAttribute('aria-setsize', '4')
 
-        // Right goes into an open folder and opens a closed one; Left closes it, then goes up.
-        await page.keyboard.press('ArrowRight')
-        await expect(item(page, 'docs')).toBeFocused()
-        await page.keyboard.press('ArrowRight')
-        await expect(item(page, 'Empty')).toBeVisible()
-        await page.keyboard.press('ArrowLeft')
-        await expect(item(page, 'Empty')).toHaveCount(0)
-        await page.keyboard.press('ArrowLeft')
-        await expect(root).toBeFocused()
+          // Right goes into an open folder and opens a closed one; Left closes it, then goes up.
+          await page.keyboard.press('ArrowRight')
+          await expect(item(page, 'docs')).toBeFocused()
+          await page.keyboard.press('ArrowRight')
+          await expect(item(page, 'Empty')).toBeVisible()
+          await page.keyboard.press('ArrowLeft')
+          await expect(item(page, 'Empty')).toHaveCount(0)
+          await page.keyboard.press('ArrowLeft')
+          await expect(root).toBeFocused()
 
-        await page.keyboard.press('End')
-        await expect(item(page, 'README.md')).toBeFocused()
-        await page.keyboard.press('Home')
-        await expect(root).toBeFocused()
-        await page.keyboard.type('pa')
-        await expect(item(page, 'package.json')).toBeFocused()
-        await expect(item(page, 'package.json')).toHaveAttribute('aria-selected', 'true')
+          await page.keyboard.press('End')
+          await expect(item(page, 'README.md')).toBeFocused()
+          await page.keyboard.press('Home')
+          await expect(root).toBeFocused()
+          await page.keyboard.type('pa')
+          await expect(item(page, 'package.json')).toBeFocused()
+          await expect(item(page, 'package.json')).toHaveAttribute('aria-selected', 'true')
 
-        await page.keyboard.press('ControlOrMeta+Shift+KeyC')
-        await expect.poll(() => clipboardText(electronApp)).toBe(join(repo, 'package.json'))
+          await page.keyboard.press('ControlOrMeta+Shift+KeyC')
+          await expect.poll(() => clipboardText(electronApp)).toBe(join(repo, 'package.json'))
 
-        // `*` opens the folder's siblings too.
-        await page.keyboard.press('ArrowUp')
-        await page.keyboard.press('*')
-        await expect(item(page, 'a.ts')).toBeVisible()
-        await item(page, 'a.ts').click()
-        await page.keyboard.press('ControlOrMeta+Alt+Shift+KeyC')
-        await expect.poll(() => clipboardText(electronApp)).toBe(join('src', 'a.ts'))
-        await contextMenu(page, root, 'Copy Path')
-        await expect.poll(() => clipboardText(electronApp)).toBe(repo)
-        await contextMenu(page, item(page, 'src'), 'Copy Relative Path')
-        await expect.poll(() => clipboardText(electronApp)).toBe('src')
-        await saveScreenshot(page, 'file-tree-keyboard')
+          // `*` opens the folder's siblings too.
+          await page.keyboard.press('ArrowUp')
+          await page.keyboard.press('*')
+          await expect(item(page, 'a.ts')).toBeVisible()
+          await item(page, 'a.ts').click()
+          await page.keyboard.press('ControlOrMeta+Alt+Shift+KeyC')
+          await expect.poll(() => clipboardText(electronApp)).toBe(join('src', 'a.ts'))
+          await contextMenu(page, root, 'Copy Path')
+          await expect.poll(() => clipboardText(electronApp)).toBe(repo)
+          await contextMenu(page, item(page, 'src'), 'Copy Relative Path')
+          await expect.poll(() => clipboardText(electronApp)).toBe('src')
+          await saveScreenshot(page, 'file-tree-keyboard')
 
-        await page.getByRole('button', { name: 'Collapse All' }).click()
-        await expect(tree(page).getByRole('treeitem')).toHaveText(['appmain'])
+          await page.getByRole('button', { name: 'Collapse All' }).click()
+          await expect(tree(page).getByRole('treeitem')).toHaveText(['appmain'])
+        } finally {
+          await restoreClipboard?.()
+        }
       },
       { userDataDir: userData }
     )

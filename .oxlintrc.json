@@ -29,6 +29,7 @@
     "typescript/no-non-null-assertion": "error",
     "import/no-cycle": "error",
     "import/no-default-export": "error",
+    "import/default": "off",
     "unicorn/filename-case": [
       "error",
       {

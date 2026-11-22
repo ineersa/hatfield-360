@@ -3,6 +3,9 @@ import { app, BrowserWindow } from 'electron'
 import { agentStatusServer } from './agent-status/status-server'
 import { separateDevAppData } from './app-data-folder'
 import { registerAppInfoIpc } from './ipc/app-info-ipc'
+import { filesSessionStore } from './files/files-session-store'
+import { registerEditorIpc } from './ipc/editor-ipc'
+import { registerFilesSessionIpc } from './ipc/files-session-ipc'
 import { registerFileTreeIpc } from './ipc/file-tree-ipc'
 import { registerSettingsIpc } from './ipc/settings-ipc'
 import { registerShellLayoutIpc } from './ipc/shell-layout-ipc'
@@ -13,6 +16,7 @@ import { installAppMenu } from './menu/app-menu'
 import { terminalSessions } from './terminal/terminal-sessions'
 import { createMainWindow } from './window/main-window'
 import { installPermissionPolicy } from './window/permission-policy'
+import { quitWaitsForUnsavedChanges } from './window/unsaved-changes-guard'
 import { windowStateStore } from './window/window-state-store'
 import { chosenAppTheme, followAppTheme } from './window/window-theme'
 
@@ -30,6 +34,8 @@ void app.whenReady().then(async () => {
   registerWorkspaceIpc()
   registerWorktreeIpc()
   registerFileTreeIpc()
+  registerEditorIpc()
+  registerFilesSessionIpc()
   registerSettingsIpc()
   registerShellLayoutIpc()
   registerTerminalIpc()
@@ -55,6 +61,8 @@ app.on('before-quit', (event) => {
   if (readyToQuit) return
   event.preventDefault()
   if (quitting) return
+  // Unsaved edits are saved or discarded first; a cancelled quit leaves everything running.
+  if (quitWaitsForUnsavedChanges()) return
   quitting = true
   void Promise.allSettled([
     agentStatusServer.stop().catch((error: unknown) => {
@@ -63,6 +71,9 @@ app.on('before-quit', (event) => {
     windowStateStore
       .flush()
       .catch((error: unknown) => console.error('Saving window state failed:', error)),
+    filesSessionStore
+      .flush()
+      .catch((error: unknown) => console.error('Saving Files sessions failed:', error)),
     terminalSessions.killAll()
   ]).finally(() => {
     readyToQuit = true

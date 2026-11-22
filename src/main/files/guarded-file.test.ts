@@ -13,7 +13,7 @@ import {
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { readFileInRoots, writeFileInRoots } from './guarded-file'
+import { readFileInRoots, writeFileInRoots, writeFileReadAs } from './guarded-file'
 
 describe('guarded file access', () => {
   let dir: string
@@ -33,7 +33,10 @@ describe('guarded file access', () => {
   afterEach(() => rm(dir, { recursive: true, force: true }))
 
   it('reads files inside the roots and refuses ones outside', async () => {
-    expect(await readFileInRoots(join(root, 'notes.md'), [root])).toBe('inside')
+    expect(await readFileInRoots(join(root, 'notes.md'), [root])).toEqual({
+      text: 'inside',
+      real: join(root, 'notes.md')
+    })
     await expect(readFileInRoots(join(outside, 'secret'), [root])).rejects.toThrow(
       'Not inside the workspace'
     )
@@ -110,6 +113,26 @@ describe('guarded file access', () => {
       await symlink(join(outside, 'secret'), `${target}.${process.pid}.tmp`)
       await writeFileInRoots(target, 'edited', [root])
       expect(await readFile(target, 'utf8')).toBe('edited')
+      expect(await readFile(join(outside, 'secret'), 'utf8')).toBe('outside')
+    }
+  )
+
+  it('saves a file read earlier to that same file, outside the roots now', async () => {
+    const { real } = await readFileInRoots(join(root, 'notes.md'), [root])
+    await writeFileReadAs(join(root, 'notes.md'), 'kept', real)
+    expect(await readFile(join(root, 'notes.md'), 'utf8')).toBe('kept')
+  })
+
+  it.skipIf(process.platform === 'win32')(
+    'refuses a file read earlier that has since become a link elsewhere',
+    async () => {
+      const notes = join(root, 'notes.md')
+      const { real } = await readFileInRoots(notes, [root])
+      await rm(notes)
+      await symlink(join(outside, 'secret'), notes)
+      await expect(writeFileReadAs(notes, 'edited', real)).rejects.toThrow(
+        'Not inside the workspace'
+      )
       expect(await readFile(join(outside, 'secret'), 'utf8')).toBe('outside')
     }
   )

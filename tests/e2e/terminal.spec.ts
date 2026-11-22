@@ -1,7 +1,8 @@
-import { type ElectronApplication, expect, test, type Locator, type Page } from '@playwright/test'
+import { expect, test, type Locator, type Page } from '@playwright/test'
 import { mkdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { makeTempDir, saveScreenshot, withApp } from './launch-app'
+import { keepUserClipboard } from './user-clipboard'
 
 const isWindows = process.platform === 'win32'
 // Output that differs from the typed command, so the check sees the shell's answer, not the echo of the keys.
@@ -148,22 +149,6 @@ test('splits and tabs each get their own shell; closing them ends it, and so doe
     await cleanup()
   }
 })
-
-/**
- * On a real display the test shares the user's clipboard. Plain text is saved and put back;
- * anything else (an image) can't be (reading its contents crashes Electron 45's main process),
- * so the test is skipped rather than lose it. Under xvfb and in CI the clipboard is the test's.
- */
-async function keepUserClipboard(app: ElectronApplication): Promise<(() => Promise<void>) | null> {
-  const textOnly = await app.evaluate(async ({ clipboard }) =>
-    (await clipboard.read()).every((item) =>
-      item.types.every((type) => type.startsWith('text/plain'))
-    )
-  )
-  if (!textOnly) return null
-  const text = await app.evaluate(({ clipboard }) => clipboard.readText())
-  return () => app.evaluate(({ clipboard }, saved) => clipboard.writeText(saved), text)
-}
 
 test('the system keys paste into the terminal and copy its selection', async () => {
   const { userData, cleanup } = await seedProject()
