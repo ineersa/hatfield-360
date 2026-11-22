@@ -9,6 +9,7 @@ import {
   type TerminalExit,
   type TerminalSession
 } from '../../shared/terminal-api'
+import { agentStatusServer } from '../agent-status/status-server'
 import { defaultShell } from './default-shell'
 import { descendantPids, isProcessAlive } from './process-tree'
 import { terminalEnvironment } from './terminal-environment'
@@ -31,6 +32,7 @@ const delay = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve,
 
 type Session = {
   id: string
+  bootstrapToken?: string
   pty: IPty
   owner: WebContents
   cwd: string
@@ -100,6 +102,13 @@ class TerminalSessions {
     return session ? { cwd: session.cwd, project: session.project } : null
   }
 
+  manualPlacement(id: string) {
+    const session = this.sessions.get(id)
+    if (session?.bootstrapToken && !session.detached && !session.owner.isDestroyed())
+      return { owner: session.owner, cwd: session.cwd, project: session.project }
+    return undefined
+  }
+
   async spawn(
     owner: WebContents,
     request: { cwd: string; cols: number; rows: number },
@@ -122,18 +131,43 @@ class TerminalSessions {
     const shell = agent
       ? { file: await agentExecutable(agent.executable, request.cwd, env.PATH), args: agent.args }
       : defaultShell(process.env, process.platform)
-    if (owner.isDestroyed()) throw new Error('The terminal window has closed.')
-    const pty = spawn(shell.file, shell.args, {
-      name: 'xterm-256color',
-      cols: request.cols,
-      rows: request.rows,
-      cwd: request.cwd,
-      env: { ...env, ...agent?.env },
-      ...(process.platform === 'win32' ? { useConptyDll: true } : {})
-    })
     const id = agent?.id ?? randomUUID()
+    const bootstrap = agent
+      ? undefined
+      : await agentStatusServer
+          .prepareBootstrap({ terminalId: id, cwd: request.cwd })
+          .catch(() => undefined)
+    const closeBootstrap = () => {
+      if (bootstrap) agentStatusServer.closeBootstrap(bootstrap.token)
+    }
+    const pty = (() => {
+      try {
+        if (owner.isDestroyed()) throw new Error('The terminal window has closed.')
+        return spawn(shell.file, shell.args, {
+          name: 'xterm-256color',
+          cols: request.cols,
+          rows: request.rows,
+          cwd: request.cwd,
+          env: {
+            ...env,
+            ...agent?.env,
+            ...(bootstrap
+              ? {
+                  H360_STATUS_ENDPOINT: bootstrap.endpoint,
+                  H360_STATUS_BOOTSTRAP_TOKEN: bootstrap.token
+                }
+              : {})
+          },
+          ...(process.platform === 'win32' ? { useConptyDll: true } : {})
+        })
+      } catch (error) {
+        closeBootstrap()
+        throw error
+      }
+    })()
     const session: Session = {
       id,
+      ...(bootstrap ? { bootstrapToken: bootstrap.token } : {}),
       pty,
       owner,
       cwd: request.cwd,
@@ -154,10 +188,13 @@ class TerminalSessions {
     pty.onExit(({ exitCode, signal }) => {
       this.flushOutput(session)
       this.sessions.delete(id)
+      closeBootstrap()
       agent?.onExit()
       const exit: TerminalExit = { id, exitCode, signal: signal ?? null }
       if (!session.detached && !owner.isDestroyed()) owner.send(TERMINAL_CHANNELS.exit, exit)
     })
+    if (bootstrap)
+      await agentStatusServer.bindBootstrap(bootstrap.token, pty.pid).catch(closeBootstrap)
     return { id, pid: pty.pid, shell: shell.file }
   }
 
@@ -203,6 +240,7 @@ class TerminalSessions {
   private end(session: Session): Promise<void> {
     if (!session.ending) {
       session.onClosing?.()
+      if (session.bootstrapToken) agentStatusServer.closeBootstrap(session.bootstrapToken)
       const ending = this.terminate(session).finally(() => this.endings.delete(ending))
       this.endings.add(ending)
       session.ending = ending
