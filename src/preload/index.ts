@@ -6,6 +6,7 @@ import { FILES_SESSION_CHANNELS } from '../shared/files-session-api'
 import { FILE_TREE_CHANNELS } from '../shared/file-tree-api'
 import { SETTINGS_CHANNELS, type SettingsView } from '../shared/settings-api'
 import { SHELL_LAYOUT_CHANNELS } from '../shared/shell-layout-api'
+import { LANGUAGE_SERVER_CHANNELS, type LanguageServerStatus } from '../shared/language-server-api'
 import { TERMINAL_CHANNELS, type TerminalCommand, type TerminalExit } from '../shared/terminal-api'
 import { type WorkspaceView, WORKSPACE_CHANNELS } from '../shared/workspace-api'
 import { WEB_LINK_CHANNELS } from '../shared/web-link-api'
@@ -93,6 +94,21 @@ const desktopApi: DesktopApi = {
   killTerminal: (id) => ipcRenderer.invoke(TERMINAL_CHANNELS.kill, id),
   ackTerminalOutput: (id, bytes) => ipcRenderer.invoke(TERMINAL_CHANNELS.ack, id, bytes),
   openWebLink: (url) => ipcRenderer.invoke(WEB_LINK_CHANNELS.open, url),
+  connectLanguageServer: (path, languageId) =>
+    ipcRenderer.invoke(LANGUAGE_SERVER_CHANNELS.connect, path, languageId),
+  sendLanguageServerMessage: (id, message) =>
+    ipcRenderer.invoke(LANGUAGE_SERVER_CHANNELS.send, id, message),
+  disconnectLanguageServer: (id) => ipcRenderer.invoke(LANGUAGE_SERVER_CHANNELS.disconnect, id),
+  subscribeLanguageServerMessages: (callback) => {
+    const listener = (_event: unknown, id: string, message: unknown): void => callback(id, message)
+    ipcRenderer.on(LANGUAGE_SERVER_CHANNELS.message, listener)
+    return () => ipcRenderer.removeListener(LANGUAGE_SERVER_CHANNELS.message, listener)
+  },
+  subscribeLanguageServerStatus: (callback) => {
+    const listener = (_event: unknown, status: LanguageServerStatus): void => callback(status)
+    ipcRenderer.on(LANGUAGE_SERVER_CHANNELS.status, listener)
+    return () => ipcRenderer.removeListener(LANGUAGE_SERVER_CHANNELS.status, listener)
+  },
   readTerminalClipboard: () => ipcRenderer.invoke(TERMINAL_CHANNELS.readClipboard),
   writeTerminalClipboard: (text) => ipcRenderer.invoke(TERMINAL_CHANNELS.writeClipboard, text),
   subscribeTerminalData: (callback) => {

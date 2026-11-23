@@ -76,7 +76,6 @@ async function capture(page: Page, name: string) {
 }
 
 test('agent launches report through the real socket and sidebar rows select exact panes', async () => {
-  test.skip(process.platform === 'win32', 'The agent reporting transport is Unix only')
   test.setTimeout(45_000)
   const { project, userDataDir, cleanup } = await seed()
   try {
@@ -260,9 +259,8 @@ test('agent launches report through the real socket and sidebar rows select exac
   }
 })
 
-test('records the event-only agent status demonstration', async () => {
-  test.skip(!demo, 'Opt-in recording')
-  test.skip(process.platform === 'win32', 'The agent reporting transport is Unix only')
+// With E2E_AGENT_DEMO=1 the same run is recorded as a demonstration (docs/agents/agent-launches.md).
+test('two agents move through working, needs input, background work and outcomes', async () => {
   test.setTimeout(90_000)
   const { userDataDir, cleanup } = await seed()
   const videos: Video[] = []
@@ -698,7 +696,6 @@ test('a newer main turn supersedes a pending agent completion', async () => {
 })
 
 test('a project with broken Git metadata still displays its launched session', async () => {
-  test.skip(process.platform === 'win32', 'The agent reporting transport is Unix only')
   const { project, userDataDir, cleanup } = await seed()
   try {
     await mkdir(join(project, '.git'))
@@ -726,7 +723,6 @@ test('a project with broken Git metadata still displays its launched session', a
 })
 
 test('a linked worktree launches into its own tab and publishes only public session data', async () => {
-  test.skip(process.platform === 'win32', 'The agent reporting transport is Unix only')
   const { repo, projects, cleanup: cleanRepo } = await makeRepo()
   try {
     const worktree = join(projects, 'app-feature')

@@ -1,7 +1,7 @@
 import { lstat, realpath, stat } from 'node:fs/promises'
-import { basename, dirname, join } from 'node:path'
+import { dirname } from 'node:path'
 import { writeFileAtomic } from './atomic-write'
-import { resolveInsideRoots } from './path-containment'
+import { resolveInsideRoots, resolveTargetInsideRoots } from './path-containment'
 
 const outsideRoots = (path: string): Error => new Error(`Not inside the workspace: ${path}`)
 
@@ -48,16 +48,9 @@ export async function writeFileInRoots(
   contents: string,
   roots: string[]
 ): Promise<void> {
-  const exists = await lstat(path).then(
-    () => true,
-    () => false
-  )
-  const folder = exists ? null : await resolveInsideRoots(dirname(path), roots)
-  const real = exists
-    ? await resolveInsideRoots(path, roots)
-    : folder && join(folder, basename(path))
+  const real = await resolveTargetInsideRoots(path, roots)
   if (!real) throw outsideRoots(path)
   // Checked before writing: the temp file would go next to a folder, which for a root is outside.
-  if (exists && (await stat(real)).isDirectory()) throw new Error(`Not a file: ${path}`)
+  if ((await stat(real).catch(() => null))?.isDirectory()) throw new Error(`Not a file: ${path}`)
   await writeFileAtomic(real, contents)
 }

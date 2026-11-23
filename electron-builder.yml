@@ -8,12 +8,18 @@ files:
   - package.json
   # The main process loads it as the Linux window icon.
   - resources/icon.png
-# node-pty's native addon, spawn-helper (macOS) and ConPTY agents (Windows) run from real files, not from the asar.
+# Executables run from real files, not from the asar: node-pty's native addon, spawn-helper (macOS)
+# and TypeScript's native language server. basedpyright changes its working directory to its own
+# folder, which can't be inside an asar; it has no dependencies to take along.
 asarUnpack:
   - node_modules/node-pty/**
-# node-pty is an N-API addon: its prebuilt (macOS, Windows) or install-time (Linux) binary already runs in Electron.
+  - node_modules/@typescript/**
+  - node_modules/basedpyright/**
+# TypeScript's language server needs its lib/*.d.ts, which electron-builder leaves out by default.
+onNodeModuleFile: ./config/electron-builder-node-modules.mjs
+# node-pty is an N-API addon: its prebuilt (macOS) or install-time (Linux) binary already runs in Electron.
 npmRebuild: false
-# One 1024 px PNG; electron-builder derives the .icns / .ico from it.
+# One 1024 px PNG; electron-builder derives the .icns from it.
 icon: resources/icon.png
 linux:
   target: AppImage
@@ -25,6 +31,4 @@ mac:
   target: [dmg, zip]
   # Unsigned until a signing identity exists; Gatekeeper requires right-click → Open on first launch.
   identity: null
-win:
-  target: nsis
 publish: null

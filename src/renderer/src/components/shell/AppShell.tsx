@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useRef } from 'react'
+import { useEffect, useRef } from 'react'
 import { UnsavedChangesDialog } from '@/components/editor/UnsavedChangesDialog'
 import { SettingsPage } from '@/components/settings/SettingsPage'
 import { useAppFont } from '@/components/settings/use-app-font'
@@ -19,13 +19,10 @@ import { useTerminalStore } from '@/state/terminal-store'
 import { useWorktreeStore } from '@/state/worktree-store'
 import { useWorkspaceStore } from '@/state/workspace-store'
 import { ActivityBar } from './ActivityBar'
+import { LazyEditorTabs, loadEditorTabs } from './LazyEditorTabs'
 import { SHELL_VIEWS } from './shell-views'
 import { SIDE_PANEL_HANDLE_WIDTH, SidePanelResizeHandle } from './SidePanelResizeHandle'
 import { StatusBar } from './StatusBar'
-
-// Monaco is large: it loads once the Files view is shown, so neither startup nor the first file waits.
-const loadEditorTabs = () => import('@/components/editor/EditorTabs')
-const EditorTabs = lazy(() => loadEditorTabs().then((module) => ({ default: module.EditorTabs })))
 
 /** Sliver of main area that stays visible however wide the side panel gets, as in JetBrains IDEs. */
 const MAIN_AREA_MIN_WIDTH = 120
@@ -56,7 +53,8 @@ export function AppShell(): React.JSX.Element {
   useEffect(() => connectFilesSession(), [])
   useEffect(() => window.desktop.subscribeShowSettings(openSettings), [openSettings])
   useEffect(() => {
-    if (activeView === 'files') void loadEditorTabs()
+    // Loaded ahead of the first file; a failure shows when the editor does.
+    if (activeView === 'files') loadEditorTabs().catch(() => undefined)
   }, [activeView])
   useAppFont()
   useColorThemes()
@@ -133,11 +131,7 @@ export function AppShell(): React.JSX.Element {
             >
               {hasTerminals ? <TerminalTabs hidden={!showTerminals} /> : null}
               <UnsavedChangesDialog />
-              {hasEditorTabs ? (
-                <Suspense fallback={null}>
-                  <EditorTabs hidden={!showEditor} />
-                </Suspense>
-              ) : null}
+              {hasEditorTabs ? <LazyEditorTabs hidden={!showEditor} /> : null}
               {showTerminals || showEditor ? null : settingsOpen ? (
                 <SettingsPage />
               ) : workspaceEmpty ? (

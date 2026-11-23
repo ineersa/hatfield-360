@@ -2,6 +2,7 @@ import type { AgentApi } from './agent-api'
 import type { EditorApi } from './editor-api'
 import type { FilesSessionApi } from './files-session-api'
 import type { FileTreeApi } from './file-tree-api'
+import type { LanguageServerApi } from './language-server-api'
 import type { SettingsApi } from './settings-api'
 import type { ShellLayoutApi } from './shell-layout-api'
 import type { TerminalApi } from './terminal-api'
@@ -30,6 +31,7 @@ export type DesktopApi = WorkspaceApi &
   WorktreeApi &
   FileTreeApi &
   EditorApi &
-  FilesSessionApi & {
+  FilesSessionApi &
+  LanguageServerApi & {
     getAppInfo: () => Promise<AppInfo>
   }

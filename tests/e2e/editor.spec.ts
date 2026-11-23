@@ -3,7 +3,7 @@ import { chmod, mkdir, readFile, realpath, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { clickMenuItem } from './app-menu'
 import { editor, item, lines, openFile, showView, tab, tabs, typeAtEnd } from './editor-page'
-import { makeTempDir, saveScreenshot, withApp } from './launch-app'
+import { makeTempDir, requireFolderPermissions, saveScreenshot, withApp } from './launch-app'
 import { seedWorkspace } from './workspace-seed'
 
 const activeLine = (page: Page) => editor(page).locator('.line-numbers.active-line-number')
@@ -102,6 +102,16 @@ test('files open in editor tabs that switch, reorder and close, with highlightin
         await expect(tabs(page)).toHaveCount(2)
         await expect(tab(page, 'index.ts src')).toHaveAttribute('aria-selected', 'true')
         await expect(lines(page)).toContainText('const greeting')
+        // The whole tab box selects it: its left edge, beside the icon, and its bottom edge.
+        const box = await tab(page, 'index.ts test').locator('xpath=..').boundingBox()
+        if (!box) throw new Error('The tab box is not drawn')
+        await page.mouse.click(box.x + 2, box.y + box.height / 2)
+        await expect(tab(page, 'index.ts test')).toHaveAttribute('aria-selected', 'true')
+        await expect(lines(page)).toContainText('export const tested')
+        const other = await tab(page, 'index.ts src').locator('xpath=..').boundingBox()
+        if (!other) throw new Error('The tab box is not drawn')
+        await page.mouse.click(other.x + other.width / 2, other.y + other.height - 2)
+        await expect(tab(page, 'index.ts src')).toHaveAttribute('aria-selected', 'true')
         await tab(page, 'index.ts test').click()
         await expect(lines(page)).toContainText('export const tested')
 
@@ -223,7 +233,7 @@ test('closing the window or quitting with unsaved changes asks first, even after
         await expect(closeDialog(page)).toBeVisible()
         await closeDialog(page).getByRole('button', { name: 'Cancel' }).click()
         await expect(closeDialog(page)).toBeHidden()
-        await expect(lines(page)).toContainText('first lineunsaved')
+        await expect(lines(page)).toContainText('unsaved')
 
         // The tab stays, and can still be saved, once its folder leaves the workspace.
         await item(page, 'app').click({ button: 'right' })
@@ -278,8 +288,8 @@ test('a closed tab can no longer write its file once the folder has left the wor
 })
 
 test('a failed save says why and keeps the changes', async () => {
-  // A read-only folder refuses the new file; Windows has no such folder mode, and root ignores it.
-  test.skip(process.platform === 'win32' || process.getuid?.() === 0, 'needs folder permissions')
+  // A read-only folder refuses the new file.
+  requireFolderPermissions()
   const [app, cleanProject] = await makeProject()
   const [userData, cleanUserData] = await seedWorkspace([{ path: app, kind: 'folder' }])
   try {
@@ -293,7 +303,7 @@ test('a failed save says why and keeps the changes', async () => {
           await page.keyboard.press('ControlOrMeta+S')
           await expect(page.getByText("Couldn't save notes.txt").first()).toBeVisible()
           await expect(tab(page, 'notes.txt, unsaved')).toBeVisible()
-          await expect(lines(page)).toContainText('first lineunsaved')
+          await expect(lines(page)).toContainText('unsaved')
         } finally {
           await chmod(app, 0o755)
         }

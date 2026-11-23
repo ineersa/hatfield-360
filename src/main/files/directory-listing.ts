@@ -2,7 +2,7 @@ import type { Dirent } from 'node:fs'
 import { readdir, stat } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { DirectoryEntry, DirectoryListing } from '../../shared/file-tree-api'
-import { runGit } from '../git/git-command'
+import { ignoredNames } from '../git/git-ignore'
 import type { FileRoot } from './file-roots'
 import { isPathInside, resolveInsideRoots } from './path-containment'
 
@@ -25,20 +25,6 @@ async function entryKind(folder: string, entry: Dirent): Promise<DirectoryEntry[
     (info) => (info.isDirectory() ? 'directory' : 'file'),
     () => 'file'
   )
-}
-
-/** Names in `folder` that git ignores; none when git can't say (not a repository, a submodule's files). */
-async function ignoredNames(folder: string, names: string[]): Promise<Set<string>> {
-  if (names.length === 0) return new Set()
-  try {
-    const output = await runGit(folder, ['check-ignore', '--stdin', '-z'], {
-      input: `${names.join('\0')}\0`,
-      okExitCodes: [1]
-    })
-    return new Set(output.split('\0').filter((name) => name !== ''))
-  } catch {
-    return new Set()
-  }
 }
 
 /** Lists a folder inside the roots: folders first, then files, each sorted by name. */

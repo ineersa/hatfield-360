@@ -2,7 +2,12 @@ import { mkdir, mkdtemp, realpath, rm, symlink, writeFile } from 'node:fs/promis
 import { tmpdir } from 'node:os'
 import { join, posix, win32 } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { isPathInside, resolveInsideRoots, rootRelativePath } from './path-containment'
+import {
+  isPathInside,
+  resolveInsideRoots,
+  resolveOutsideHome,
+  rootRelativePath
+} from './path-containment'
 
 describe('isPathInside', () => {
   it('accepts the folder and what is under it, and nothing beside or above it', () => {
@@ -87,5 +92,34 @@ describe.skipIf(process.platform === 'win32')('resolveInsideRoots', () => {
     )
     expect(await resolveInsideRoots(join(root, 'src'), [linkedRoot])).toBe(join(root, 'src'))
     expect(await resolveInsideRoots(join(outside, 'secret'), [linkedRoot])).toBeNull()
+  })
+})
+
+describe('resolveOutsideHome', () => {
+  let base: string
+  beforeEach(async () => {
+    base = await realpath(await mkdtemp(join(tmpdir(), 'outside-home-')))
+    await mkdir(join(base, 'home', '.ssh'), { recursive: true })
+    await mkdir(join(base, 'usr'))
+    await writeFile(join(base, 'home', '.ssh', 'id_ed25519'), 'secret')
+    await writeFile(join(base, 'usr', 'os.py'), 'x')
+  })
+  afterEach(() => rm(base, { recursive: true, force: true }))
+
+  it('reads outside home, but nothing in it, even through a link from outside', async () => {
+    const home = join(base, 'home')
+    expect(await resolveOutsideHome(join(base, 'usr', 'os.py'), home)).toBe(
+      join(base, 'usr', 'os.py')
+    )
+    expect(await resolveOutsideHome(join(home, '.ssh', 'id_ed25519'), home)).toBeNull()
+    await symlink(join(home, '.ssh', 'id_ed25519'), join(base, 'usr', 'key'))
+    expect(await resolveOutsideHome(join(base, 'usr', 'key'), home)).toBeNull()
+  })
+
+  it('compares home by where it really is, when it is reached through a link', async () => {
+    await symlink(join(base, 'home'), join(base, 'home-link'))
+    expect(
+      await resolveOutsideHome(join(base, 'home', '.ssh', 'id_ed25519'), join(base, 'home-link'))
+    ).toBeNull()
   })
 })

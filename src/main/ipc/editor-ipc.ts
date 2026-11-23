@@ -1,11 +1,13 @@
 import type { BrowserWindow, WebContents } from 'electron'
 import { realpath } from 'node:fs/promises'
+import { homedir } from 'node:os'
 import { EDITOR_CHANNELS, type EditorFile, type EditorWriteResult } from '../../shared/editor-api'
 import { readEditorFile, textVersion } from '../files/editor-file-read'
 import { fileRoots } from '../files/file-roots'
 import { locateEditorFile, writeFileInRoots, writeFileReadAs } from '../files/guarded-file'
 import { OpenFileWatchers } from '../files/open-file-watchers'
-import { resolveInsideRoots } from '../files/path-containment'
+import { resolveInsideRoots, resolveOutsideHome } from '../files/path-containment'
+import { allLibraryRoots } from '../language-servers/language-server-registry'
 import { answerClose, setUnsaved } from '../window/unsaved-changes-guard'
 import { handleTrusted } from './trusted-ipc'
 
@@ -26,18 +28,21 @@ function checkedPath(path: unknown): string {
 type Held = { files: Map<string, string>; watchers: OpenFileWatchers }
 
 const held = new WeakMap<WebContents, Held>()
+const pages = new Set<Held>()
 
 function heldBy(contents: WebContents): Held {
   let page = held.get(contents)
   if (!page) {
     const watchers = new OpenFileWatchers((paths) => {
       if (!contents.isDestroyed()) contents.send(EDITOR_CHANNELS.changed, paths)
-    })
+    }, rootPaths)
     page = { files: new Map(), watchers }
     held.set(contents, page)
+    pages.add(page)
     contents.once('destroyed', () => {
       watchers.close()
       held.delete(contents)
+      if (page) pages.delete(page)
     })
   }
   return page
@@ -46,13 +51,29 @@ function heldBy(contents: WebContents): Held {
 function hold(page: Held, path: string, real: string): void {
   if (page.files.get(path) === real) return
   page.files.set(path, real)
-  page.watchers.set(page.files)
+  void page.watchers.set(page.files)
+}
+
+/**
+ * A file outside the workspace, read-only, so not held for saving or watched: anywhere outside the
+ * user's home folder, or in a language's library folders (a Go module cache, a pyenv install).
+ */
+async function readOutside(path: string, refused: unknown): Promise<EditorFile> {
+  const real =
+    (await resolveInsideRoots(path, await allLibraryRoots())) ??
+    (await resolveOutsideHome(path, homedir()))
+  if (real === null) throw refused
+  const file = await readEditorFile(real)
+  return file.kind === 'text' || file.kind === 'large' ? { ...file, outside: true } : file
 }
 
 async function read(contents: WebContents, path: string): Promise<EditorFile> {
   const page = heldBy(contents)
-  const real = await locateEditorFile(path, await rootPaths(), page.files.get(path))
+  const real = await locateEditorFile(path, await rootPaths(), page.files.get(path)).catch(
+    (error: unknown) => readOutside(path, error)
+  )
   if (real === null) return { kind: 'missing' }
+  if (typeof real !== 'string') return real
   const file = await readEditorFile(real)
   if (file.kind !== 'missing') hold(page, path, real)
   return file
@@ -86,11 +107,15 @@ async function write(
 }
 
 export function registerEditorIpc(): void {
+  // Which workspace folder's watcher hears of a file depends on the folders.
+  fileRoots.onChange(() => {
+    for (const page of pages) void page.watchers.rewatch()
+  })
   handleTrusted(EDITOR_CHANNELS.read, (event, path) => read(event.sender, checkedPath(path)))
 
   handleTrusted(EDITOR_CHANNELS.release, (event, path) => {
     const page = held.get(event.sender)
-    if (page?.files.delete(checkedPath(path))) page.watchers.set(page.files)
+    if (page?.files.delete(checkedPath(path))) void page.watchers.set(page.files)
   })
 
   handleTrusted(EDITOR_CHANNELS.write, (event, path, contents, base) => {

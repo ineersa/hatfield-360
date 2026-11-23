@@ -19,7 +19,7 @@ Electron desktop app: React renderer, Node main process, sandboxed preload bridg
 > [!IMPORTANT]
 > Run `pnpm verify` after your last edit and before every push (`pnpm check` alone while iterating). Never `--no-verify`, and never silence a lint rule with a disable comment.
 
-There is no PR CI: the task workflow's validate hook (`pnpm verify`) is the gate. `.github/workflows/release.yml` runs only for a published release or a manual dispatch; it runs `pnpm check`, packages the app on Linux, macOS and Windows, smoke-tests each packaged executable with the E2E spec and uploads the installers. Watch it with `gh run watch <run-id> --compact --exit-status`; don't poll.
+There is no PR CI: the task workflow's validate hook (`pnpm verify`) is the gate. `.github/workflows/release.yml` runs only for a published release or a manual dispatch; it runs `pnpm check`, packages the app on Linux and macOS, smoke-tests each packaged executable with the E2E spec and uploads the installers. Watch it with `gh run watch <run-id> --compact --exit-status`; don't poll.
 
 # Architecture
 
@@ -53,6 +53,7 @@ Process boundary rules, enforced by lint (`.oxlintrc.json` overrides plus `confi
 - `main` is always releasable. Never break CI; if it's broken, fixing it comes first.
 - **Testing policy.** Prefer integration and real Electron E2E tests. Add unit tests only for a specific, meaningful behavior (pure logic with real inputs). Do not introduce mocks, stubs, spies standing in for collaborators, `vi.stubGlobal` or fake implementations without explicit user authorization. A test must fail when its change is reverted. Read [test anti-patterns](docs/agents/test-antipatterns.md) and use the `testing` skill.
 - Commits are not GPG-signed: commit with `git -c commit.gpgsign=false commit …`. Sign only merges.
+- **No timing in tests.** A test must never depend on how fast anything runs: no sleeps, no polling or retry loops (`toPass`, `expect.poll`, `vi.waitFor`), no raised or custom timeouts, no time measurements, and no waiting on background work whose speed varies with load (language servers, file watchers, child processes). A test that can pass alone and fail under parallel load or contention does more harm than good: delete it or rewrite it to assert a deterministic outcome; never retry it, extend its timeout or rerun until green.
 - Focused tests (`.only`) fail the run in both Vitest and Playwright; don't commit them.
 - New dependencies: prefer what's already installed. pnpm refuses versions younger than 3 days (`minimumReleaseAge`); don't bypass it.
 
@@ -77,5 +78,5 @@ Process boundary rules, enforced by lint (`.oxlintrc.json` overrides plus `confi
 
 Every change considers:
 
-1. **Cross-platform (macOS, Linux, Windows).** Guard platform-specific behavior at runtime (`process.platform`), build paths with `node:path`, never hardcode separators, shells or shortcuts. Use `CommandOrControl` for accelerators.
+1. **Cross-platform (macOS, Linux; Windows isn't supported).** Guard platform-specific behavior at runtime (`process.platform`), build paths with `node:path`, never hardcode separators, shells or shortcuts. Use `CommandOrControl` for accelerators.
 2. **Security.** Untrusted renderer, no remote code, no `shell.openExternal` on unvalidated URLs, strict CSP in `index.html`.

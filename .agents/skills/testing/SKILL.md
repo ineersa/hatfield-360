@@ -28,7 +28,7 @@ Extract such logic out of Electron-bound modules into plain functions (see `src/
 
 ## Rules
 
-- No real network and no sleeping on wall-clock time; wait on observable state (`expect(...).toBeVisible()`, `toPass`).
+- No real network. No timing in tests. A test must never depend on how fast anything runs: no sleeps, no polling or retry loops (`toPass`, `expect.poll`, `vi.waitFor`), no raised or custom timeouts, no time measurements, and no waiting on background work whose speed varies with load (language servers, file watchers, child processes). A test that can pass alone and fail under parallel load or contention does more harm than good: delete it or rewrite it to assert a deterministic outcome; never retry it, extend its timeout or rerun until green.
 - One case per distinct behavior. No Cartesian `it.each`.
 - E2E asserts by role, label or `data-testid`. Each spec launches its own app with `APP_BACKGROUND_LAUNCH=1` and closes it in `finally`.
 - Screenshots are evidence, not assertions; no baseline comparison exists yet.

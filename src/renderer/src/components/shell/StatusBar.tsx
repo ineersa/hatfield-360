@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { useAppInfoStore } from '@/state/app-info-store'
+import { LanguageServerStatus } from './LanguageServerStatus'
 
 export function StatusBar(): React.JSX.Element {
   const appInfo = useAppInfoStore((state) => state.appInfo)
@@ -12,6 +13,7 @@ export function StatusBar(): React.JSX.Element {
 
   return (
     <footer className="type-status flex min-h-status-bar shrink-0 items-center justify-end gap-3 px-3 py-0.5">
+      <LanguageServerStatus />
       {error ? (
         <span role="alert" className="truncate text-error">
           Could not load app info: {error}
