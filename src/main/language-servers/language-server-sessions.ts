@@ -1,6 +1,7 @@
 import type { WebContents } from 'electron'
 import { type ChildProcess, spawn } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
+import { pathToFileURL } from 'node:url'
 import { StreamMessageReader, StreamMessageWriter } from 'vscode-jsonrpc/node'
 import {
   LANGUAGE_SERVER_CHANNELS,
@@ -10,6 +11,7 @@ import {
 } from '../../shared/language-server-api'
 import { isPlainObject } from '../../shared/plain-object'
 import { isPathInside } from '../files/path-containment'
+import { type TreeChange, TreeWatcher } from '../files/tree-watcher'
 import { clientMessageVerdict, serverRequestAnswer } from './language-server-policy'
 import type {
   LanguageServerDefinition,
@@ -38,6 +40,10 @@ type Session = {
   exited: Promise<void>
   /** Why main stopped it as failed (it refused to start), reported once it has exited. */
   failure: string | null
+  /** The page's client has sent `initialized`, so the server takes other notifications. */
+  initialized: boolean
+  /** Files changed on disk under the root reach the server from here, not from the page. */
+  watcher: TreeWatcher
 }
 
 /** Every message written carries `jsonrpc: '2.0'`; the policy has already checked the page's. */
@@ -91,6 +97,8 @@ class LanguageServerSessions {
       initializeId: undefined,
       stopping: null,
       failure: null,
+      initialized: false,
+      watcher: new TreeWatcher(root, (changes) => this.filesChanged(session, changes)),
       exited: new Promise((resolve) => child.once('close', () => resolve()))
     }
     this.sessions.set(connection.id, session)
@@ -107,6 +115,7 @@ class LanguageServerSessions {
     child.stdin.on('error', () => undefined)
     reader.listen((message) => this.fromServer(session, message))
     child.once('close', (code, signal) => this.closed(session, code, signal))
+    void session.watcher.start()
     this.status(session, 'starting')
     return connection
   }
@@ -128,6 +137,7 @@ class LanguageServerSessions {
     const { method } = verdict.message
     if (method === 'initialize') session.initializeId = verdict.message['id']
     await write(session.writer, verdict.message)
+    if (method === 'initialized') session.initialized = true
     // Servers that read settings only when pushed (the JSON server) get them once started.
     if (method === 'initialized' && session.configuration.settings) {
       await write(session.writer, {
@@ -191,6 +201,20 @@ class LanguageServerSessions {
     this.toPage(session, LANGUAGE_SERVER_CHANNELS.message, session.connection.id, message)
   }
 
+  /** Tells the server about files changed on disk, as a client watching its project would. */
+  private filesChanged(session: Session, changes: TreeChange[]): void {
+    if (!session.initialized || session.stopping) return
+    const params = {
+      changes: changes.map((change) => ({
+        uri: pathToFileURL(change.path).href,
+        type: change.type
+      }))
+    }
+    void write(session.writer, { method: 'workspace/didChangeWatchedFiles', params }).catch(
+      () => undefined
+    )
+  }
+
   private stop(session: Session): Promise<void> {
     session.stopping ??= (async () => {
       const { child, writer } = session
@@ -214,6 +238,7 @@ class LanguageServerSessions {
 
   private closed(session: Session, code: number | null, signal: NodeJS.Signals | null): void {
     const { connection, owner } = session
+    session.watcher.close()
     this.sessions.delete(connection.id)
     if (this.byKey.get(key(owner, connection.server, connection.root)) === session) {
       this.byKey.delete(key(owner, connection.server, connection.root))

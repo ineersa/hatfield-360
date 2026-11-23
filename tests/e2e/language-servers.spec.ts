@@ -3,7 +3,7 @@ import { mkdir, realpath, writeFile } from 'node:fs/promises'
 import { execFile } from 'node:child_process'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
-import { editor, editorText, openFile, showView, tab } from './editor-page'
+import { editor, editorText, openFile, showView, tab, typeAtEnd } from './editor-page'
 import { makeTempDir, withApp } from './launch-app'
 import { seedWorkspace } from './workspace-seed'
 
@@ -60,6 +60,9 @@ test('TypeScript, Python and PHP files get errors from their language servers', 
         await showView(page, 'Files')
         await openFile(page, 'project', 'web', 'label.ts')
         await expectError(page, /Type 'number' is not assignable to type 'string'/)
+        // An agent fixes the other file on disk: the server hears of it and the error goes.
+        await writeFile(join(project, 'web', 'count.ts'), "export const count: string = '1'\n")
+        await expect(editor(page).locator('.squiggly-error')).toHaveCount(0, { timeout: 20_000 })
         await openFile(page, 'tool', 'main.py')
         await expectError(page, /is not assignable to declared type "int"/)
         await openFile(page, 'site', 'index.php')
@@ -203,6 +206,18 @@ test('Go to Definition, hover and references work across files, into dependencie
         await page.keyboard.type('x')
         await expect.poll(() => editorText(page)).toContain('export declare const dep: string')
         await expect(page.locator('.monaco-editor-overlaymessage')).toContainText('read-only')
+
+        await tab(page, 'label.ts').click()
+        await typeAtEnd(page, 'export const fixed = count.toFi')
+        const suggestions = page.locator('.suggest-widget')
+        await expect(suggestions.getByRole('option', { name: /toFixed/ })).toBeVisible()
+        // The server's documentation for the selected completion, in the details beside the list.
+        await page.keyboard.press('Control+Space')
+        await expect(page.locator('.suggest-details')).toContainText('fixed-point notation')
+        await page.keyboard.press('Enter')
+        await expect.poll(() => editorText(page)).toContain('count.toFixed')
+        await page.keyboard.press('ControlOrMeta+s')
+        await expect(tab(page, 'label.ts')).not.toContainText('●')
       },
       { userDataDir: userData }
     )
