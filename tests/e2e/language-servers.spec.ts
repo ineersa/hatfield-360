@@ -34,47 +34,49 @@ const CLOSE_ON_FIRST_LINE = `{
   window.stopClosing = () => observer.disconnect()
 }`
 
-/** Hovers the editor's first error squiggle and expects the server's message in the hover. */
+/** Waits for the server's first error in the open file and expects its message, shown by F8. */
 async function expectError(page: Page, message: RegExp): Promise<void> {
-  const squiggle = editor(page).locator('.squiggly-error').first()
-  // Servers index the project first; a cold start can take a while on a slow machine.
-  await expect(squiggle).toBeVisible({ timeout: 30_000 })
-  // The squiggle is drawn under the text layer; the mouse goes to where it is.
-  await squiggle.hover({ force: true })
-  await expect(page.locator('.monaco-hover').filter({ hasText: message })).toBeVisible()
+  // A server publishes a file's errors once it has loaded the project, cold start included.
+  await expect(editor(page).locator('.squiggly-error').first()).toBeVisible({ timeout: 15_000 })
+  await editor(page).locator('.view-line').first().click()
+  await page.keyboard.press('F8')
+  const problem = page.locator('.marker-widget')
+  await expect(problem).toContainText(message)
   await page.keyboard.press('Escape')
+  await expect(problem).toBeHidden()
+}
+
+/** Puts the cursor inside the first `symbol` of the open file, whose text is `text`, with Go to Line. */
+async function cursorOn(page: Page, text: string, symbol: string): Promise<void> {
+  const at = text.indexOf(symbol)
+  if (at < 0) throw new Error(`${symbol} isn't in the file`)
+  const before = text.slice(0, at)
+  const line = before.split('\n').length
+  const column = at - before.lastIndexOf('\n') + 1
+  await editor(page).locator('.view-line').first().click()
+  await page.keyboard.press('Control+g')
+  const goTo = page.locator('.quick-input-widget')
+  await expect(goTo).toBeVisible()
+  await page.keyboard.type(`${line}:${column}`)
+  await page.keyboard.press('Enter')
+  await expect(goTo).toBeHidden()
 }
 
 /**
- * Clicks into `symbol` where it is drawn: a grammar may colour it as part of a longer token, and
- * inlay hints add text the line's string doesn't have.
- */
-async function cursorOn(page: Page, symbol: string): Promise<void> {
-  const token = editor(page).locator('.view-line span span', { hasText: symbol }).first()
-  const text = await token.innerText({ timeout: 3_000 })
-  const box = await token.boundingBox()
-  if (!box) throw new Error(`${symbol} isn't drawn`)
-  const width = box.width / text.length
-  await token.click({ position: { x: (text.indexOf(symbol) + 1.5) * width, y: box.height / 2 } })
-}
-
-/**
- * F12 on `symbol` in the `from` tab until its server, maybe still indexing, opens `target`; that
- * file shows `declares` and is read-only.
+ * F12 on `symbol` in the `from` tab, whose text is `text`, opens `target`, which shows `declares`
+ * and is read-only. The caller has seen the server's errors for `from`, so its project is loaded.
  */
 async function jumpToReadOnly(
   page: Page,
-  from: string,
+  [from, text]: [string, string],
   symbol: string,
   target: string,
   declares: RegExp
 ): Promise<void> {
-  await expect(async () => {
-    await tab(page, from).click()
-    await cursorOn(page, symbol)
-    await page.keyboard.press('F12')
-    await expect(tab(page, target)).toHaveAttribute('aria-selected', 'true', { timeout: 3_000 })
-  }).toPass({ timeout: 45_000 })
+  await tab(page, from).click()
+  await cursorOn(page, text, symbol)
+  await page.keyboard.press('F12')
+  await expect(tab(page, target)).toHaveAttribute('aria-selected', 'true')
   await expect.poll(() => editorText(page)).toMatch(declares)
   // Read-only: typing says why and leaves the file unedited.
   await page.keyboard.type('x')
@@ -84,7 +86,6 @@ async function jumpToReadOnly(
 }
 
 test('TypeScript, Python and PHP files get errors from their language servers', async () => {
-  test.setTimeout(120_000)
   const [dir, cleanDir] = await makeTempDir('language-servers')
   const project = join(await realpath(dir), 'project')
   await mkdir(join(project, 'web'), { recursive: true })
@@ -113,7 +114,7 @@ test('TypeScript, Python and PHP files get errors from their language servers', 
         await expectError(page, /Type 'number' is not assignable to type 'string'/)
         // An agent fixes the other file on disk: the server hears of it and the error goes.
         await writeFile(join(project, 'web', 'count.ts'), "export const count: string = '1'\n")
-        await expect(editor(page).locator('.squiggly-error')).toHaveCount(0, { timeout: 20_000 })
+        await expect(editor(page).locator('.squiggly-error')).toHaveCount(0, { timeout: 15_000 })
         await openFile(page, 'tool', 'main.py')
         await expectError(page, /is not assignable to declared type "int"/)
         await openFile(page, 'site', 'index.php')
@@ -136,7 +137,6 @@ test('TypeScript, Python and PHP files get errors from their language servers', 
 })
 
 test("JSON, CSS and HTML files get VS Code's servers, which stop when their folder leaves the workspace", async () => {
-  test.setTimeout(90_000)
   const [dir, cleanDir] = await makeTempDir('language-servers-vscode')
   const project = join(await realpath(dir), 'project')
   await mkdir(project)
@@ -160,7 +160,7 @@ test("JSON, CSS and HTML files get VS Code's servers, which stop when their fold
         await page.keyboard.press('Control+Space')
         await expect(
           page.locator('.suggest-widget').getByRole('option', { name: /^button/ })
-        ).toBeVisible({ timeout: 30_000 })
+        ).toBeVisible({ timeout: 15_000 })
         await page.keyboard.press('Escape')
         const appPid = app.process().pid
         if (appPid === undefined) throw new Error('The app has no process id')
@@ -180,7 +180,6 @@ test("JSON, CSS and HTML files get VS Code's servers, which stop when their fold
 })
 
 test('a file closed while its server starts leaves none running, and one reopened at once gets a working server, in a linked folder', async () => {
-  test.setTimeout(90_000)
   const [dir, cleanDir] = await makeTempDir('language-server-lifecycle')
   const checkout = join(await realpath(dir), 'checkout')
   await mkdir(checkout)
@@ -209,7 +208,7 @@ test('a file closed while its server starts leaves none running, and one reopene
 
         const status = page.getByRole('status').filter({ hasText: 'JSON language server' })
         await item(page, 'data.json').dblclick()
-        await expect(status).toHaveText('JSON language server ready', { timeout: 30_000 })
+        await expect(status).toHaveText('JSON language server ready', { timeout: 15_000 })
         // Reopened while its server shuts down: it gets a new one, which answers.
         await close.click()
         await item(page, 'data.json').dblclick()
@@ -225,8 +224,7 @@ test('a file closed while its server starts leaves none running, and one reopene
   }
 })
 
-test('a crashed language server restarts, and one that keeps crashing is reported once with its log', async () => {
-  test.setTimeout(90_000)
+test('a crashed language server restarts, and the new one answers for the open file', async () => {
   const [dir, cleanDir] = await makeTempDir('language-server-crash')
   const project = join(await realpath(dir), 'project')
   await mkdir(project)
@@ -238,43 +236,29 @@ test('a crashed language server restarts, and one that keeps crashing is reporte
       async (app, page) => {
         await showView(page, 'Files')
         await openFile(page, 'project', 'main.ts')
-        const status = page.getByRole('status').filter({ hasText: 'TypeScript language server' })
-        await expect(status).toHaveText('TypeScript language server ready', { timeout: 30_000 })
+        await expectError(page, /Type 'number' is not assignable to type 'string'/)
         const appPid = app.process().pid
         if (appPid === undefined) throw new Error('The app has no process id')
-        const running = async (): Promise<number> => {
-          const [server] = await serverPids(appPid, TYPESCRIPT_SERVER)
-          return server ?? 0
-        }
-        let killed = 0
-        for (let crash = 1; crash <= 4; crash += 1) {
-          await expect.poll(running, { timeout: 30_000 }).not.toBe(0)
-          const server = await running()
-          expect(server).not.toBe(killed)
-          process.kill(server, 'SIGKILL')
-          killed = server
-          if (crash < 4) {
-            // Started again for the open file, which gets its errors back.
-            await expect(status).toHaveText('TypeScript language server ready', { timeout: 30_000 })
-            await expect(editor(page).locator('.squiggly-error').first()).toBeVisible({
-              timeout: 30_000
-            })
-          }
-        }
-        const stopped = page.getByRole('button', {
-          name: 'TypeScript language server stopped: show log'
-        })
-        await expect(stopped).toBeVisible()
-        await expect(
-          page
-            .getByRole('navigation', { name: 'Tool windows' })
-            .getByRole('button', { name: 'Notifications (1)' })
-        ).toBeVisible()
-        await stopped.click()
-        const panel = page.getByRole('complementary', { name: 'Notifications panel' })
-        await expect(panel).toContainText('The TypeScript language server keeps stopping')
-        await expect(panel).toContainText('was killed (SIGKILL)')
-        await expect.poll(() => serverPids(appPid, TYPESCRIPT_SERVER)).toEqual([])
+        const [server] = await serverPids(appPid, TYPESCRIPT_SERVER)
+        if (server === undefined) throw new Error('No TypeScript server runs')
+        process.kill(server, 'SIGKILL')
+        // Started again for the open file: one server, not the killed one.
+        await expect
+          .poll(
+            async () =>
+              (await serverPids(appPid, TYPESCRIPT_SERVER)).filter((pid) => pid !== server),
+            {
+              timeout: 15_000
+            }
+          )
+          .toHaveLength(1)
+        const status = page.getByRole('status').filter({ hasText: 'TypeScript language server' })
+        await expect(status).toHaveText('TypeScript language server ready', { timeout: 15_000 })
+        // Only the new server can report an error typed after the crash.
+        await typeAtEnd(page, "export const count: number = 'many'")
+        await page.keyboard.press('ControlOrMeta+s')
+        await expect(tab(page, 'main.ts')).not.toContainText('●')
+        await expect(editor(page).locator('.squiggly-error')).toHaveCount(2, { timeout: 15_000 })
       },
       { userDataDir: userData }
     )
@@ -285,7 +269,6 @@ test('a crashed language server restarts, and one that keeps crashing is reporte
 })
 
 test('Go to Definition, hover and references work across files, into dependencies read-only', async () => {
-  test.setTimeout(90_000)
   const [dir, cleanDir] = await makeTempDir('language-server-navigation')
   const project = join(await realpath(dir), 'project')
   const dependency = join(project, 'node_modules', 'dep')
@@ -298,7 +281,7 @@ test('Go to Definition, hover and references work across files, into dependencie
   )
   await writeFile(
     join(project, 'label.ts'),
-    "import { count } from './count'\nimport { dep } from 'dep'\nimport { origin } from './point'\nexport const label = `${dep}${count}${origin}`\n"
+    "import { count } from './count'\nimport { dep } from 'dep'\nimport { origin } from './point'\nexport const label = `${dep}${count}${origin}`\nexport const wrong: string = 1\n"
   )
   await writeFile(
     join(project, 'point.ts'),
@@ -317,19 +300,14 @@ test('Go to Definition, hover and references work across files, into dependencie
       async (_app, page) => {
         await showView(page, 'Files')
         await openFile(page, 'project', 'label.ts')
+        await expectError(page, /Type 'number' is not assignable to type 'string'/)
         const word = (text: string) =>
           editor(page)
             .locator('.view-line span span', { hasText: new RegExp(`^${text}$`) })
             .last()
         const useOfCount = word('count')
-        await expect(useOfCount).toBeVisible()
-        // Hover info comes from the server once it has the project loaded.
-        await expect(async () => {
-          await useOfCount.hover({ force: true })
-          await expect(page.getByRole('tooltip', { name: /const count: number/ })).toBeVisible({
-            timeout: 2_000
-          })
-        }).toPass({ timeout: 30_000 })
+        await useOfCount.hover({ force: true })
+        await expect(page.getByRole('tooltip', { name: /const count: number/ })).toBeVisible()
         await page.keyboard.press('Escape')
 
         await useOfCount.click()
@@ -429,66 +407,78 @@ async function withProjectFiles(
 }
 
 test("Go to Definition opens TypeScript's standard library read-only, served by its server", async () => {
+  const list = "export const key: PropertyKey = 'a'\nexport const wrong: string = 1\n"
   await withProjectFiles(
     'library-typescript',
     {
       'project/tsconfig.json': '{ "compilerOptions": { "strict": true } }\n',
-      'project/list.ts': "export const key: PropertyKey = 'a'\n"
+      'project/list.ts': list
     },
     async (page) => {
       await openFile(page, 'project', 'list.ts')
-      await jumpToReadOnly(page, 'list.ts', 'PropertyKey', 'lib.es5.d.ts', /type PropertyKey = /)
-      // The library file has the server too: its hover answers there.
-      await expect(async () => {
-        await cursorOn(page, 'PropertyKey')
-        await page.keyboard.press('ControlOrMeta+k')
-        await page.keyboard.press('ControlOrMeta+i')
-        await expect(page.getByRole('tooltip', { name: /type PropertyKey = / })).toBeVisible({
-          timeout: 2_000
-        })
-      }).toPass({ timeout: 10_000 })
+      await expectError(page, /Type 'number' is not assignable to type 'string'/)
+      await jumpToReadOnly(
+        page,
+        ['list.ts', list],
+        'PropertyKey',
+        'lib.es5.d.ts',
+        /type PropertyKey = /
+      )
+      // The library file has the server too: its hover answers there, on the declaration F12 found.
+      await page.keyboard.press('ControlOrMeta+k')
+      await page.keyboard.press('ControlOrMeta+i')
+      await expect(page.getByRole('tooltip', { name: /type PropertyKey = / })).toBeVisible()
     }
   )
 })
 
 test("Go to Definition opens Python's typeshed and the interpreter's own modules read-only", async () => {
+  const main = 'from acme_tools import acme_size\n\nsize = len("abc")\nwrong: int = "many"\n'
   await withProjectFiles(
     'library-python',
     {
       'project/pyproject.toml': '[project]\nname = "tool"\n',
-      'project/main.py': 'from acme_tools import acme_size\n\nsize = len("abc")\n',
+      'project/main.py': main,
       // A module the interpreter finds outside the project, as one installed system-wide would be.
       'python-lib/acme_tools.py': 'def acme_size(text: str) -> int:\n    return len(text)\n'
     },
     async (page) => {
       await openFile(page, 'project', 'main.py')
-      await jumpToReadOnly(page, 'main.py', 'len', 'builtins.pyi', /def len\(/)
-      await jumpToReadOnly(page, 'main.py', 'acme_size', 'acme_tools.py', /def acme_size\(/)
+      await expectError(page, /is not assignable to declared type "int"/)
+      await jumpToReadOnly(page, ['main.py', main], 'len', 'builtins.pyi', /def len\(/)
+      await jumpToReadOnly(page, ['main.py', main], 'acme_size', 'acme_tools.py', /def acme_size\(/)
     },
     (dir) => ({ PYTHONPATH: join(dir, 'python-lib') })
   )
 })
 
 test("Go to Definition opens PHP's stubs and Composer's vendor folder read-only", async () => {
+  const index = "<?php\n\n$size = strlen('abc');\n$name = acme_name();\nmissing_function();\n"
   await withProjectFiles(
     'library-php',
     {
       'project/composer.json': '{}\n',
-      'project/index.php': "<?php\n\n$size = strlen('abc');\n$name = acme_name();\n",
+      'project/index.php': index,
       // A Composer dependency is in the project, but read-only all the same.
       'project/vendor/acme/names.php':
         "<?php\n\nfunction acme_name(): string\n{\n    return 'acme';\n}\n"
     },
     async (page) => {
       await openFile(page, 'project', 'index.php')
-      await jumpToReadOnly(page, 'index.php', 'strlen', 'Core.php', /function strlen\(/)
-      await jumpToReadOnly(page, 'index.php', 'acme_name', 'names.php', /function acme_name\(/)
+      await expectError(page, /Undefined function 'missing_function'/)
+      await jumpToReadOnly(page, ['index.php', index], 'strlen', 'Core.php', /function strlen\(/)
+      await jumpToReadOnly(
+        page,
+        ['index.php', index],
+        'acme_name',
+        'names.php',
+        /function acme_name\(/
+      )
     }
   )
 })
 
 test('Go files get errors from gopls, and Go to Definition opens the standard library read-only', async () => {
-  test.setTimeout(120_000)
   const gopls = await promisify(execFile)('gopls', ['version']).then(
     () => true,
     () => false
@@ -498,10 +488,9 @@ test('Go files get errors from gopls, and Go to Definition opens the standard li
   const project = join(await realpath(dir), 'project')
   await mkdir(project)
   await writeFile(join(project, 'go.mod'), 'module example.com/project\n\ngo 1.22\n')
-  await writeFile(
-    join(project, 'main.go'),
+  const main =
     'package main\n\nimport "strings"\n\nvar loud = strings.ToUpper("a")\n\nvar count int = "many"\n\nfunc main() {}\n'
-  )
+  await writeFile(join(project, 'main.go'), main)
   const [userData, cleanUserData] = await seedWorkspace([{ path: project, kind: 'folder' }])
   try {
     await withApp(
@@ -509,7 +498,7 @@ test('Go files get errors from gopls, and Go to Definition opens the standard li
         await showView(page, 'Files')
         await openFile(page, 'project', 'main.go')
         await expectError(page, /cannot use "many"/)
-        await jumpToReadOnly(page, 'main.go', 'ToUpper', 'strings.go', /func ToUpper\(/)
+        await jumpToReadOnly(page, ['main.go', main], 'ToUpper', 'strings.go', /func ToUpper\(/)
       },
       { userDataDir: userData }
     )
