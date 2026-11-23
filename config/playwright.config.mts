@@ -9,5 +9,10 @@ export default defineConfig({
   workers: '50%',
   timeout: 30_000,
   forbidOnly: true,
-  reporter: process.env.CI ? 'github' : 'list'
+  reporter: process.env.CI ? 'github' : 'list',
+  projects: [
+    { name: 'app', grepInvert: /@clipboard/ },
+    // The system clipboard is one per display: tests that use it take turns.
+    { name: 'clipboard', grep: /@clipboard/, workers: 1 }
+  ]
 })

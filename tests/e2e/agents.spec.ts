@@ -260,8 +260,8 @@ test('agent launches report through the real socket and sidebar rows select exac
   }
 })
 
-test('records the event-only agent status demonstration', async () => {
-  test.skip(!demo, 'Opt-in recording')
+// With E2E_AGENT_DEMO=1 the same run is recorded as a demonstration (docs/agents/agent-launches.md).
+test('two agents move through working, needs input, background work and outcomes', async () => {
   test.skip(process.platform === 'win32', 'The agent reporting transport is Unix only')
   test.setTimeout(90_000)
   const { userDataDir, cleanup } = await seed()
