@@ -3,13 +3,15 @@ import { mkdir, realpath, writeFile } from 'node:fs/promises'
 import { execFile } from 'node:child_process'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
-import { editor, editorText, openFile, showView, tab, typeAtEnd } from './editor-page'
+import { editor, editorText, item, openFile, showView, tab, typeAtEnd } from './editor-page'
 import { makeTempDir, withApp } from './launch-app'
 import { seedWorkspace } from './workspace-seed'
 
 /** The TypeScript, Python and PHP servers' command lines. */
 const LANGUAGE_SERVERS = /tsc --lsp|langserver\.index\.js|intelephense\.js/
 const TYPESCRIPT_SERVER = /tsc --lsp/
+/** VS Code's JSON, CSS and HTML servers' command lines. */
+const VSCODE_SERVERS = /(json|css|html)ServerMain\.js/
 
 /** The app's child processes whose command line matches `match`. */
 async function serverPids(appPid: number, match: RegExp): Promise<number[]> {
@@ -75,6 +77,50 @@ test('TypeScript, Python and PHP files get errors from their language servers', 
           await page.getByRole('button', { name: `Close ${name}` }).click()
         }
         await expect.poll(() => serverPids(appPid, LANGUAGE_SERVERS)).toEqual([])
+      },
+      { userDataDir: userData }
+    )
+  } finally {
+    await cleanUserData()
+    await cleanDir()
+  }
+})
+
+test("JSON, CSS and HTML files get VS Code's servers, which stop when their folder leaves the workspace", async () => {
+  test.setTimeout(90_000)
+  const [dir, cleanDir] = await makeTempDir('language-servers-vscode')
+  const project = join(await realpath(dir), 'project')
+  await mkdir(project)
+  await writeFile(join(project, 'package.json'), '{ "name": "project" }\n')
+  await writeFile(join(project, 'data.json'), '{\n  "name": "x",\n}\n')
+  await writeFile(join(project, 'style.css'), 'a {\n  color: red;\n')
+  await writeFile(join(project, 'page.html'), '<p>hello</p>\n')
+  const [userData, cleanUserData] = await seedWorkspace([{ path: project, kind: 'folder' }])
+  try {
+    await withApp(
+      async (app, page) => {
+        await showView(page, 'Files')
+        await openFile(page, 'project', 'data.json')
+        await expectError(page, /Trailing comma/)
+        await openFile(page, 'project', 'style.css')
+        await expectError(page, /\} expected/)
+        await openFile(page, 'project', 'page.html')
+        await expect.poll(() => editorText(page)).toContain('<p>hello</p>')
+        // Tag names come from the HTML server: the page doesn't mention this one.
+        await typeAtEnd(page, '<butto')
+        await page.keyboard.press('Control+Space')
+        await expect(
+          page.locator('.suggest-widget').getByRole('option', { name: /^button/ })
+        ).toBeVisible({ timeout: 30_000 })
+        await page.keyboard.press('Escape')
+        const appPid = app.process().pid
+        if (appPid === undefined) throw new Error('The app has no process id')
+        expect(await serverPids(appPid, VSCODE_SERVERS)).toHaveLength(3)
+        await page.keyboard.press('ControlOrMeta+z')
+        await expect(tab(page, 'page.html')).not.toContainText('●')
+        await item(page, 'project').click({ button: 'right' })
+        await page.getByRole('menuitem', { name: 'Remove from Workspace' }).click()
+        await expect.poll(() => serverPids(appPid, VSCODE_SERVERS)).toEqual([])
       },
       { userDataDir: userData }
     )
@@ -157,7 +203,11 @@ test('Go to Definition, hover and references work across files, into dependencie
   )
   await writeFile(
     join(project, 'label.ts'),
-    "import { count } from './count'\nimport { dep } from 'dep'\nexport const label = `${dep}${count}`\n"
+    "import { count } from './count'\nimport { dep } from 'dep'\nimport { origin } from './point'\nexport const label = `${dep}${count}${origin}`\n"
+  )
+  await writeFile(
+    join(project, 'point.ts'),
+    'export interface Point {\n  x: number\n}\nexport const origin: Point = { x: 0 }\n'
   )
   // Never opened in a tab: the reference list reads it from disk.
   await writeFile(
@@ -198,6 +248,15 @@ test('Go to Definition, hover and references work across files, into dependencie
         await references.getByText('double.ts', { exact: true }).click()
         await expect(references).toContainText('twice = count * 2')
         await page.keyboard.press('Escape')
+
+        await tab(page, 'label.ts').click()
+        // Go to Type Definition lands on the interface, not on the constant.
+        await word('origin').click({ button: 'right' })
+        // The editor's menu takes the item it has focused, not a click straight after it opens.
+        await page.getByRole('menuitem', { name: 'Go to Type Definition' }).hover()
+        await page.keyboard.press('Enter')
+        await expect(tab(page, 'point.ts')).toHaveAttribute('aria-selected', 'true')
+        await expect(editor(page).locator('.active-line-number')).toHaveText('1')
 
         await tab(page, 'label.ts').click()
         await word('dep').click({ modifiers: ['ControlOrMeta'] })
