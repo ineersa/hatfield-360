@@ -70,9 +70,10 @@ export async function loadDocument(path: string): Promise<void> {
       setLoad(path, { status: 'ready', file: 'binary', size: file.size })
       return
     }
-    files.prime(path, file)
     // The URI's extension picks the language.
-    const reference = await monaco.editor.createModelReference(monaco.Uri.file(path))
+    const reference = await files.withPrimed(path, file, () =>
+      monaco.editor.createModelReference(monaco.Uri.file(path))
+    )
     const model = reference.object.textEditorModel
     if (!model || !tabOf(path)) {
       reference.dispose()
