@@ -15,5 +15,5 @@ Delete, don't update, tests that:
 - Assert copy text that isn't the behavior under test.
 - Test third-party behavior (React, zustand, Radix, Electron itself).
 - Reach into private state or add test-only exports, globals or code paths to production code.
-- Depend on real networks or sleep on wall-clock time.
+- Depend on real networks, or on timing in any form: sleeps, polling or retry loops (`toPass`, `expect.poll`, `vi.waitFor`), custom timeouts, time measurements, or background work whose speed varies with machine load (language servers, file watchers, child processes). A test that passes alone and fails under parallel load is pure harm.
 - Use mocks, stubs, fakes, `vi.mock`, `vi.stubGlobal` or spies standing in for a collaborator. These need explicit user authorization; without it, test through the real collaborator (integration or E2E) or don't add the test.
