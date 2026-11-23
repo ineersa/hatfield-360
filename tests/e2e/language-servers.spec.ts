@@ -45,6 +45,44 @@ async function expectError(page: Page, message: RegExp): Promise<void> {
   await page.keyboard.press('Escape')
 }
 
+/**
+ * Clicks into `symbol` where it is drawn: a grammar may colour it as part of a longer token, and
+ * inlay hints add text the line's string doesn't have.
+ */
+async function cursorOn(page: Page, symbol: string): Promise<void> {
+  const token = editor(page).locator('.view-line span span', { hasText: symbol }).first()
+  const text = await token.innerText({ timeout: 3_000 })
+  const box = await token.boundingBox()
+  if (!box) throw new Error(`${symbol} isn't drawn`)
+  const width = box.width / text.length
+  await token.click({ position: { x: (text.indexOf(symbol) + 1.5) * width, y: box.height / 2 } })
+}
+
+/**
+ * F12 on `symbol` in the `from` tab until its server, maybe still indexing, opens `target`; that
+ * file shows `declares` and is read-only.
+ */
+async function jumpToReadOnly(
+  page: Page,
+  from: string,
+  symbol: string,
+  target: string,
+  declares: RegExp
+): Promise<void> {
+  await expect(async () => {
+    await tab(page, from).click()
+    await cursorOn(page, symbol)
+    await page.keyboard.press('F12')
+    await expect(tab(page, target)).toHaveAttribute('aria-selected', 'true', { timeout: 3_000 })
+  }).toPass({ timeout: 45_000 })
+  await expect.poll(() => editorText(page)).toMatch(declares)
+  // Read-only: typing says why and leaves the file unedited.
+  await page.keyboard.type('x')
+  await expect(page.locator('.monaco-editor-overlaymessage')).toContainText('read-only')
+  await expect(tab(page, target)).not.toContainText('●')
+  await page.keyboard.press('Escape')
+}
+
 test('TypeScript, Python and PHP files get errors from their language servers', async () => {
   test.setTimeout(120_000)
   const [dir, cleanDir] = await makeTempDir('language-servers')
@@ -397,47 +435,11 @@ test("Go to Definition opens a language's own sources outside the workspace read
     await withApp(
       async (_app, page) => {
         await showView(page, 'Files')
-        /**
-         * Clicks into `symbol` where it is drawn: a grammar may colour it as part of a longer token,
-         * and inlay hints add text the line's string doesn't have.
-         */
-        const cursorOn = async (symbol: string): Promise<void> => {
-          const token = editor(page).locator('.view-line span span', { hasText: symbol }).first()
-          const text = await token.innerText({ timeout: 3_000 })
-          const box = await token.boundingBox()
-          if (!box) throw new Error(`${symbol} isn't drawn`)
-          const width = box.width / text.length
-          await token.click({
-            position: { x: (text.indexOf(symbol) + 1.5) * width, y: box.height / 2 }
-          })
-        }
-        /** F12 on `symbol` until its server, still indexing, answers with the library file. */
-        const jump = async (
-          from: string,
-          symbol: string,
-          target: string,
-          declares: RegExp
-        ): Promise<void> => {
-          await expect(async () => {
-            await tab(page, from).click()
-            await cursorOn(symbol)
-            await page.keyboard.press('F12')
-            await expect(tab(page, target)).toHaveAttribute('aria-selected', 'true', {
-              timeout: 3_000
-            })
-          }).toPass({ timeout: 45_000 })
-          await expect.poll(() => editorText(page)).toMatch(declares)
-          // Read-only: typing says why and leaves the file unedited.
-          await page.keyboard.type('x')
-          await expect(page.locator('.monaco-editor-overlaymessage')).toContainText('read-only')
-          await expect(tab(page, target)).not.toContainText('●')
-          await page.keyboard.press('Escape')
-        }
         await openFile(page, 'project', 'web', 'list.ts')
-        await jump('list.ts', 'PropertyKey', 'lib.es5.d.ts', /type PropertyKey = /)
+        await jumpToReadOnly(page, 'list.ts', 'PropertyKey', 'lib.es5.d.ts', /type PropertyKey = /)
         // The library file has the server too: its hover answers there.
         await expect(async () => {
-          await cursorOn('PropertyKey')
+          await cursorOn(page, 'PropertyKey')
           await page.keyboard.press('ControlOrMeta+k')
           await page.keyboard.press('ControlOrMeta+i')
           await expect(page.getByRole('tooltip', { name: /type PropertyKey = / })).toBeVisible({
@@ -447,13 +449,45 @@ test("Go to Definition opens a language's own sources outside the workspace read
         await page.keyboard.press('Escape')
 
         await openFile(page, 'tool', 'main.py')
-        await jump('main.py', 'len', 'builtins.pyi', /def len\(/)
-        await jump('main.py', 'acme_size', 'acme_tools.py', /def acme_size\(/)
+        await jumpToReadOnly(page, 'main.py', 'len', 'builtins.pyi', /def len\(/)
+        await jumpToReadOnly(page, 'main.py', 'acme_size', 'acme_tools.py', /def acme_size\(/)
         await openFile(page, 'site', 'index.php')
-        await jump('index.php', 'strlen', 'Core.php', /function strlen\(/)
-        await jump('index.php', 'acme_name', 'names.php', /function acme_name\(/)
+        await jumpToReadOnly(page, 'index.php', 'strlen', 'Core.php', /function strlen\(/)
+        await jumpToReadOnly(page, 'index.php', 'acme_name', 'names.php', /function acme_name\(/)
       },
       { userDataDir: userData, env: { PYTHONPATH: pythonPath } }
+    )
+  } finally {
+    await cleanUserData()
+    await cleanDir()
+  }
+})
+
+test('Go files get errors from gopls, and Go to Definition opens the standard library read-only', async () => {
+  test.setTimeout(120_000)
+  const gopls = await promisify(execFile)('gopls', ['version']).then(
+    () => true,
+    () => false
+  )
+  test.skip(!gopls, 'gopls is not installed')
+  const [dir, cleanDir] = await makeTempDir('language-server-go')
+  const project = join(await realpath(dir), 'project')
+  await mkdir(project)
+  await writeFile(join(project, 'go.mod'), 'module example.com/project\n\ngo 1.22\n')
+  await writeFile(
+    join(project, 'main.go'),
+    'package main\n\nimport "strings"\n\nvar loud = strings.ToUpper("a")\n\nvar count int = "many"\n\nfunc main() {}\n'
+  )
+  const [userData, cleanUserData] = await seedWorkspace([{ path: project, kind: 'folder' }])
+  try {
+    await withApp(
+      async (_app, page) => {
+        await showView(page, 'Files')
+        await openFile(page, 'project', 'main.go')
+        await expectError(page, /cannot use "many"/)
+        await jumpToReadOnly(page, 'main.go', 'ToUpper', 'strings.go', /func ToUpper\(/)
+      },
+      { userDataDir: userData }
     )
   } finally {
     await cleanUserData()
