@@ -13,7 +13,7 @@ import {
   tabs,
   typeAtEnd
 } from './editor-page'
-import { makeTempDir, saveScreenshot, withApp } from './launch-app'
+import { makeTempDir, requireFolderPermissions, saveScreenshot, withApp } from './launch-app'
 import { seedWorkspace } from './workspace-seed'
 
 const activeLine = (page: Page) => editor(page).locator('.line-numbers.active-line-number')
@@ -288,8 +288,8 @@ test('a closed tab can no longer write its file once the folder has left the wor
 })
 
 test('a failed save says why and keeps the changes', async () => {
-  // A read-only folder refuses the new file; Windows has no such folder mode, and root ignores it.
-  test.skip(process.platform === 'win32' || process.getuid?.() === 0, 'needs folder permissions')
+  // A read-only folder refuses the new file.
+  requireFolderPermissions()
   const [app, cleanProject] = await makeProject()
   const [userData, cleanUserData] = await seedWorkspace([{ path: app, kind: 'folder' }])
   try {

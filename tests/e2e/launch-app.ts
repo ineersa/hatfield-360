@@ -65,3 +65,9 @@ export async function saveScreenshot(page: Page, name: string): Promise<void> {
     })
   }).toPass({ timeout: 15_000 })
 }
+
+/** Tests that lock a folder need a user that folder permissions apply to: root ignores them. */
+export function requireFolderPermissions(): void {
+  if (process.getuid?.() === 0)
+    throw new Error('Run the E2E suite as a normal user: root ignores folder permissions.')
+}

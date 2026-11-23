@@ -13,7 +13,7 @@ import {
 } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { DirectoryListing } from '../../src/shared/file-tree-api'
-import { makeTempDir, saveScreenshot, withApp } from './launch-app'
+import { makeTempDir, requireFolderPermissions, saveScreenshot, withApp } from './launch-app'
 import { CLIPBOARD_TAG, keepUserClipboard } from './user-clipboard'
 import { seedWorkspace } from './workspace-seed'
 
@@ -394,10 +394,7 @@ test(
 )
 
 test("a folder that can't be listed says why and can be retried", async () => {
-  test.skip(
-    process.platform === 'win32' || process.getuid?.() === 0,
-    'unreadable folders need POSIX permissions, which root ignores'
-  )
+  requireFolderPermissions()
   const [projects, cleanProjects] = await makeProjectsDir()
   const root = join(projects, 'notes')
   const locked = join(root, 'locked')
