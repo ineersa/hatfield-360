@@ -50,7 +50,7 @@ if (token === undefined && launchId === undefined && path && bootstrapToken) {
     stat('/proc/self/ns/pid', { bigint: true })
   ])
   const reply = await send({
-    version: 2,
+    version: 1,
     kind: 'launch.register',
     bootstrapToken,
     instanceId: randomUUID(),
@@ -71,7 +71,7 @@ const sendEvent = async (event) => (await send(event)).status
 async function emit(kind, fields = {}) {
   sequence++
   last = {
-    version: 2,
+    version: 1,
     token,
     launchId,
     sessionId,

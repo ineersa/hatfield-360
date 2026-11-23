@@ -367,7 +367,7 @@ export class AgentStatusServer {
       'kind' in input &&
       input.kind === 'launch.register'
     ) {
-      if (!('version' in input) || input.version !== 2) return { ok: false, error: 'version' }
+      if (!('version' in input) || input.version !== 1) return { ok: false, error: 'version' }
       const registration = parseRegistration(input)
       return registration
         ? this.#registerManual(registration, signal)

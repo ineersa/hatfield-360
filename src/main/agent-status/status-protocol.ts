@@ -56,7 +56,7 @@ const envelope = {
   sessionEpoch: sequence
 }
 type Kind = keyof typeof events
-type Envelope = Validated<typeof envelope> & { version: 2; at?: string }
+type Envelope = Validated<typeof envelope> & { version: 1; at?: string }
 type Request = {
   [K in Kind]: Envelope & { kind: K } & Validated<(typeof events)[K]>
 }[Kind]
@@ -111,12 +111,12 @@ function kind(value: unknown): value is Kind {
 
 export function parseStatusRequest(value: unknown): Request | 'invalid' | 'version' {
   if (!record(value)) return 'invalid'
-  if (value.version !== 2) return 'version'
+  if (value.version !== 1) return 'version'
   return validRequest(value) ? value : 'invalid'
 }
 
 function validRequest(value: Record<string, unknown>): value is Request {
-  if (value.version !== 2 || !kind(value.kind)) return false
+  if (value.version !== 1 || !kind(value.kind)) return false
   const required: Record<string, Validator> = { ...envelope, ...events[value.kind] }
   const optional: Record<string, Validator> = {
     at: text(64)

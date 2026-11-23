@@ -36,7 +36,7 @@ function session(server: AgentStatusServer) {
     cwd: '/project'
   })
   const event = (sequence: number, fields: Record<string, unknown>) => ({
-    version: 2,
+    version: 1,
     launchId,
     token,
     sessionId: 'provider-session',
@@ -93,7 +93,7 @@ describe.skipIf(process.platform === 'win32')('agent status socket', () => {
     ).toEqual([accepted, { ok: false, error: 'invalid' }, { ok: false, error: 'invalid' }])
     expect(
       await send(
-        event(2, { ...start, version: 1 }),
+        event(2, { ...start, version: 2 }),
         event(2, { ...start, token: 'wrong' }),
         event(2, { ...start, cwd: '/forged' })
       )
