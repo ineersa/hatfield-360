@@ -54,9 +54,15 @@ export class DirectoryWatchers {
       // Content changes don't change the listing.
       if (event !== 'change') this.queue(path)
     })
-    // Gone between resolving and watching, or unreadable: its parent's listing shows that.
-    watcher.on('error', () => this.queue(path))
-    return new Promise((resolve) => watcher.once('ready', () => resolve()))
+    // Gone or unreadable: its listing already says so. Dropped, so a later update watches it again.
+    watcher.on('error', () => {
+      void watcher.close()
+      if (this.watchers.get(path)?.watcher === watcher) this.watchers.delete(path)
+    })
+    return new Promise((resolve) => {
+      watcher.once('ready', () => resolve())
+      watcher.once('error', () => resolve())
+    })
   }
 
   private queue(path: string): void {
