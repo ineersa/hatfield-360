@@ -8,8 +8,7 @@ import {
   type AgentSession,
   type AgentSnapshot
 } from '../../../../shared/agent-api'
-import { terminalTabControllers } from '@/components/terminal/terminal-tab-controllers'
-import { useShellLayoutStore } from '@/state/shell-layout-store'
+import { selectTerminal } from '@/components/terminal/terminal-tab-controllers'
 import { useTerminalStore } from '@/state/terminal-store'
 import { mainErrorMessage } from '@/lib/main-error-message'
 
@@ -35,16 +34,8 @@ export function useAgentSessions() {
   return { sessions: snapshot.sessions.toSorted((a, b) => b.updatedAt - a.updatedAt), error }
 }
 
-function selectTerminal(id: string): void {
-  for (const [tabId, controller] of terminalTabControllers) {
-    if (!controller.selectTerminal(id)) continue
-    useTerminalStore.getState().activateTab(tabId)
-    useShellLayoutStore.getState().showAgents()
-    return
-  }
-}
-
 function sessionDescription(session: AgentSession): string {
+  if (session.process === 'unknown') return 'Process status unavailable'
   if (session.wait) return `Needs input: ${waitLabel(session)}`
   if (session.activity === 'working') return session.tool ? `Working · ${session.tool}` : 'Working'
   if (session.activity === 'idle') return 'Idle'

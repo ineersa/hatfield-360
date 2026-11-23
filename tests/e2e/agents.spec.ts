@@ -1,7 +1,7 @@
 import type { AgentSnapshot } from '../../src/shared/agent-api'
 import type { DesktopApi } from '../../src/shared/desktop-api'
 import { expect, test, type Locator, type Page, type Video } from '@playwright/test'
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, rename, rmdir, symlink, writeFile } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 import { git, makeRepo } from './git-repository'
@@ -460,10 +460,240 @@ function expectPublicSnapshot(snapshot: AgentSnapshot): void {
       'terminalId',
       'tool',
       'updatedAt',
-      'wait'
+      'wait',
+      'worktree'
     ])
   }
 }
+
+test('agent notifications follow accepted transitions and open only the owning terminal', async () => {
+  test.skip(process.platform === 'win32', 'The agent reporting transport is Unix only')
+  const { userDataDir, cleanup } = await seed()
+  try {
+    await withApp(
+      async (_app, page) => {
+        await launch(page, 'Hatfield')
+        const hatfield = page
+          .getByRole('tabpanel', { name: 'Hatfield' })
+          .getByTestId('terminal-pane')
+        await startFocusedScenario(page, hatfield)
+        await command(page, hatfield, 'tool')
+        const bell = page.getByRole('button', { name: /^Notifications(?: \(\d+\))?$/ })
+        await expect(bell).toHaveAccessibleName('Notifications')
+        await command(page, hatfield, 'wait')
+        await expect(page.getByRole('alert', { name: 'Agent needs input' })).toBeVisible()
+        await bell.click()
+        const panel = page.getByRole('complementary', { name: 'Notifications panel' })
+        const history = panel.getByRole('listitem')
+        const needsInput = panel.getByRole('listitem', { name: 'Agent needs input' })
+        const completed = panel.getByRole('listitem', { name: 'Agent turn completed' })
+        await command(page, hatfield, 'duplicate', 'duplicate')
+        await command(page, hatfield, 'stale', 'stale')
+        await command(page, hatfield, 'child')
+        await command(page, hatfield, 'resolve')
+        await expect(needsInput).toHaveCount(1)
+        await command(page, hatfield, 'child-done')
+        const hatfieldId = await hatfield.getAttribute('data-terminal-id')
+        if (!hatfieldId) throw new Error('Hatfield terminal missing')
+        const send = (input: string) =>
+          page.evaluate(({ id, text }) => globalThis.desktop.writeTerminal(id, `${text}\r`), {
+            id: hatfieldId,
+            text: input
+          })
+        await send('child')
+        await expect(needsInput).toHaveCount(2)
+        await command(page, hatfield, 'script')
+        await command(page, hatfield, 'completed')
+        await expect(completed).toHaveCount(0)
+        await send('child-done')
+        await expect(page.getByRole('button', { name: /^Hatfield session/ })).not.toContainText(
+          'Needs input'
+        )
+        await expect(completed).toHaveCount(0)
+        await command(page, hatfield, 'child-working')
+        await command(page, hatfield, 'script-done')
+        await expect(completed).toHaveCount(0)
+        await send('child-done')
+        await expect(completed).toHaveCount(1)
+        await command(page, hatfield, 'again')
+        await command(page, hatfield, 'failed')
+        await expect(panel.getByRole('listitem', { name: 'Agent turn failed' })).toHaveCount(1)
+
+        await launch(page, 'Claude')
+        const claude = page.getByRole('tabpanel', { name: 'Claude' }).getByTestId('terminal-pane')
+        await startFocusedScenario(page, claude)
+        await command(page, claude, 'cancelled')
+        await expect(history).toHaveCount(4)
+        await expect(page.getByRole('tab', { name: 'Claude', selected: true })).toBeVisible()
+        const beforeMessage = await page.evaluate(() => globalThis.desktop.getAgentSessions())
+        const openSettings = page.getByRole('button', { name: 'Settings', exact: true })
+        const settings = page.getByRole('main', { name: 'Settings', exact: true })
+        await openSettings.click()
+        await send('message')
+        const message = panel.getByRole('listitem', { name: 'Review available' })
+        await expect(message).toContainText('Hatfield · hatfield-e2e')
+        await expect(message).toContainText('The report is ready.')
+        await expect(settings).toBeVisible()
+        expect(await page.evaluate(() => globalThis.desktop.getAgentSessions())).toEqual(
+          beforeMessage
+        )
+        await send('duplicate')
+        await message.getByRole('button', { name: 'Open terminal' }).click()
+        await expect(settings).toHaveCount(0)
+        await expect(page.getByRole('tab', { name: 'Hatfield', selected: true })).toBeVisible()
+        await expect(hatfield.locator('textarea')).toBeFocused()
+        await expect(output(hatfield)).toContainText(
+          /ACK message: accepted.*ACK duplicate: duplicate/s
+        )
+        await expect(message).toHaveCount(1)
+        await page.getByRole('button', { name: 'Close Hatfield', exact: true }).click()
+        await openSettings.click()
+        await message.getByRole('button', { name: 'Open terminal' }).click()
+        await expect(
+          panel.getByRole('listitem', { name: 'Terminal no longer available' })
+        ).toBeVisible()
+        await expect(settings).toBeVisible()
+        await expect(page.getByRole('tab', { name: 'Hatfield', includeHidden: true })).toHaveCount(
+          0
+        )
+        await expect(panel.getByRole('listitem', { name: 'Agent turn failed' })).toHaveCount(1)
+      },
+      { userDataDir }
+    )
+  } finally {
+    await cleanup()
+  }
+})
+
+test('an announced child blocks completion before reporting its first turn', async () => {
+  test.skip(process.platform === 'win32', 'The agent reporting transport is Unix only')
+  const { userDataDir, cleanup } = await seed()
+  try {
+    await withApp(
+      async (_app, page) => {
+        await launch(page, 'Hatfield')
+        const pane = page.getByRole('tabpanel', { name: 'Hatfield' }).getByTestId('terminal-pane')
+        await startFocusedScenario(page, pane)
+        await page.getByRole('button', { name: 'Notifications', exact: true }).click()
+        const panel = page.getByRole('complementary', { name: 'Notifications panel' })
+        const completion = panel.getByRole('listitem', { name: 'Agent turn completed' })
+        await command(page, pane, 'child-start-only')
+        await command(page, pane, 'completed')
+        await expect(page.getByRole('button', { name: /^Hatfield session/ })).toContainText(
+          'Last turn: completed'
+        )
+        await expect(completion).toHaveCount(0)
+        await command(page, pane, 'child-done')
+        await expect(completion).toHaveCount(1)
+        await command(page, pane, 'duplicate', 'duplicate')
+        await expect(completion).toHaveCount(1)
+      },
+      { userDataDir }
+    )
+  } finally {
+    await cleanup()
+  }
+})
+
+test('an idle child with an open turn still blocks agent completion', async () => {
+  test.skip(process.platform === 'win32', 'The agent reporting transport is Unix only')
+  const { userDataDir, cleanup } = await seed()
+  try {
+    await withApp(
+      async (_app, page) => {
+        await launch(page, 'Hatfield')
+        const pane = page.getByRole('tabpanel', { name: 'Hatfield' }).getByTestId('terminal-pane')
+        await startFocusedScenario(page, pane)
+        await page.getByRole('button', { name: 'Notifications', exact: true }).click()
+        const panel = page.getByRole('complementary', { name: 'Notifications panel' })
+        const completion = panel.getByRole('listitem', { name: 'Agent turn completed' })
+        const session = page.getByRole('button', { name: /^Hatfield session/ })
+        await command(page, pane, 'child-working')
+        await command(page, pane, 'completed')
+        await expect(session).toContainText('Working · Last turn: completed')
+        await expect(completion).toHaveCount(0)
+        await command(page, pane, 'child-idle')
+        await expect(session).toContainText('Idle · Last turn: completed')
+        await expect(completion).toHaveCount(0)
+        await command(page, pane, 'child-turn-done')
+        await expect(completion).toHaveCount(1)
+        await command(page, pane, 'child-done')
+        await command(page, pane, 'duplicate', 'duplicate')
+        await expect(completion).toHaveCount(1)
+      },
+      { userDataDir }
+    )
+  } finally {
+    await cleanup()
+  }
+})
+
+test('closing an agent terminal suppresses a real hangup failure report', async () => {
+  test.skip(process.platform === 'win32', 'The agent reporting transport is Unix only')
+  const { project, userDataDir, cleanup } = await seed()
+  try {
+    await withApp(
+      async (_app, page) => {
+        await launch(page, 'Hatfield')
+        const pane = page.getByRole('tabpanel', { name: 'Hatfield' }).getByTestId('terminal-pane')
+        await startFocusedScenario(page, pane)
+        await command(page, pane, 'report-failure-on-hangup', 'armed')
+        await page.getByRole('button', { name: 'Notifications', exact: true }).click()
+        const panel = page.getByRole('complementary', { name: 'Notifications panel' })
+        await page.getByRole('button', { name: 'Close Hatfield', exact: true }).click()
+        await expect
+          .poll(() => readFile(join(project, 'hangup-report'), 'utf8').catch(() => null))
+          .toBe('accepted')
+        await expect(page.getByRole('button', { name: /^Hatfield session/ })).toContainText(
+          'Stopped · Last turn: failed'
+        )
+        await expect
+          .poll(() =>
+            page.evaluate(async () =>
+              (await globalThis.desktop.getAgentSessions()).sessions.map(
+                ({ process, outcome }) => ({ process, outcome })
+              )
+            )
+          )
+          .toEqual([{ process: 'exited', outcome: 'failed' }])
+        await expect(panel.getByText('No notifications.', { exact: true })).toBeVisible()
+      },
+      { userDataDir }
+    )
+  } finally {
+    await cleanup()
+  }
+})
+
+test('a newer main turn supersedes a pending agent completion', async () => {
+  test.skip(process.platform === 'win32', 'The agent reporting transport is Unix only')
+  const { userDataDir, cleanup } = await seed()
+  try {
+    await withApp(
+      async (_app, page) => {
+        await launch(page, 'Hatfield')
+        const pane = page.getByRole('tabpanel', { name: 'Hatfield' }).getByTestId('terminal-pane')
+        await startFocusedScenario(page, pane)
+        await page.getByRole('button', { name: 'Notifications', exact: true }).click()
+        const panel = page.getByRole('complementary', { name: 'Notifications panel' })
+        const completed = panel.getByRole('listitem', { name: 'Agent turn completed' })
+        await command(page, pane, 'script')
+        await command(page, pane, 'completed')
+        await expect(completed).toHaveCount(0)
+        await command(page, pane, 'again')
+        await command(page, pane, 'cancelled')
+        await command(page, pane, 'script-done')
+        await expect(completed).toHaveCount(0)
+        await command(page, pane, 'again')
+        await command(page, pane, 'completed')
+        await expect(completed).toHaveCount(1)
+      },
+      { userDataDir }
+    )
+  } finally {
+    await cleanup()
+  }
+})
 
 test('a project with broken Git metadata still displays its launched session', async () => {
   const { project, userDataDir, cleanup } = await seed()
@@ -572,6 +802,7 @@ test('a linked worktree launches into its own tab and publishes only public sess
               providerSessionId: 'claude-e2e',
               project: repo,
               cwd: worktree,
+              worktree,
               wait: 'permission',
               terminalId: worktreeId
             }
@@ -603,6 +834,255 @@ test('a linked worktree launches into its own tab and publishes only public sess
       await cleanup()
     }
   } finally {
+    await cleanRepo()
+  }
+})
+
+const shellQuote = (value: string) => `'${value.replaceAll("'", "'\\''")}'`
+
+test('manually launched agents follow the managed shell pane and observed directory', async () => {
+  test.skip(process.platform !== 'linux', 'Manual registration uses Linux process identity')
+  const { project, userDataDir, cleanup } = await seed()
+  const side = join(project, '..', 'side-project')
+  try {
+    await writeFile(
+      join(userDataDir, 'settings.json'),
+      JSON.stringify({
+        'terminal.gpuAcceleration': false,
+        'agents.claude': {
+          executable: '/usr/bin/env',
+          args: [
+            `H360_STATUS_BOOTSTRAP_TOKEN=${'b'.repeat(64)}`,
+            process.execPath,
+            fixture,
+            'claude',
+            'claude-e2e',
+            'split'
+          ]
+        }
+      })
+    )
+    await withApp(
+      async (_app, page) => {
+        await projectRow(page).click({ button: 'right' })
+        await page.getByRole('menuitem', { name: 'Open Terminal Here' }).click()
+        const pane = page.getByTestId('terminal-pane')
+        const run = async (session: string) => {
+          await expect(pane.locator('textarea')).toBeFocused()
+          await page.keyboard.type(
+            `cd ${shellQuote(side)} && ${shellQuote(process.execPath)} ${shellQuote(fixture)} hatfield ${session} ${session}`
+          )
+          await page.keyboard.press('Enter')
+          await expect(output(pane)).toContainText(`Scenario ready: ${session}`)
+          await command(page, pane, 'start')
+        }
+        await run('manual-first')
+        const folders = page.getByRole('list', { name: 'Workspace folders' })
+        const first = folders.getByRole('button', { name: /Hatfield session.*manual-first/ })
+        await expect(first).toContainText('Working')
+        await expect
+          .poll(async () => {
+            const snapshot = await page.evaluate(() => globalThis.desktop.getAgentSessions())
+            const session = snapshot.sessions.find(
+              (entry) => entry.providerSessionId === 'manual-first'
+            )
+            return { cwd: session?.cwd, project: session?.project }
+          })
+          .toEqual({ cwd: side, project: side })
+        await command(page, pane, 'wait')
+        await command(page, pane, 'message')
+        await page.getByRole('button', { name: /^Notifications(?: \(\d+\))?$/ }).click()
+        const panel = page.getByRole('complementary', { name: 'Notifications panel' })
+        const needsInput = panel.getByRole('listitem', { name: 'Agent needs input' })
+        const message = panel.getByRole('listitem', { name: 'Review available' })
+        await expect(needsInput).toContainText('Hatfield · manual-first')
+        await expect(message).toContainText('The report is ready.')
+        await page.getByRole('button', { name: 'Settings', exact: true }).click()
+        const settings = page.getByRole('main', { name: 'Settings', exact: true })
+        await expect(settings).toBeVisible()
+        await message.getByRole('button', { name: 'Open terminal' }).click()
+        await expect(settings).toHaveCount(0)
+        await expect(pane.locator('textarea')).toBeFocused()
+        await page.keyboard.type('quit')
+        await page.keyboard.press('Enter')
+        await expect(first).toContainText('Stopped')
+        await expect(panel.getByRole('listitem')).toHaveCount(2)
+        await run('manual-second')
+        await expect(
+          folders.getByRole('button', { name: /Hatfield session.*manual-second/ })
+        ).toContainText('Working')
+        await expect(first).toContainText('Stopped')
+        await expect(pane).toHaveCount(1)
+        await launch(page, 'Claude')
+        const explicitPane = page
+          .getByRole('tabpanel', { name: 'Claude' })
+          .getByTestId('terminal-pane')
+        await expect(output(explicitPane)).toContainText('Scenario ready: split')
+        await startFocusedScenario(page, explicitPane)
+        await expect(page.getByRole('button', { name: /^Claude session.*claude-e2e/ })).toHaveCount(
+          1
+        )
+      },
+      {
+        userDataDir,
+        env: {
+          H360_STATUS_BOOTSTRAP_TOKEN: 'a'.repeat(64),
+          H360_STATUS_TOKEN: 'invalid-inherited-explicit-token',
+          H360_STATUS_LAUNCH_ID: 'invalid-inherited-launch'
+        }
+      }
+    )
+  } finally {
+    await cleanup()
+  }
+})
+
+async function placementWorkspace(userDataDir: string, project: string, folder?: string) {
+  await writeFile(
+    join(userDataDir, 'workspaces/default.hatfield-workspace'),
+    JSON.stringify({
+      version: 1,
+      folders: [
+        { path: project, kind: 'project' },
+        ...(folder ? [{ path: folder, kind: 'folder' }] : [])
+      ]
+    })
+  )
+}
+
+async function launchManualPlacement(
+  page: Page,
+  projectName: string,
+  cwd: string,
+  session: string
+) {
+  const folders = page.getByRole('list', { name: 'Workspace folders' })
+  await folders.getByRole('listitem', { name: projectName, exact: true }).click({ button: 'right' })
+  await page.getByRole('menuitem', { name: 'Open Terminal Here' }).click()
+  const pane = page.getByTestId('terminal-pane').filter({ visible: true })
+  await expect(pane.locator('textarea')).toBeFocused()
+  await page.keyboard.type(
+    `cd ${shellQuote(cwd)} && ${shellQuote(process.execPath)} ${shellQuote(fixture)} hatfield ${session} ${session}`
+  )
+  await page.keyboard.press('Enter')
+  await expect(output(pane)).toContainText(`Scenario ready: ${session}`)
+  await command(page, pane, 'start')
+  return folders.getByRole('button', { name: `Hatfield session · ${session}` })
+}
+
+async function readManualPlacement(page: Page, sessionId: string) {
+  const snapshot = await page.evaluate(() => globalThis.desktop.getAgentSessions())
+  return snapshot.sessions.find((session) => session.providerSessionId === sessionId)
+}
+
+test('manual placement keeps a nested plain folder under its parent project', async () => {
+  test.skip(process.platform !== 'linux', 'Manual registration uses Linux process identity')
+  const { project, userDataDir, cleanup } = await seed()
+  try {
+    const src = join(project, 'src')
+    await mkdir(src)
+    await placementWorkspace(userDataDir, project, src)
+    await withApp(
+      async (_app, page) => {
+        const row = await launchManualPlacement(page, 'agent-project', src, 'nested-folder')
+        await expect
+          .poll(async () => {
+            const session = await readManualPlacement(page, 'nested-folder')
+            return { cwd: session?.cwd, project: session?.project }
+          })
+          .toEqual({ cwd: src, project })
+        const folders = page.getByRole('list', { name: 'Workspace folders' })
+        await folders.getByRole('button', { name: 'Collapse agent-project' }).click()
+        await expect(row).toHaveCount(0)
+      },
+      { userDataDir }
+    )
+  } finally {
+    await cleanup()
+  }
+})
+
+test('manual placement retains the workspace alias for a symlinked project', async () => {
+  test.skip(process.platform !== 'linux', 'Manual registration uses Linux process identity')
+  const { project, userDataDir, cleanup } = await seed()
+  try {
+    const alias = join(project, '..', 'aliased-project')
+    await symlink(project, alias, 'dir')
+    await placementWorkspace(userDataDir, alias)
+    await withApp(
+      async (_app, page) => {
+        const row = await launchManualPlacement(page, 'aliased-project', alias, 'alias')
+        await expect
+          .poll(async () => {
+            const session = await readManualPlacement(page, 'alias')
+            return { cwd: session?.cwd, project: session?.project }
+          })
+          .toEqual({ cwd: project, project: alias })
+        await expect(row).toBeVisible()
+      },
+      { userDataDir }
+    )
+  } finally {
+    await cleanup()
+  }
+})
+
+test('manual placement groups linked worktree subdirectories after Git discovery recovers', async () => {
+  test.skip(process.platform !== 'linux', 'Manual registration uses Linux process identity')
+  const { repo, projects, cleanup: cleanRepo } = await makeRepo()
+  const { userDataDir, cleanup } = await seed(repo)
+  try {
+    const tree = join(repo, 'feature')
+    git(repo, 'worktree', 'add', '-b', 'feature', tree)
+    const src = join(tree, 'src')
+    const boundary = join(repo, 'feature-other')
+    const alias = join(projects, 'feature-alias')
+    await mkdir(src)
+    await mkdir(boundary)
+    await symlink(tree, alias, 'dir')
+    const gitDir = join(repo, '.git')
+    const backup = join(repo, 'git-backup')
+    await rename(gitDir, backup)
+    await mkdir(gitDir)
+    await withApp(
+      async (_app, page) => {
+        const folders = page.getByRole('list', { name: 'Workspace folders' })
+        await expect(folders.getByRole('alert').filter({ hasText: 'Git:' })).toBeVisible()
+        const child = await launchManualPlacement(page, 'app', join(alias, 'src'), 'linked-subdir')
+        await expect(child).toBeVisible()
+        await rmdir(gitDir)
+        await rename(backup, gitDir)
+        const feature = folders.getByRole('listitem', { name: 'feature worktree', exact: true })
+        await expect(feature).toBeVisible()
+        const adjacent = feature
+          .locator('xpath=following-sibling::li[1]')
+          .getByRole('button', { name: /linked-subdir/ })
+        await expect(adjacent).toBeVisible()
+        const outside = await launchManualPlacement(page, 'app', boundary, 'boundary')
+        await expect(outside).toBeVisible()
+        await expect
+          .poll(async () => {
+            const session = await readManualPlacement(page, 'linked-subdir')
+            return { cwd: session?.cwd, project: session?.project, worktree: session?.worktree }
+          })
+          .toEqual({ cwd: src, project: repo, worktree: tree })
+        await expect
+          .poll(async () => {
+            const session = await readManualPlacement(page, 'boundary')
+            return { cwd: session?.cwd, project: session?.project, worktree: session?.worktree }
+          })
+          .toEqual({ cwd: boundary, project: repo, worktree: null })
+        await expect(adjacent).toBeVisible()
+        await folders.getByRole('button', { name: 'Collapse app' }).click()
+        await expect(child).toHaveCount(0)
+        await expect(outside).toHaveCount(0)
+        await folders.getByRole('button', { name: 'Expand app' }).click()
+        await expect(adjacent).toBeVisible()
+      },
+      { userDataDir }
+    )
+  } finally {
+    await cleanup()
     await cleanRepo()
   }
 })

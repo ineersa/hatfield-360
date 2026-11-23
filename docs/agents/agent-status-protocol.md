@@ -4,9 +4,9 @@ Hatfield 360 owns a status-only listener in Electron main. Linux/macOS use an AF
 
 ## Launch ownership
 
-Main-only `agentStatusServer` exposes `start`, `stop`, `registerLaunch({ terminalId, cwd })`, `markExited`, `revokeLaunch`, `snapshot` and `subscribe`. A trusted caller explicitly registers a launch (not an arbitrary shell); it supplies a terminal ID and cwd and receives `{ endpoint, launchId, token }`. There is no registration command on the socket. Main must call `markExited` on app-observed exit (or failed spawn); it disables credentials while retaining the last observation. Call `revokeLaunch` to discard the record. Neither `turn.ended` nor `session.ended` can change process status. An active registration is not proof a spawn succeeded. Exited records count against the launch limit until discarded.
+Main-only `agentStatusServer` exposes `start`, `stop`, `registerLaunch({ terminalId, cwd })`, `markExited`, `revokeLaunch`, `snapshot` and `subscribe`. A trusted caller explicitly registers a launch (not an arbitrary shell); it supplies a terminal ID and cwd and receives `{ endpoint, launchId, token }`. Explicit launch credentials are provisioned by main rather than by a socket request. Linux managed shells use `prepareBootstrap`, `bindBootstrap` and `closeBootstrap` for the separate flow below. Main must call `markExited` on app-observed exit (or failed spawn); it disables credentials while retaining the last observation. Call `revokeLaunch` to discard the record. Neither `turn.ended` nor `session.ended` can change process status. An active registration is not proof a spawn succeeded. Exited records count against the launch limit until discarded.
 
-Snapshots are detached copies and omit credentials. Subscribers receive detached changes (`registered`, `exited`, `revoked` or `event`) synchronously, with no history replay or tokens; use a snapshot for initial state. Only accepted events reach subscribers. UI notification policy is separate; explicit `notification` is for extra plain-text messages, not duplicate completion or input alerts. No renderer API, CLI, control requests, command/recipe fields, tool inputs/results, or transcripts are supported.
+Snapshots are detached copies and omit credentials. Subscribers receive detached changes (`registered`, `exited`, `revoked`, `event`, `manual-registered` or `manual-ended`) synchronously, with no history replay or tokens; use a snapshot for initial state. Only accepted events reach subscribers. UI notification policy is separate; explicit `notification` is for extra plain-text messages, not duplicate completion or input alerts. No renderer API, CLI, control requests, command/recipe fields, tool inputs/results, or transcripts are supported.
 
 A launch credential authenticates status submission _for that launch_, not the official reporter; a tool subprocess can inherit and use it. Never place credentials in logs, snapshots or notifications. Treat all reporter strings as data, never markup. The directory prevents access by other OS users but does not isolate same-user processes.
 
@@ -58,3 +58,26 @@ Report `scripts` in `session.started` only when the adapter observes actual back
 - `script.ended` adds `scriptId` and `scriptStart` (the matching start sequence). Send it whenever the job ceases execution, including failure or cancellation; it does not report a parent turn outcome.
 
 The usual credentials, session epoch, high-water sequence and retry rules apply. Jobs belong to the session epoch, not a turn or actor, so they survive parent completion. At most 32 can be active per session. A duplicate active ID or an end referring to a different start is rejected. A session boundary clears jobs; process exit retires the launch. A future scheduled job is not running until it actually starts.
+
+## Manual launch registration (Linux)
+
+Ordinary managed shells receive `H360_STATUS_ENDPOINT` and a fresh `H360_STATUS_BOOTSTRAP_TOKEN`. If either explicit credential variable (`H360_STATUS_TOKEN` or `H360_STATUS_LAUNCH_ID`) is set, use explicit credentials only; never retry via bootstrap after an explicit credential error. Without usable context, reporting must fail open without interrupting the agent. The Linux socket is created in a private directory under `/tmp`, which needs to be visible inside the sandbox. There is no Windows or macOS manual bootstrap.
+
+Send a single newline-terminated frame on a fresh Unix socket:
+
+```json
+{
+  "version": 1,
+  "kind": "launch.register",
+  "bootstrapToken": "<64 lowercase hex digits>",
+  "instanceId": "<lowercase UUID>",
+  "provider": "hatfield",
+  "owner": { "pid": 2, "pidNamespace": "4026534665", "startTicks": "1087562" }
+}
+```
+
+`provider` is `hatfield` or `claude`; no extra fields are accepted. `pid` is the owning agent's namespace-local PID (positive signed 32-bit integer); `pidNamespace` is the decimal inode from following `/proc/<owner>/ns/pid`; `startTicks` is decimal field 22 of `/proc/<owner>/stat`. These decimal strings are nonzero, at most 20 digits, with no leading zeros. `instanceId` stays stable for that owner process, including across retry and conversation changes. A Claude hook is not the owner: adapters must share the owner identity across hooks and verify their mechanism against real Claude. No fixed ancestor-depth guess, caller-supplied process tree, pane, cwd, project or launch recipe is accepted.
+
+Success: `{"ok":true,"launchId":"<UUID>","token":"<64 lowercase hex digits>"}`. Keep these fresh credentials private to the adapter; do not export them to a general child environment. Report unchanged v1 events on separate connections; the registered provider is fixed. The same process and instance get the same reply while live, including when an earlier reply was lost. Retry transient `unavailable`, `limit`, or a missed reply with the same identity, bounded by a producer deadline. `invalid` means malformed fields, `version` unsupported version, `unauthorized` unknown/revoked bootstrap, `conflict` changed identity/provider for an active instance or another instance for the same tracked process, `unavailable` unbound pane or no verifiable live owner (including inaccessible or ambiguous process observations). `limit` means rate, concurrency or capacity limit. Existing frame, connection and two-second socket deadlines apply; allow for an early disconnect. There are at most four attempts in a rolling second, one lookup in flight and four tracked owners per pane. A lookup considers at most 128 descendants. Never log tokens or include them in renderer snapshots.
+
+Main checks ancestry beneath the pinned PTY root and verifies the same nonzero controlling TTY and matching PID namespace, PID and start ticks. A credential copied into another terminal or tmux PTY is insufficient. Same-user processes with access to a pane's bootstrap context are not isolated. Main polls the pinned owner approximately once per second; verified death revokes reporting without depending on a hook or `session.ended`. Three consecutive observation errors retire reporting with unknown process status; the retired identity continues to occupy one of the bounded pane slots until closure to prevent duplicate attachment. Closing the pane/window revokes all pane credentials. Sequential owners get separate rows; independent nested owners can register if verified in the same pane. Provider subagents remain actors. Registration grants no process control, and the app never signals the reported PID.

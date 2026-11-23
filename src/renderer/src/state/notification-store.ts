@@ -21,8 +21,8 @@ type NotificationState = {
   /** Notifications whose toasts are on screen, oldest first. */
   toasts: number[]
   panelOpen: boolean
-  /** Shows a toast and adds it to the list; returns its id. */
-  notify: (input: NotificationInput) => number
+  /** Adds to history and shows a toast unless suppressed; returns its id. */
+  notify: (input: NotificationInput, options?: { showToast?: boolean }) => number
   closeToast: (id: number) => void
   /** Removes it from the list, closing its toast too. */
   dismiss: (id: number) => void
@@ -39,13 +39,16 @@ export const useNotificationStore = create<NotificationState>((set) => ({
   notifications: [],
   toasts: [],
   panelOpen: false,
-  notify: (input) => {
+  notify: (input, options) => {
     lastId += 1
     const id = lastId
     set((state) => ({
       notifications: [{ ...input, id, time: Date.now() }, ...state.notifications],
       // The open panel already shows it.
-      toasts: state.panelOpen ? state.toasts : [...state.toasts, id].slice(-MAX_TOASTS)
+      toasts:
+        state.panelOpen || options?.showToast === false
+          ? state.toasts
+          : [...state.toasts, id].slice(-MAX_TOASTS)
     }))
     return id
   },
@@ -61,8 +64,8 @@ export const useNotificationStore = create<NotificationState>((set) => ({
     set((state) => (state.panelOpen ? { panelOpen: false } : { panelOpen: true, toasts: [] }))
 }))
 
-export const notify = (input: NotificationInput): number =>
-  useNotificationStore.getState().notify(input)
+export const notify = (input: NotificationInput, options?: { showToast?: boolean }): number =>
+  useNotificationStore.getState().notify(input, options)
 
 /**
  * Follows a notice main keeps about its current state: a new notice shows a toast; once main

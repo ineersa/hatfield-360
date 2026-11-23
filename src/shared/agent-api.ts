@@ -11,8 +11,9 @@ export type AgentSession = {
   provider: AgentProvider
   providerSessionId: string | null
   project: string | null
+  worktree: string | null
   cwd: string
-  process: 'running' | 'exited'
+  process: 'running' | 'exited' | 'unknown'
   activity: 'working' | 'idle' | 'unknown'
   runningChildren: number | null
   runningScripts: number | null
@@ -22,13 +23,24 @@ export type AgentSession = {
   updatedAt: number
 }
 export type AgentSnapshot = { revision: number; sessions: AgentSession[] }
+export type AgentNotification = {
+  ownerWindowFocusedAndVisible: boolean
+  provider: AgentProvider
+  providerSessionId: string
+  terminalId: string
+  message:
+    | { kind: 'needs-input' | 'completed' | 'failed' }
+    | { kind: 'explicit'; title: string; body: string }
+}
 export const AGENT_CHANNELS = {
   launch: 'agent:launch',
   get: 'agent:get',
-  changed: 'agent:changed'
+  changed: 'agent:changed',
+  notification: 'agent:notification'
 } as const
 export type AgentApi = {
   launchAgent: (request: AgentLaunch & { cols: number; rows: number }) => Promise<TerminalSession>
   getAgentSessions: () => Promise<AgentSnapshot>
+  subscribeAgentNotifications: (callback: (notice: AgentNotification) => void) => () => void
   subscribeAgentSessions: (callback: (snapshot: AgentSnapshot) => void) => () => void
 }

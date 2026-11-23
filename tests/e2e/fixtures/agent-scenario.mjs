@@ -1,16 +1,15 @@
+import { randomUUID } from 'node:crypto'
+import { readFile, stat, writeFile } from 'node:fs/promises'
+import { join } from 'node:path'
 import { createConnection } from 'node:net'
 import { createInterface } from 'node:readline'
 
-const {
+let {
   H360_STATUS_ENDPOINT: path,
   H360_STATUS_TOKEN: token,
   H360_STATUS_LAUNCH_ID: launchId
 } = process.env
 const [provider = 'hatfield', sessionId = 'demo', marker = 'demo'] = process.argv.slice(2)
-if (!path || !token || !launchId) {
-  console.error('This demo must be launched as an agent from Hatfield 360.')
-  process.exit(1)
-}
 let sequence = 0
 let last
 let turn
@@ -34,13 +33,38 @@ const send = (event) =>
       socket.destroy()
       try {
         const reply = JSON.parse(buffer.split('\n')[0])
-        if (reply.ok) resolve(reply.status)
+        if (reply.ok) resolve(reply)
         else reject(new Error(`Status rejected: ${reply.error}`))
       } catch (error) {
         reject(error)
       }
     })
   })
+const bootstrapToken = process.env.H360_STATUS_BOOTSTRAP_TOKEN
+if (token === undefined && launchId === undefined && path && bootstrapToken) {
+  const [processStat, namespace] = await Promise.all([
+    readFile('/proc/self/stat', 'utf8'),
+    stat('/proc/self/ns/pid', { bigint: true })
+  ])
+  const reply = await send({
+    version: 1,
+    kind: 'launch.register',
+    bootstrapToken,
+    instanceId: randomUUID(),
+    provider,
+    owner: {
+      pid: process.pid,
+      pidNamespace: namespace.ino.toString(),
+      startTicks: processStat.slice(processStat.lastIndexOf(') ') + 2).split(' ')[19]
+    }
+  })
+  ;({ token, launchId } = reply)
+}
+if (!path || !token || !launchId) {
+  console.error('This demo requires Hatfield 360 reporting credentials.')
+  process.exit(1)
+}
+const sendEvent = async (event) => (await send(event)).status
 async function emit(kind, fields = {}) {
   sequence++
   last = {
@@ -54,7 +78,7 @@ async function emit(kind, fields = {}) {
     kind,
     ...fields
   }
-  return send(last)
+  return sendEvent(last)
 }
 
 print(`Scenario ready: ${marker}`)
@@ -71,6 +95,7 @@ for await (const command of input) {
             'waits',
             'actors',
             'session-end',
+            'notifications',
             ...(provider === 'hatfield' ? ['scripts'] : [])
           ]
         })
@@ -102,11 +127,31 @@ for await (const command of input) {
       case 'script-done':
         reply = await emit('script.ended', { scriptId: 'background', scriptStart })
         break
+      case 'report-failure-on-hangup':
+        process.once('SIGHUP', () => {
+          void emit('turn.ended', { ...turn, outcome: 'failed' })
+            .then((status) => writeFile(join(process.cwd(), 'hangup-report'), status))
+            .then(
+              () => process.exit(0),
+              (error) => {
+                console.error(error)
+                process.exit(1)
+              }
+            )
+        })
+        reply = 'armed'
+        break
+      case 'child-start-only':
       case 'child-working':
       case 'child': {
         const actor = { actorId: 'child', actorStart: sequence + 1 }
-        await emit('actor.started', { actorId: actor.actorId, parentId: 'main', parentStart: 1 })
+        reply = await emit('actor.started', {
+          actorId: actor.actorId,
+          parentId: 'main',
+          parentStart: 1
+        })
         childTurn = { ...actor, turnId: 'child-turn', turnStart: sequence + 1 }
+        if (command === 'child-start-only') break
         reply = await emit('turn.started', { ...actor, turnId: childTurn.turnId })
         if (command === 'child')
           reply = await emit('wait.started', {
@@ -122,23 +167,35 @@ for await (const command of input) {
           actorStart: childTurn.actorStart
         })
         break
+      case 'child-idle':
+        reply = await emit('activity.changed', { ...childTurn, activity: 'idle' })
+        break
+      case 'child-turn-done':
+        reply = await emit('turn.ended', { ...childTurn, outcome: 'completed' })
+        break
       case 'completed':
       case 'failed':
       case 'cancelled':
         reply = await emit('turn.ended', { ...turn, outcome: command })
         break
+      case 'message':
+        reply = await emit('notification', {
+          title: 'Review available',
+          body: 'The report is ready.'
+        })
+        break
       case 'duplicate':
-        reply = await send(last)
+        reply = await sendEvent(last)
         break
       case 'stale':
-        reply = await send({ ...initial, eventId: 'delayed-start' })
+        reply = await sendEvent({ ...initial, eventId: 'delayed-start' })
         break
       case 'quit':
         input.close()
         break
       default:
         print(
-          'Commands: start, again, tool, wait, resolve, child, child-done, completed, failed, cancelled, duplicate, stale, quit'
+          'Commands: start, again, tool, wait, resolve, child, child-start-only, child-working, child-idle, child-turn-done, child-done, completed, failed, cancelled, message, duplicate, stale, report-failure-on-hangup, quit'
         )
     }
     if (reply) print(`ACK ${command}: ${reply}`)

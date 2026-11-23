@@ -58,9 +58,46 @@ type Request = {
     (K extends 'activity.changed' ? { tool?: string } : object)
 }[Kind]
 export type StatusEvent = { [K in Kind]: Omit<Extract<Request, { kind: K }>, 'token'> }[Kind]
+const bootstrapToken = (value: unknown): value is string =>
+  typeof value === 'string' && /^[a-f0-9]{64}$/.test(value)
+const uuid = (value: unknown): value is string =>
+  typeof value === 'string' &&
+  /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(value)
+const kernelNumber = (value: unknown): value is string =>
+  typeof value === 'string' && /^[1-9][0-9]{0,19}$/.test(value)
+const manualProvider = oneOf('hatfield', 'claude')
+
+export function parseRegistration(value: Record<string, unknown>) {
+  const { bootstrapToken: token, instanceId, provider, owner } = value
+  if (
+    Object.keys(value).length !== 6 ||
+    !bootstrapToken(token) ||
+    !uuid(instanceId) ||
+    !manualProvider(provider) ||
+    !record(owner) ||
+    Object.keys(owner).length !== 3 ||
+    !sequence(owner.pid) ||
+    owner.pid > 0x7fffffff ||
+    !kernelNumber(owner.pidNamespace) ||
+    !kernelNumber(owner.startTicks)
+  )
+    return undefined
+  return {
+    token,
+    instanceId,
+    provider,
+    owner: { pid: owner.pid, pidNamespace: owner.pidNamespace, startTicks: owner.startTicks }
+  }
+}
+
+export type Registration = NonNullable<ReturnType<typeof parseRegistration>>
+
 export type StatusReply =
   | { ok: true; status: 'accepted' | 'duplicate' | 'stale' }
-  | { ok: false; error: 'invalid' | 'version' | 'unauthorized' | 'conflict' | 'state' | 'limit' }
+  | {
+      ok: false
+      error: 'invalid' | 'version' | 'unauthorized' | 'conflict' | 'state' | 'limit' | 'unavailable'
+    }
 
 function record(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
