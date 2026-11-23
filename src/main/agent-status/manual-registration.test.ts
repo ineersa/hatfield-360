@@ -54,7 +54,7 @@ it.skipIf(process.platform !== 'linux')(
       const first = await owner(shell)
       const foreign = await owner(other)
       const request = {
-        version: 1,
+        version: 2,
         kind: 'launch.register',
         bootstrapToken: bootstrap.token,
         instanceId: randomUUID(),
@@ -62,6 +62,7 @@ it.skipIf(process.platform !== 'linux')(
         owner: first
       }
       const send = (value: object) => register(bootstrap.endpoint, value)
+      expect(await send({ ...request, version: 1 })).toEqual({ ok: false, error: 'version' })
       expect(await send({ ...request, bootstrapToken: 'a'.repeat(64) })).toEqual({
         ok: false,
         error: 'unauthorized'

@@ -50,10 +50,12 @@ must not appear live merely because their records survived a restart.
 
 ## Honest information and limits
 
-The status protocol separates process lifetime, activity, waits, turn outcome and
-children. A completed turn is not process exit; a child's wait can outlive its
-parent's turn. Missing reporting means status unavailable, not fabricated work or
-success. Best-effort delivery cannot guarantee live-state convergence.
+The status protocol separates process lifetime from the current main response,
+attention and background counts. A completed response is not process exit. The
+session turns green and notifies once only when that response is finished, the
+subagent count is known to be zero, and no input is needed. Background scripts
+have a separate indicator and do not block completion. Missing reporting never
+implies success. Best-effort delivery cannot guarantee live-state convergence.
 
 The current protocol supplies provider identity, tool name and wait category, but
 not session titles or free-form questions. Use honest fallbacks unless an explicit

@@ -16,31 +16,35 @@ const oneOf =
   <const T extends string>(...values: T[]) =>
   (value: unknown): value is T =>
     values.some((candidate) => candidate === value)
-const capability = oneOf('waits', 'actors', 'notifications', 'session-end', 'scripts')
-type Capability = 'waits' | 'actors' | 'notifications' | 'session-end' | 'scripts'
-const capabilities = (value: unknown): value is Capability[] =>
-  Array.isArray(value) &&
-  value.length <= 5 &&
-  value.every(capability) &&
-  new Set(value).size === value.length
-const actor = { actorId: id, actorStart: sequence }
-const turn = { ...actor, turnId: id, turnStart: sequence }
+function shape<T extends Record<string, Validator>>(fields: T) {
+  return (value: unknown): value is Validated<T> =>
+    record(value) &&
+    Object.keys(value).length === Object.keys(fields).length &&
+    Object.entries(fields).every(
+      ([key, validate]) => Object.hasOwn(value, key) && validate(value[key])
+    )
+}
+const nullable =
+  <T>(validate: (value: unknown) => value is T) =>
+  (value: unknown): value is T | null =>
+    value === null || validate(value)
+const count = (value: unknown): value is number =>
+  typeof value === 'number' && Number.isInteger(value) && value >= 0 && value <= 1024
+const provider = oneOf('hatfield', 'claude')
+const snapshotFields = {
+  provider,
+  turn: nullable(
+    shape({ id, status: oneOf('working', 'completed', 'failed', 'cancelled', 'unknown') })
+  ),
+  attention: nullable(shape({ id, reason: oneOf('permission', 'question', 'external-input') })),
+  activeSubagents: nullable(count),
+  backgroundScripts: nullable(count),
+  tool: nullable(text(128))
+}
+export type SessionTelemetry = Validated<typeof snapshotFields>
 const events = {
-  'session.started': { provider: id, capabilities },
+  'session.snapshot': snapshotFields,
   'session.ended': {},
-  'actor.started': { actorId: id, parentId: id, parentStart: sequence },
-  'actor.ended': actor,
-  'script.started': { scriptId: id },
-  'script.ended': { scriptId: id, scriptStart: sequence },
-  'turn.started': { ...actor, turnId: id },
-  'turn.ended': { ...turn, outcome: oneOf('completed', 'failed', 'cancelled', 'unknown') },
-  'activity.changed': { ...turn, activity: oneOf('working', 'idle') },
-  'wait.started': {
-    ...turn,
-    waitId: id,
-    reason: oneOf('permission', 'question', 'external-input')
-  },
-  'wait.resolved': { ...turn, waitId: id, waitStart: sequence },
   notification: { title: text(200), body: text(2000) }
 }
 const envelope = {
@@ -52,10 +56,9 @@ const envelope = {
   sessionEpoch: sequence
 }
 type Kind = keyof typeof events
-type Envelope = Validated<typeof envelope> & { version: 1; at?: string }
+type Envelope = Validated<typeof envelope> & { version: 2; at?: string }
 type Request = {
-  [K in Kind]: Envelope & { kind: K } & Validated<(typeof events)[K]> &
-    (K extends 'activity.changed' ? { tool?: string } : object)
+  [K in Kind]: Envelope & { kind: K } & Validated<(typeof events)[K]>
 }[Kind]
 export type StatusEvent = { [K in Kind]: Omit<Extract<Request, { kind: K }>, 'token'> }[Kind]
 const bootstrapToken = (value: unknown): value is string =>
@@ -65,15 +68,14 @@ const uuid = (value: unknown): value is string =>
   /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(value)
 const kernelNumber = (value: unknown): value is string =>
   typeof value === 'string' && /^[1-9][0-9]{0,19}$/.test(value)
-const manualProvider = oneOf('hatfield', 'claude')
 
 export function parseRegistration(value: Record<string, unknown>) {
-  const { bootstrapToken: token, instanceId, provider, owner } = value
+  const { bootstrapToken: token, instanceId, provider: providerId, owner } = value
   if (
     Object.keys(value).length !== 6 ||
     !bootstrapToken(token) ||
     !uuid(instanceId) ||
-    !manualProvider(provider) ||
+    !provider(providerId) ||
     !record(owner) ||
     Object.keys(owner).length !== 3 ||
     !sequence(owner.pid) ||
@@ -85,7 +87,7 @@ export function parseRegistration(value: Record<string, unknown>) {
   return {
     token,
     instanceId,
-    provider,
+    provider: providerId,
     owner: { pid: owner.pid, pidNamespace: owner.pidNamespace, startTicks: owner.startTicks }
   }
 }
@@ -109,16 +111,15 @@ function kind(value: unknown): value is Kind {
 
 export function parseStatusRequest(value: unknown): Request | 'invalid' | 'version' {
   if (!record(value)) return 'invalid'
-  if (value.version !== 1) return 'version'
+  if (value.version !== 2) return 'version'
   return validRequest(value) ? value : 'invalid'
 }
 
 function validRequest(value: Record<string, unknown>): value is Request {
-  if (value.version !== 1 || !kind(value.kind)) return false
+  if (value.version !== 2 || !kind(value.kind)) return false
   const required: Record<string, Validator> = { ...envelope, ...events[value.kind] }
   const optional: Record<string, Validator> = {
-    at: text(64),
-    ...(value.kind === 'activity.changed' ? { tool: text(128) } : {})
+    at: text(64)
   }
   if (
     !Object.entries(required).every(
@@ -130,5 +131,7 @@ function validRequest(value: Record<string, unknown>): value is Request {
     if (key === 'version' || key === 'kind' || Object.hasOwn(required, key)) continue
     if (!Object.hasOwn(optional, key) || !optional[key]?.(value[key])) return false
   }
-  return true
+  return (
+    sequence(value.sessionEpoch) && sequence(value.sequence) && value.sessionEpoch <= value.sequence
+  )
 }

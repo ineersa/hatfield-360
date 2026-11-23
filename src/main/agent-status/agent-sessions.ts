@@ -212,28 +212,22 @@ export function trackAgentSessions(
       }
       if (change.event.kind === 'notification') return
     }
-    const turn = trusted?.actors.get('main')?.turn
-    const waits =
-      trusted && !trusted.ended
-        ? [...trusted.actors.values()].flatMap((actor) => [...(actor.turn?.waits.values() ?? [])])
-        : []
     if (trusted) session.providerSessionId = trusted.id
-    const live = trusted && !trusted.ended ? trusted : undefined
-    const working = (value: typeof turn) => value?.activity === 'working' && value.waits.size === 0
-    session.runningChildren = live?.capabilities.includes('actors')
-      ? [...live.actors].filter(([id, actor]) => id !== 'main' && working(actor.turn)).length
-      : null
-    session.runningScripts = live?.capabilities.includes('scripts') ? live.scripts.size : null
-    const mainWorking = live && working(turn)
+    const live = trusted?.telemetry
+    const status = live?.turn?.status
+    session.runningChildren = live?.activeSubagents ?? null
+    session.runningScripts = live?.backgroundScripts ?? null
     session.activity =
-      mainWorking || session.runningChildren || session.runningScripts
+      status === 'working' || (live?.activeSubagents ?? 0) > 0
         ? 'working'
-        : live && turn
+        : (status === 'completed' && live?.activeSubagents === 0) ||
+            status === 'failed' ||
+            status === 'cancelled'
           ? 'idle'
           : 'unknown'
-    session.tool = mainWorking ? (turn?.tool ?? null) : null
-    session.wait = waits[0]?.reason ?? null
-    if (trusted) session.outcome = turn?.outcome ?? null
+    session.tool = status === 'working' ? (live?.tool ?? null) : null
+    session.wait = live?.attention?.reason ?? null
+    if (live) session.outcome = status && status !== 'working' ? status : null
     session.updatedAt = Date.now()
     if (records.has(session.id)) changed(owner)
   })

@@ -367,7 +367,7 @@ export class AgentStatusServer {
       'kind' in input &&
       input.kind === 'launch.register'
     ) {
-      if (!('version' in input) || input.version !== 1) return { ok: false, error: 'version' }
+      if (!('version' in input) || input.version !== 2) return { ok: false, error: 'version' }
       const registration = parseRegistration(input)
       return registration
         ? this.#registerManual(registration, signal)
@@ -388,9 +388,13 @@ export class AgentStatusServer {
     if (launch.rate.second !== second) launch.rate = { second, count: 0 }
     if (launch.rate.count >= maxRequestsPerSecond) return { ok: false, error: 'limit' }
     launch.rate.count += 1
-    const fields = Object.entries(event).toSorted(([a], [b]) => a.localeCompare(b))
-    const digest = createHash('sha256').update(JSON.stringify(fields)).digest('hex')
-    if (launch.provider && event.kind === 'session.started' && event.provider !== launch.provider)
+    const canonical = JSON.stringify(event, (_key, value: unknown): unknown =>
+      typeof value === 'object' && value !== null
+        ? Object.fromEntries(Object.entries(value).toSorted(([a], [b]) => a.localeCompare(b)))
+        : value
+    )
+    const digest = createHash('sha256').update(canonical).digest('hex')
+    if (launch.provider && event.kind === 'session.snapshot' && event.provider !== launch.provider)
       return { ok: false, error: 'state' }
     const reply = launch.status.accept(event, digest)
     if (reply.ok && reply.status === 'accepted')
