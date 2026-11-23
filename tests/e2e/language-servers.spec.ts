@@ -1,7 +1,7 @@
 import { expect, test, type Page } from '@playwright/test'
 import { mkdir, realpath, symlink, writeFile } from 'node:fs/promises'
 import { execFile } from 'node:child_process'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { promisify } from 'node:util'
 import { editor, editorText, item, openFile, showView, tab, typeAtEnd } from './editor-page'
 import { makeTempDir, withApp } from './launch-app'
@@ -395,72 +395,96 @@ test('Go to Definition, hover and references work across files, into dependencie
   }
 })
 
-test("Go to Definition opens a language's own sources outside the workspace read-only, with their server", async () => {
-  test.setTimeout(120_000)
-  const [dir, cleanDir] = await makeTempDir('language-server-library')
-  const project = join(await realpath(dir), 'project')
-  await mkdir(join(project, 'web'), { recursive: true })
-  await mkdir(join(project, 'tool'))
-  await mkdir(join(project, 'site'))
-  await writeFile(
-    join(project, 'web', 'tsconfig.json'),
-    '{ "compilerOptions": { "strict": true } }\n'
-  )
-  await writeFile(join(project, 'web', 'list.ts'), "export const key: PropertyKey = 'a'\n")
-  await writeFile(join(project, 'tool', 'pyproject.toml'), '[project]\nname = "tool"\n')
-  await writeFile(
-    join(project, 'tool', 'main.py'),
-    'from acme_tools import acme_size\n\nsize = len("abc")\n'
-  )
-  // A module the interpreter finds outside the project, as one installed system-wide would be.
-  const pythonPath = join(await realpath(dir), 'python-lib')
-  await mkdir(pythonPath)
-  await writeFile(
-    join(pythonPath, 'acme_tools.py'),
-    'def acme_size(text: str) -> int:\n    return len(text)\n'
-  )
-  await writeFile(join(project, 'site', 'composer.json'), '{}\n')
-  await writeFile(
-    join(project, 'site', 'index.php'),
-    "<?php\n\n$size = strlen('abc');\n$name = acme_name();\n"
-  )
-  // A Composer dependency is in the project, but read-only all the same.
-  await mkdir(join(project, 'site', 'vendor', 'acme'), { recursive: true })
-  await writeFile(
-    join(project, 'site', 'vendor', 'acme', 'names.php'),
-    "<?php\n\nfunction acme_name(): string\n{\n    return 'acme';\n}\n"
-  )
-  const [userData, cleanUserData] = await seedWorkspace([{ path: project, kind: 'folder' }])
+/**
+ * Runs `body` in the app with `files` (paths under a temp folder) written and its `project` folder
+ * in the workspace, opened in the Files view.
+ */
+async function withProjectFiles(
+  prefix: string,
+  files: Record<string, string>,
+  body: (page: Page) => Promise<void>,
+  env: (dir: string) => Record<string, string> = () => ({})
+): Promise<void> {
+  const [made, cleanDir] = await makeTempDir(prefix)
+  const dir = await realpath(made)
+  for (const [path, text] of Object.entries(files)) {
+    await mkdir(dirname(join(dir, path)), { recursive: true })
+    await writeFile(join(dir, path), text)
+  }
+  const [userData, cleanUserData] = await seedWorkspace([
+    { path: join(dir, 'project'), kind: 'folder' }
+  ])
   try {
     await withApp(
       async (_app, page) => {
         await showView(page, 'Files')
-        await openFile(page, 'project', 'web', 'list.ts')
-        await jumpToReadOnly(page, 'list.ts', 'PropertyKey', 'lib.es5.d.ts', /type PropertyKey = /)
-        // The library file has the server too: its hover answers there.
-        await expect(async () => {
-          await cursorOn(page, 'PropertyKey')
-          await page.keyboard.press('ControlOrMeta+k')
-          await page.keyboard.press('ControlOrMeta+i')
-          await expect(page.getByRole('tooltip', { name: /type PropertyKey = / })).toBeVisible({
-            timeout: 2_000
-          })
-        }).toPass({ timeout: 30_000 })
-        await page.keyboard.press('Escape')
-
-        await openFile(page, 'tool', 'main.py')
-        await jumpToReadOnly(page, 'main.py', 'len', 'builtins.pyi', /def len\(/)
-        await jumpToReadOnly(page, 'main.py', 'acme_size', 'acme_tools.py', /def acme_size\(/)
-        await openFile(page, 'site', 'index.php')
-        await jumpToReadOnly(page, 'index.php', 'strlen', 'Core.php', /function strlen\(/)
-        await jumpToReadOnly(page, 'index.php', 'acme_name', 'names.php', /function acme_name\(/)
+        await body(page)
       },
-      { userDataDir: userData, env: { PYTHONPATH: pythonPath } }
+      { userDataDir: userData, env: env(dir) }
     )
   } finally {
     await cleanUserData()
     await cleanDir()
   }
+}
+
+test("Go to Definition opens TypeScript's standard library read-only, served by its server", async () => {
+  await withProjectFiles(
+    'library-typescript',
+    {
+      'project/tsconfig.json': '{ "compilerOptions": { "strict": true } }\n',
+      'project/list.ts': "export const key: PropertyKey = 'a'\n"
+    },
+    async (page) => {
+      await openFile(page, 'project', 'list.ts')
+      await jumpToReadOnly(page, 'list.ts', 'PropertyKey', 'lib.es5.d.ts', /type PropertyKey = /)
+      // The library file has the server too: its hover answers there.
+      await expect(async () => {
+        await cursorOn(page, 'PropertyKey')
+        await page.keyboard.press('ControlOrMeta+k')
+        await page.keyboard.press('ControlOrMeta+i')
+        await expect(page.getByRole('tooltip', { name: /type PropertyKey = / })).toBeVisible({
+          timeout: 2_000
+        })
+      }).toPass({ timeout: 10_000 })
+    }
+  )
+})
+
+test("Go to Definition opens Python's typeshed and the interpreter's own modules read-only", async () => {
+  await withProjectFiles(
+    'library-python',
+    {
+      'project/pyproject.toml': '[project]\nname = "tool"\n',
+      'project/main.py': 'from acme_tools import acme_size\n\nsize = len("abc")\n',
+      // A module the interpreter finds outside the project, as one installed system-wide would be.
+      'python-lib/acme_tools.py': 'def acme_size(text: str) -> int:\n    return len(text)\n'
+    },
+    async (page) => {
+      await openFile(page, 'project', 'main.py')
+      await jumpToReadOnly(page, 'main.py', 'len', 'builtins.pyi', /def len\(/)
+      await jumpToReadOnly(page, 'main.py', 'acme_size', 'acme_tools.py', /def acme_size\(/)
+    },
+    (dir) => ({ PYTHONPATH: join(dir, 'python-lib') })
+  )
+})
+
+test("Go to Definition opens PHP's stubs and Composer's vendor folder read-only", async () => {
+  await withProjectFiles(
+    'library-php',
+    {
+      'project/composer.json': '{}\n',
+      'project/index.php': "<?php\n\n$size = strlen('abc');\n$name = acme_name();\n",
+      // A Composer dependency is in the project, but read-only all the same.
+      'project/vendor/acme/names.php':
+        "<?php\n\nfunction acme_name(): string\n{\n    return 'acme';\n}\n"
+    },
+    async (page) => {
+      await openFile(page, 'project', 'index.php')
+      await jumpToReadOnly(page, 'index.php', 'strlen', 'Core.php', /function strlen\(/)
+      await jumpToReadOnly(page, 'index.php', 'acme_name', 'names.php', /function acme_name\(/)
+    }
+  )
 })
 
 test('Go files get errors from gopls, and Go to Definition opens the standard library read-only', async () => {
