@@ -1,82 +1,140 @@
+import { mkdir, mkdtemp, realpath, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { clientMessageVerdict, serverRequestAnswer } from './language-server-policy'
 
-const folder = join(tmpdir(), 'work', 'app')
-const root = join(folder, 'packages', 'web')
-const inside = pathToFileURL(join(folder, 'src', 'a.ts')).href
-const outside = pathToFileURL(join(tmpdir(), 'work', 'secrets', 'key.ts')).href
+let work = ''
+let folder = ''
+let root = ''
+let inside = ''
+let outside = ''
 const verdict = (message: unknown) => clientMessageVerdict(message, root, [folder], { fixed: 1 })
 
+beforeAll(async () => {
+  work = await realpath(await mkdtemp(join(tmpdir(), 'policy-')))
+  folder = join(work, 'app')
+  root = join(folder, 'packages', 'web')
+  await mkdir(join(folder, 'src'), { recursive: true })
+  await mkdir(root, { recursive: true })
+  await mkdir(join(work, 'secrets'))
+  await writeFile(join(folder, 'src', 'a.ts'), '')
+  await writeFile(join(work, 'secrets', 'key.ts'), '')
+  inside = pathToFileURL(join(folder, 'src', 'a.ts')).href
+  outside = pathToFileURL(join(work, 'secrets', 'key.ts')).href
+})
+
+afterAll(() => rm(work, { recursive: true, force: true }))
+
 describe('clientMessageVerdict', () => {
-  it('forwards document requests and responses inside the workspace folders', () => {
+  it('forwards document requests and responses inside the workspace folders', async () => {
     const hover = {
       jsonrpc: '2.0',
       id: 3,
       method: 'textDocument/hover',
       params: { textDocument: { uri: inside }, position: { line: 0, character: 1 } }
     }
-    expect(verdict(hover)).toEqual({ action: 'forward', message: hover })
+    expect(await verdict(hover)).toEqual({ action: 'forward', message: hover })
     const response = { jsonrpc: '2.0', id: 7, result: null }
-    expect(verdict(response)).toEqual({ action: 'forward', message: response })
+    expect(await verdict(response)).toEqual({ action: 'forward', message: response })
   })
 
-  it('drops any message naming a document outside the workspace folders, however deep', () => {
-    expect(
-      verdict({
+  it('forwards a file not created yet when its folder is inside', async () => {
+    const created = pathToFileURL(join(folder, 'src', 'new.ts')).href
+    const message = {
+      jsonrpc: '2.0',
+      method: 'workspace/didCreateFiles',
+      params: { files: [{ uri: created }] }
+    }
+    expect((await verdict(message)).action).toBe('forward')
+  })
+
+  it('drops a document reached through a link out of the workspace', async () => {
+    await symlink(join(work, 'secrets'), join(folder, 'linked'))
+    for (const path of [join(folder, 'linked', 'key.ts'), join(folder, 'linked', 'new.ts')]) {
+      const message = {
         jsonrpc: '2.0',
         method: 'textDocument/didOpen',
-        params: { textDocument: { uri: outside, languageId: 'typescript', version: 1, text: '' } }
-      }).action
-    ).toBe('drop')
-    expect(
-      verdict({
-        jsonrpc: '2.0',
-        method: 'workspace/didChangeWatchedFiles',
         params: {
-          changes: [
-            { uri: inside, type: 2 },
-            { uri: outside, type: 2 }
-          ]
+          textDocument: {
+            uri: pathToFileURL(path).href,
+            languageId: 'typescript',
+            version: 1,
+            text: ''
+          }
         }
-      }).action
+      }
+      expect((await verdict(message)).action).toBe('drop')
+    }
+  })
+
+  it('drops any message naming a document outside the workspace folders, however deep', async () => {
+    expect(
+      (
+        await verdict({
+          jsonrpc: '2.0',
+          method: 'textDocument/didOpen',
+          params: { textDocument: { uri: outside, languageId: 'typescript', version: 1, text: '' } }
+        })
+      ).action
     ).toBe('drop')
     expect(
-      verdict({
-        jsonrpc: '2.0',
-        id: 4,
-        method: 'workspace/executeCommand',
-        params: { command: 'open', arguments: [outside] }
-      }).action
+      (
+        await verdict({
+          jsonrpc: '2.0',
+          method: 'workspace/didChangeWatchedFiles',
+          params: {
+            changes: [
+              { uri: inside, type: 2 },
+              { uri: outside, type: 2 }
+            ]
+          }
+        })
+      ).action
+    ).toBe('drop')
+    expect(
+      (
+        await verdict({
+          jsonrpc: '2.0',
+          id: 4,
+          method: 'workspace/executeCommand',
+          params: { command: 'open', arguments: [outside] }
+        })
+      ).action
     ).toBe('drop')
     // A URI field on another scheme can't point the server anywhere either.
     expect(
-      verdict({
-        jsonrpc: '2.0',
-        id: 5,
-        method: 'textDocument/definition',
-        params: {
-          textDocument: { uri: 'https://example.com/a.ts' },
-          position: { line: 0, character: 0 }
-        }
-      }).action
+      (
+        await verdict({
+          jsonrpc: '2.0',
+          id: 5,
+          method: 'textDocument/definition',
+          params: {
+            textDocument: { uri: 'https://example.com/a.ts' },
+            position: { line: 0, character: 0 }
+          }
+        })
+      ).action
     ).toBe('drop')
   })
 
-  it("drops methods that would change the server's settings or folders", () => {
+  it("drops methods that would change the server's settings or folders, or stop it", async () => {
     for (const method of [
       'workspace/didChangeConfiguration',
-      'workspace/didChangeWorkspaceFolders'
+      'workspace/didChangeWorkspaceFolders',
+      'shutdown',
+      'exit'
     ]) {
-      expect(verdict({ jsonrpc: '2.0', method, params: { settings: {} } }).action).toBe('drop')
+      expect((await verdict({ jsonrpc: '2.0', method, params: { settings: {} } })).action).toBe(
+        'drop'
+      )
     }
-    expect(verdict({ id: 1, method: 'textDocument/hover' }).action).toBe('drop')
+    expect((await verdict({ id: 1, method: 'textDocument/hover' })).action).toBe('drop')
   })
 
-  it("rewrites initialize with main's root and options, keeping only the page's capabilities", () => {
-    const result = verdict({
+  it("rewrites initialize with main's root and options, keeping only the page's capabilities", async () => {
+    const result = await verdict({
       jsonrpc: '2.0',
       id: 0,
       method: 'initialize',

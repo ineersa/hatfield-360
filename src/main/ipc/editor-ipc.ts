@@ -26,18 +26,21 @@ function checkedPath(path: unknown): string {
 type Held = { files: Map<string, string>; watchers: OpenFileWatchers }
 
 const held = new WeakMap<WebContents, Held>()
+const pages = new Set<Held>()
 
 function heldBy(contents: WebContents): Held {
   let page = held.get(contents)
   if (!page) {
     const watchers = new OpenFileWatchers((paths) => {
       if (!contents.isDestroyed()) contents.send(EDITOR_CHANNELS.changed, paths)
-    })
+    }, rootPaths)
     page = { files: new Map(), watchers }
     held.set(contents, page)
+    pages.add(page)
     contents.once('destroyed', () => {
       watchers.close()
       held.delete(contents)
+      if (page) pages.delete(page)
     })
   }
   return page
@@ -46,7 +49,7 @@ function heldBy(contents: WebContents): Held {
 function hold(page: Held, path: string, real: string): void {
   if (page.files.get(path) === real) return
   page.files.set(path, real)
-  page.watchers.set(page.files)
+  void page.watchers.set(page.files)
 }
 
 async function read(contents: WebContents, path: string): Promise<EditorFile> {
@@ -86,11 +89,15 @@ async function write(
 }
 
 export function registerEditorIpc(): void {
+  // Which workspace folder's watcher hears of a file depends on the folders.
+  fileRoots.onChange(() => {
+    for (const page of pages) void page.watchers.set(page.files)
+  })
   handleTrusted(EDITOR_CHANNELS.read, (event, path) => read(event.sender, checkedPath(path)))
 
   handleTrusted(EDITOR_CHANNELS.release, (event, path) => {
     const page = held.get(event.sender)
-    if (page?.files.delete(checkedPath(path))) page.watchers.set(page.files)
+    if (page?.files.delete(checkedPath(path))) void page.watchers.set(page.files)
   })
 
   handleTrusted(EDITOR_CHANNELS.write, (event, path, contents, base) => {

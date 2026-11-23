@@ -11,7 +11,8 @@ import {
 } from '../../shared/language-server-api'
 import { isPlainObject } from '../../shared/plain-object'
 import { isPathInside } from '../files/path-containment'
-import { type TreeChange, TreeWatcher } from '../files/tree-watcher'
+import { type ProjectChange, watchProject } from '../files/project-watch'
+import { exitFailure } from './language-server-exit'
 import { clientMessageVerdict, serverRequestAnswer } from './language-server-policy'
 import type {
   LanguageServerDefinition,
@@ -19,8 +20,8 @@ import type {
   ServerConfiguration
 } from './language-server-registry'
 
-/** A server gets this long to exit after `shutdown` before it is killed. */
-const STOP_GRACE_MS = 2000
+/** A server gets this long to answer `shutdown`, and again to exit after `exit`, before it is killed. */
+const STOP_STEP_MS = 2000
 /** The end of a server's stderr, kept for the failure message. */
 const LOG_LINES = 40
 /** Main's own requests (its `shutdown`) use ids the page's client never does. */
@@ -36,14 +37,31 @@ type Session = {
   log: string[]
   /** The page's `initialize` request; its response means the server is ready. */
   initializeId: unknown
+  /** The page's messages still being checked, so they reach the server in order. */
+  queue: Promise<void>
+  /** Set once main starts shutting the server down; only main ever does. */
   stopping: Promise<void> | null
+  /** Resolves when the server answers main's `shutdown`. */
+  shutDown: () => void
   exited: Promise<void>
   /** Why main stopped it as failed (it refused to start), reported once it has exited. */
   failure: string | null
   /** The page's client has sent `initialized`, so the server takes other notifications. */
   initialized: boolean
-  /** Files changed on disk under the root reach the server from here, not from the page. */
-  watcher: TreeWatcher
+  /** Stops hearing of files changed on disk under the root, which reach the server from main. */
+  unwatch: () => void
+}
+
+/** LSP's file change types. */
+const FILE_CHANGE_TYPES = { add: 1, change: 2, unlink: 3 } as const
+
+/** Whether `promise` settled within `ms`. */
+async function within(promise: Promise<unknown>, ms: number): Promise<boolean> {
+  let timer: NodeJS.Timeout | undefined
+  const late = new Promise<false>((resolve) => (timer = setTimeout(() => resolve(false), ms)))
+  const settled = await Promise.race([promise.then(() => true), late])
+  clearTimeout(timer)
+  return settled
 }
 
 /** Every message written carries `jsonrpc: '2.0'`; the policy has already checked the page's. */
@@ -64,6 +82,7 @@ class LanguageServerSessions {
     definition: LanguageServerDefinition,
     command: ServerCommand,
     root: string,
+    folder: string,
     configuration: ServerConfiguration
   ): LanguageServerConnection {
     const existing = this.byKey.get(key(owner, definition.name, root))
@@ -95,10 +114,12 @@ class LanguageServerSessions {
       writer,
       log: [],
       initializeId: undefined,
+      queue: Promise.resolve(),
       stopping: null,
+      shutDown: () => undefined,
       failure: null,
       initialized: false,
-      watcher: new TreeWatcher(root, (changes) => this.filesChanged(session, changes)),
+      unwatch: watchProject(folder, (changes) => this.filesChanged(session, changes)).stop,
       exited: new Promise((resolve) => child.once('close', () => resolve()))
     }
     this.sessions.set(connection.id, session)
@@ -115,21 +136,38 @@ class LanguageServerSessions {
     child.stdin.on('error', () => undefined)
     reader.listen((message) => this.fromServer(session, message))
     child.once('close', (code, signal) => this.closed(session, code, signal))
-    void session.watcher.start()
     this.status(session, 'starting')
     return connection
   }
 
-  /** Passes a page's message on to its server, when the policy allows it. */
-  async send(owner: WebContents, id: string, message: unknown, folders: string[]): Promise<void> {
+  /** Passes a page's message on to its server, when the policy allows it, in the order sent. */
+  send(
+    owner: WebContents,
+    id: string,
+    message: unknown,
+    folders: () => Promise<string[]>
+  ): Promise<void> {
     const session = this.owned(owner, id)
-    if (!session || session.stopping) return
-    const verdict = clientMessageVerdict(
+    if (!session || session.stopping) return Promise.resolve()
+    // Checking a message takes a varying time; the server must still get them in order.
+    const sent = session.queue.then(() => this.forward(session, message, folders))
+    session.queue = sent.catch(() => undefined)
+    return sent
+  }
+
+  private async forward(
+    session: Session,
+    message: unknown,
+    folders: () => Promise<string[]>
+  ): Promise<void> {
+    if (session.stopping) return
+    const verdict = await clientMessageVerdict(
       message,
       session.connection.root,
-      folders,
+      await folders(),
       session.configuration.initializationOptions
     )
+    if (session.stopping) return
     if (verdict.action === 'drop') {
       console.warn(`Dropped a message for the ${session.definition.name} server: ${verdict.reason}`)
       return
@@ -171,7 +209,10 @@ class LanguageServerSessions {
 
   private fromServer(session: Session, message: unknown): void {
     if (!isPlainObject(message)) return
-    if (message['id'] === MAIN_REQUEST_ID) return
+    if (message['id'] === MAIN_REQUEST_ID) {
+      session.shutDown()
+      return
+    }
     const answer = serverRequestAnswer(
       message,
       session.connection.root,
@@ -202,12 +243,14 @@ class LanguageServerSessions {
   }
 
   /** Tells the server about files changed on disk, as a client watching its project would. */
-  private filesChanged(session: Session, changes: TreeChange[]): void {
+  private filesChanged(session: Session, changes: ProjectChange[]): void {
     if (!session.initialized || session.stopping) return
+    const inside = changes.filter((change) => isPathInside(change.path, session.connection.root))
+    if (inside.length === 0) return
     const params = {
-      changes: changes.map((change) => ({
+      changes: inside.map((change) => ({
         uri: pathToFileURL(change.path).href,
-        type: change.type
+        type: FILE_CHANGE_TYPES[change.kind]
       }))
     }
     void write(session.writer, { method: 'workspace/didChangeWatchedFiles', params }).catch(
@@ -215,21 +258,19 @@ class LanguageServerSessions {
     )
   }
 
+  /** LSP's shutdown: `shutdown`, its answer, then `exit`; a server slow at either step is killed. */
   private stop(session: Session): Promise<void> {
     session.stopping ??= (async () => {
       const { child, writer } = session
-      if (child.exitCode === null && child.signalCode === null) {
-        const sent = Promise.all([
-          write(writer, { id: MAIN_REQUEST_ID, method: 'shutdown' }),
-          write(writer, { method: 'exit' })
-        ]).catch(() => undefined)
-        let timer: NodeJS.Timeout | undefined
-        const graceOver = new Promise<'timeout'>((resolve) => {
-          timer = setTimeout(() => resolve('timeout'), STOP_GRACE_MS)
-        })
-        const result = await Promise.race([sent.then(() => session.exited), graceOver])
-        clearTimeout(timer)
-        if (result === 'timeout') child.kill('SIGKILL')
+      const running = (): boolean => child.exitCode === null && child.signalCode === null
+      const answered = new Promise<void>((resolve) => (session.shutDown = resolve))
+      if (running()) {
+        await write(writer, { id: MAIN_REQUEST_ID, method: 'shutdown' }).catch(() => undefined)
+        await within(Promise.race([answered, session.exited]), STOP_STEP_MS)
+      }
+      if (running()) {
+        await write(writer, { method: 'exit' }).catch(() => undefined)
+        if (!(await within(session.exited, STOP_STEP_MS))) child.kill('SIGKILL')
       }
       await session.exited
     })()
@@ -238,26 +279,19 @@ class LanguageServerSessions {
 
   private closed(session: Session, code: number | null, signal: NodeJS.Signals | null): void {
     const { connection, owner } = session
-    session.watcher.close()
+    session.unwatch()
     this.sessions.delete(connection.id)
     if (this.byKey.get(key(owner, connection.server, connection.root)) === session) {
       this.byKey.delete(key(owner, connection.server, connection.root))
     }
-    if (session.failure !== null) {
-      this.status(session, 'failed', [session.failure, ...session.log].join('\n'))
-      return
-    }
-    // A clean exit is the page's own client shutting it down.
-    if (session.stopping || code === 0) {
-      this.status(session, 'stopped')
-      return
-    }
-    const how = signal ? `was killed (${signal})` : `exited with code ${String(code)}`
-    this.status(
-      session,
-      'failed',
-      [`The ${connection.server} language server ${how}.`, ...session.log].join('\n')
-    )
+    const failure = exitFailure(connection.server, {
+      refused: session.failure,
+      requested: session.stopping !== null,
+      code,
+      signal
+    })
+    if (failure === null) this.status(session, 'stopped')
+    else this.status(session, 'failed', [failure, ...session.log].join('\n'))
   }
 
   private status(session: Session, state: LanguageServerState, message?: string): void {

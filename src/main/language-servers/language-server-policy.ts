@@ -1,7 +1,7 @@
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { basename } from 'node:path'
 import { isPlainObject } from '../../shared/plain-object'
-import { isPathInside } from '../files/path-containment'
+import { resolveTargetInsideRoots } from '../files/path-containment'
 
 type JsonObject = Record<string, unknown>
 
@@ -10,12 +10,13 @@ export type ClientVerdict =
   | { action: 'forward'; message: JsonObject }
   | { action: 'drop'; reason: string }
 
-/** Requests and notifications a page may send; anything else could reconfigure or redirect the server. */
+/**
+ * Requests and notifications a page may send; anything else could reconfigure or redirect the
+ * server. Shutting it down is main's alone, so `shutdown` and `exit` are not among them.
+ */
 const CLIENT_METHODS: (string | RegExp)[] = [
   'initialize',
   'initialized',
-  'shutdown',
-  'exit',
   '$/cancelRequest',
   '$/setTrace',
   /^textDocument\//,
@@ -54,14 +55,16 @@ function uris(value: unknown, key = ''): string[] {
   return []
 }
 
-const fileUriInside = (uri: string, roots: string[]): boolean => {
+/** Whether a `file:` URI leads inside `roots` once links are followed (a new file by its folder). */
+async function fileUriInside(uri: string, roots: string[]): Promise<boolean> {
   if (!uri.startsWith('file:')) return false
+  let path: string
   try {
-    const path = fileURLToPath(uri)
-    return roots.some((root) => isPathInside(path, root))
+    path = fileURLToPath(uri)
   } catch {
     return false
   }
+  return (await resolveTargetInsideRoots(path, roots)) !== null
 }
 
 const rootUri = (root: string): string => pathToFileURL(root).href
@@ -88,12 +91,12 @@ function initializeParams(params: unknown, root: string, options: unknown): Json
  * Checks a message from the page against the policy: its documents must be inside `folders` (the
  * workspace's). `initialize` is rewritten for the server's `root`, not checked.
  */
-export function clientMessageVerdict(
+export async function clientMessageVerdict(
   message: unknown,
   root: string,
   folders: string[],
   initializationOptions: unknown
-): ClientVerdict {
+): Promise<ClientVerdict> {
   if (!isPlainObject(message) || message['jsonrpc'] !== '2.0') {
     return { action: 'drop', reason: 'not a JSON-RPC message' }
   }
@@ -119,7 +122,9 @@ export function clientMessageVerdict(
       }
     }
   }
-  const outside = uris(message['params']).find((uri) => !fileUriInside(uri, folders))
+  const named = uris(message['params'])
+  const inside = await Promise.all(named.map((uri) => fileUriInside(uri, folders)))
+  const outside = named.find((_, index) => !inside[index])
   return outside === undefined
     ? { action: 'forward', message }
     : { action: 'drop', reason: `${outside} is outside the workspace folders` }

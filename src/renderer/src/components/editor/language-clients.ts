@@ -63,6 +63,10 @@ type Client = {
 }
 
 const clients = new Map<string, Client>()
+/** Connections given back to main, whose client waits for main to report the server gone. */
+const closing = new Map<string, Client>()
+/** Connections the page gave back; one main hands out again is already stopping, so it is asked anew. */
+const released = new Set<string>()
 /** Which connection each open file uses. */
 const fileConnections = new Map<string, string>()
 /** Files whose tab is open, so a connection that arrives after the tab closed is dropped. */
@@ -116,6 +120,12 @@ window.desktop.subscribeLanguageServerMessages((id, message) =>
   clients.get(id)?.reader.receive(message)
 )
 window.desktop.subscribeLanguageServerStatus((status: LanguageServerStatus) => {
+  const done = closing.get(status.id)
+  if (done && (status.state === 'failed' || status.state === 'stopped')) {
+    closing.delete(status.id)
+    done.reader.closed()
+    return
+  }
   const entry = clients.get(status.id)
   if (!entry) return
   const { server } = entry.connection
@@ -144,10 +154,10 @@ function startClient(connection: LanguageServerConnection): Client {
         pattern: { baseUri: root.toString(), pattern: '**/*' }
       })),
       workspaceFolder: { uri: root, name: connection.root, index: 0 },
-      // Main owns the server's lifetime; a stopped server is reported, not restarted here.
+      // Main owns the server's lifetime and reports how it ended; the client never restarts it.
       errorHandler: {
         error: () => ({ action: ErrorAction.Continue }),
-        closed: () => ({ action: CloseAction.DoNotRestart })
+        closed: () => ({ action: CloseAction.DoNotRestart, handled: true })
       }
     },
     messageTransports: { reader, writer: new ConnectionWriter(connection.id) }
@@ -160,12 +170,38 @@ function startClient(connection: LanguageServerConnection): Client {
   return entry
 }
 
+/**
+ * Gives the connection back to main, which shuts its server down. The client stays until main says
+ * the server is gone: it must not stop the server itself, and nothing may reuse the connection.
+ */
+function release(id: string): void {
+  released.add(id)
+  const entry = clients.get(id)
+  if (entry) {
+    clients.delete(id)
+    closing.set(id, entry)
+  }
+  window.desktop.disconnectLanguageServer(id).catch((error: unknown) => {
+    console.error('Stopping a language server failed:', error)
+    closing.delete(id)
+    entry?.reader.closed()
+  })
+}
+
+/** Main's connection for the file, asked again while it names one the page already gave back. */
+async function connect(path: string, languageId: string) {
+  for (;;) {
+    const result = await window.desktop.connectLanguageServer(path, languageId)
+    if (result.kind !== 'connected' || !released.has(result.connection.id)) return result
+  }
+}
+
 /** Gives an open file its language server, starting one for its project when none runs. */
 export async function attachLanguageServer(path: string, languageId: string): Promise<void> {
   if (wanted.has(path)) return
   wanted.add(path)
   try {
-    const result = await window.desktop.connectLanguageServer(path, languageId)
+    const result = await connect(path, languageId)
     if (result.kind === 'missing' && !reportedMissing.has(result.server)) {
       reportedMissing.add(result.server)
       notify({
@@ -174,7 +210,13 @@ export async function attachLanguageServer(path: string, languageId: string): Pr
         body: result.message
       })
     }
-    if (result.kind !== 'connected' || !wanted.has(path)) return
+    if (result.kind !== 'connected') return
+    const { id } = result.connection
+    if (!wanted.has(path)) {
+      // The tab closed while main started the server; it is given back unless another file uses it.
+      if (!clients.get(id)?.files.size) release(id)
+      return
+    }
     const entry = clients.get(result.connection.id) ?? startClient(result.connection)
     entry.files.add(path)
     fileConnections.set(path, result.connection.id)
@@ -196,11 +238,5 @@ export function detachLanguageServer(path: string): void {
   const entry = clients.get(id)
   if (!entry) return
   entry.files.delete(path)
-  if (entry.files.size > 0) return
-  clients.delete(id)
-  void entry.client
-    .stop()
-    .catch(() => undefined)
-    .then(() => window.desktop.disconnectLanguageServer(id))
-    .catch((error: unknown) => console.error('Stopping a language server failed:', error))
+  if (entry.files.size === 0) release(id)
 }

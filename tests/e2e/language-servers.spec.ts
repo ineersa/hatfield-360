@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
-import { mkdir, realpath, writeFile } from 'node:fs/promises'
+import { mkdir, realpath, symlink, writeFile } from 'node:fs/promises'
 import { execFile } from 'node:child_process'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
@@ -22,6 +22,17 @@ async function serverPids(appPid: number, match: RegExp): Promise<number[]> {
     .filter((row) => row !== null && Number(row[2]) === appPid && match.test(row[3] ?? ''))
     .map((row) => Number(row?.[1]))
 }
+
+/** A page script closing the open tab as soon as the editor draws a line; `stopClosing()` ends it. */
+const CLOSE_ON_FIRST_LINE = `{
+  const observer = new MutationObserver(() => {
+    if (document.querySelector('.monaco-editor .view-line')) {
+      document.querySelector('[aria-label="Close data.json"]')?.click()
+    }
+  })
+  observer.observe(document.body, { childList: true, subtree: true })
+  window.stopClosing = () => observer.disconnect()
+}`
 
 /** Hovers the editor's first error squiggle and expects the server's message in the hover. */
 async function expectError(page: Page, message: RegExp): Promise<void> {
@@ -121,6 +132,52 @@ test("JSON, CSS and HTML files get VS Code's servers, which stop when their fold
         await item(page, 'project').click({ button: 'right' })
         await page.getByRole('menuitem', { name: 'Remove from Workspace' }).click()
         await expect.poll(() => serverPids(appPid, VSCODE_SERVERS)).toEqual([])
+      },
+      { userDataDir: userData }
+    )
+  } finally {
+    await cleanUserData()
+    await cleanDir()
+  }
+})
+
+test('a file closed while its server starts leaves none running, and one reopened at once gets a working server, in a linked folder', async () => {
+  test.setTimeout(90_000)
+  const [dir, cleanDir] = await makeTempDir('language-server-lifecycle')
+  const checkout = join(await realpath(dir), 'checkout')
+  await mkdir(checkout)
+  await writeFile(join(checkout, 'package.json'), '{ "name": "project" }\n')
+  await writeFile(join(checkout, 'data.json'), '{\n  "name": "x",\n}\n')
+  // The workspace folder is a link to the project: its server runs in the real folder.
+  const project = join(await realpath(dir), 'project')
+  await symlink(checkout, project)
+  const [userData, cleanUserData] = await seedWorkspace([{ path: project, kind: 'folder' }])
+  try {
+    await withApp(
+      async (app, page) => {
+        const appPid = app.process().pid
+        if (appPid === undefined) throw new Error('The app has no process id')
+        await showView(page, 'Files')
+        await item(page, 'project').click()
+        const close = page.getByRole('button', { name: 'Close data.json' })
+        // The page closes the tab the moment its text shows, while main still starts the server.
+        await page.evaluate(CLOSE_ON_FIRST_LINE)
+        for (let round = 0; round < 6; round += 1) {
+          await item(page, 'data.json').dblclick()
+          await expect(close).toBeHidden()
+        }
+        await page.evaluate('window.stopClosing()')
+        await expect.poll(() => serverPids(appPid, VSCODE_SERVERS)).toEqual([])
+
+        const status = page.getByRole('status').filter({ hasText: 'JSON language server' })
+        await item(page, 'data.json').dblclick()
+        await expect(status).toHaveText('JSON language server ready', { timeout: 30_000 })
+        // Reopened while its server shuts down: it gets a new one, which answers.
+        await close.click()
+        await item(page, 'data.json').dblclick()
+        await expectError(page, /Trailing comma/)
+        await expect(status).toHaveText('JSON language server ready')
+        await expect.poll(() => serverPids(appPid, VSCODE_SERVERS)).toHaveLength(1)
       },
       { userDataDir: userData }
     )
@@ -247,6 +304,20 @@ test('Go to Definition, hover and references work across files, into dependencie
         // Its lines come from the file on disk, which no tab has open.
         await references.getByText('double.ts', { exact: true }).click()
         await expect(references).toContainText('twice = count * 2')
+        // A tab opened on it while the list shows it; once both are gone, its next read is fresh.
+        await openFile(page, 'double.ts')
+        await expect.poll(() => editorText(page)).toContain('twice = count * 2')
+        await page.getByRole('button', { name: 'Close double.ts' }).click()
+        await tab(page, 'count.ts').click()
+        await page.keyboard.press('Escape')
+        await expect(references).toBeHidden()
+        await writeFile(
+          join(project, 'double.ts'),
+          "import { count } from './count'\nexport const twice = count * 3\n"
+        )
+        await page.keyboard.press('Shift+F12')
+        await references.getByText('double.ts', { exact: true }).click()
+        await expect(references).toContainText('twice = count * 3')
         await page.keyboard.press('Escape')
 
         await tab(page, 'label.ts').click()
