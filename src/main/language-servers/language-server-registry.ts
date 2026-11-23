@@ -1,10 +1,8 @@
-import { app } from 'electron'
 import { constants } from 'node:fs'
-import { createHash } from 'node:crypto'
 import { access } from 'node:fs/promises'
 import { createRequire } from 'node:module'
+import { homedir } from 'node:os'
 import { delimiter, dirname, join } from 'node:path'
-import { settingsStore } from '../settings/settings-store'
 
 type JsonObject = Record<string, unknown>
 
@@ -49,17 +47,21 @@ async function virtualenvPython(root: string): Promise<string | undefined> {
   return undefined
 }
 
-/** Intelephense's index lives in the app's data folder, one per project root. */
-async function intelephenseConfiguration(root: string): Promise<ServerConfiguration> {
-  const storage = join(app.getPath('userData'), 'language-servers', 'intelephense')
-  const project = createHash('sha256').update(root).digest('hex').slice(0, 16)
-  const licenceKey = (await settingsStore.view()).values['intelephense.licenceKey']
+/**
+ * Intelephense keeps its own index and finds a key in its global storage folder; a key in
+ * `~/intelephense` (`licence.txt` or `license.txt`) is passed as a path, which it reads itself.
+ */
+async function intelephenseConfiguration(): Promise<ServerConfiguration> {
+  const folder = join(homedir(), 'intelephense')
+  let licenceKey: string | undefined
+  for (const name of ['licence.txt', 'license.txt']) {
+    if (await exists(join(folder, name))) {
+      licenceKey = join(folder, name)
+      break
+    }
+  }
   return {
-    initializationOptions: {
-      storagePath: join(storage, 'projects', project),
-      globalStoragePath: join(storage, 'global'),
-      ...(licenceKey === '' ? {} : { licenceKey })
-    },
+    ...(licenceKey === undefined ? {} : { initializationOptions: { licenceKey } }),
     settings: { intelephense: { telemetry: { enabled: false } } }
   }
 }
