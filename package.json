@@ -24,6 +24,8 @@
     "prepare": "husky"
   },
   "dependencies": {
+    "basedpyright": "1.40.2",
+    "intelephense": "1.18.5",
     "node-pty": "1.1.0",
     "typescript": "7.0.2",
     "vscode-jsonrpc": "10.0.0",

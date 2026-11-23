@@ -93,6 +93,14 @@ function agentProfile(raw: unknown): Checked<Settings['agents.hatfield']> {
   return { value: { executable, args: raw.args } }
 }
 
+function licenceKey(value: unknown): Checked<string> {
+  if (typeof value !== 'string') return { problem: 'must be a licence key' }
+  const key = value.trim()
+  // Keys are short; this keeps a pasted paragraph or control characters out of the server's options.
+  if (key.length > 200 || !/^[\x20-\x7e]*$/.test(key)) return { problem: 'must be a licence key' }
+  return { value: key }
+}
+
 const CHECKS: { [K in SettingKey]: (value: unknown) => Checked<Settings[K]> } = {
   'agents.hatfield': agentProfile,
   'agents.claude': agentProfile,
@@ -109,7 +117,8 @@ const CHECKS: { [K in SettingKey]: (value: unknown) => Checked<Settings[K]> } = 
   'workbench.iconTheme': oneOf(ICON_THEMES),
   'workbench.colorTheme': oneOf(ids(APP_THEMES)),
   'editor.colorTheme': oneOf(ids(EDITOR_THEMES)),
-  'terminal.colorTheme': oneOf(ids(TERMINAL_THEMES))
+  'terminal.colorTheme': oneOf(ids(TERMINAL_THEMES)),
+  'intelephense.licenceKey': licenceKey
 }
 
 export const isSettingKey = (key: string): key is SettingKey => Object.hasOwn(CHECKS, key)

@@ -14,6 +14,7 @@ import {
 } from '../../../../shared/settings-api'
 import { ColorThemeSettings } from './ColorThemeSettings'
 import { FONT_PICKER_ATTRIBUTE, FontPicker } from './FontPicker'
+import { LicenceKeySetting } from './LicenceKeySetting'
 import { NumberStepper } from './NumberStepper'
 import { ResetButton } from './ResetButton'
 
@@ -329,6 +330,7 @@ export function SettingsPage(): React.JSX.Element {
             description="Remove spaces and tabs at the start of each copied line. Terminal output stays unchanged."
           />
           <AgentLaunchSettings />
+          <LicenceKeySetting />
         </div>
       </div>
     </div>

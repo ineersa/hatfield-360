@@ -7,3 +7,5 @@ allowBuilds:
   electron-winstaller: false
   # Its install script only prints a funding notice (pulled in by the bundled JSON/CSS/HTML language servers).
   core-js: false
+  # Its install script only warns about dependents' version ranges (pulled in by Intelephense).
+  protobufjs: false

@@ -11,7 +11,11 @@ import {
 import { isPlainObject } from '../../shared/plain-object'
 import { isPathInside } from '../files/path-containment'
 import { clientMessageVerdict, serverRequestAnswer } from './language-server-policy'
-import type { LanguageServerDefinition, ServerCommand } from './language-server-registry'
+import type {
+  LanguageServerDefinition,
+  ServerCommand,
+  ServerConfiguration
+} from './language-server-registry'
 
 /** A server gets this long to exit after `shutdown` before it is killed. */
 const STOP_GRACE_MS = 2000
@@ -23,6 +27,7 @@ const MAIN_REQUEST_ID = 'hatfield-main-shutdown'
 type Session = {
   connection: LanguageServerConnection
   definition: LanguageServerDefinition
+  configuration: ServerConfiguration
   owner: WebContents
   child: ChildProcess
   writer: StreamMessageWriter
@@ -50,7 +55,8 @@ class LanguageServerSessions {
     owner: WebContents,
     definition: LanguageServerDefinition,
     command: ServerCommand,
-    root: string
+    root: string,
+    configuration: ServerConfiguration
   ): LanguageServerConnection {
     const existing = this.byKey.get(key(owner, definition.name, root))
     if (existing && !existing.stopping) return existing.connection
@@ -75,6 +81,7 @@ class LanguageServerSessions {
     const session: Session = {
       connection,
       definition,
+      configuration,
       owner,
       child,
       writer,
@@ -109,7 +116,7 @@ class LanguageServerSessions {
       message,
       session.connection.root,
       folders,
-      session.definition.initializationOptions
+      session.configuration.initializationOptions
     )
     if (verdict.action === 'drop') {
       console.warn(`Dropped a message for the ${session.definition.name} server: ${verdict.reason}`)
@@ -119,10 +126,10 @@ class LanguageServerSessions {
     if (method === 'initialize') session.initializeId = verdict.message['id']
     await write(session.writer, verdict.message)
     // Servers that read settings only when pushed (the JSON server) get them once started.
-    if (method === 'initialized' && session.definition.settings) {
+    if (method === 'initialized' && session.configuration.settings) {
       await write(session.writer, {
         method: 'workspace/didChangeConfiguration',
-        params: { settings: session.definition.settings }
+        params: { settings: session.configuration.settings }
       })
     }
   }
@@ -155,7 +162,7 @@ class LanguageServerSessions {
     const answer = serverRequestAnswer(
       message,
       session.connection.root,
-      session.definition.settings ?? {}
+      session.configuration.settings ?? {}
     )
     if (answer) {
       void write(session.writer, answer).catch(() => undefined)

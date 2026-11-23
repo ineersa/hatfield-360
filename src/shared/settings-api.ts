@@ -28,6 +28,8 @@ export type Settings = {
   'editor.colorTheme': EditorThemeId
   /** Terminal background, text and ANSI colours. */
   'terminal.colorTheme': TerminalThemeId
+  /** Unlocks Intelephense's premium PHP features; empty runs it in free mode. Stored as written. */
+  'intelephense.licenceKey': string
 }
 
 export type SettingKey = keyof Settings
@@ -67,7 +69,8 @@ export const DEFAULT_SETTINGS: Settings = {
   'workbench.iconTheme': 'catppuccin',
   'workbench.colorTheme': 'islands-dark',
   'editor.colorTheme': 'islands-dark',
-  'terminal.colorTheme': 'dracula'
+  'terminal.colorTheme': 'dracula',
+  'intelephense.licenceKey': ''
 }
 
 export type SettingsView = {

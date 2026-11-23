@@ -39,9 +39,16 @@ export function registerLanguageServerIpc(): void {
       if ('missing' in command)
         return { kind: 'missing', server: definition.name, message: command.missing }
       const root = await projectRoot(real, folder, definition.rootMarkers)
+      const configuration = (await definition.configure?.(root)) ?? {}
       return {
         kind: 'connected',
-        connection: languageServerSessions.connect(event.sender, definition, command, root)
+        connection: languageServerSessions.connect(
+          event.sender,
+          definition,
+          command,
+          root,
+          configuration
+        )
       }
     }
   )
