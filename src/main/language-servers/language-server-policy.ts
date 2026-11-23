@@ -12,7 +12,8 @@ export type ClientVerdict =
 
 /**
  * Requests and notifications a page may send; anything else could reconfigure or redirect the
- * server. Shutting it down is main's alone, so `shutdown` and `exit` are not among them.
+ * server. Shutting it down is main's alone, so `shutdown` and `exit` are not among them, and so is
+ * `workspace/executeCommand`: a server's commands can run programs (gopls runs `go test`).
  */
 const CLIENT_METHODS: (string | RegExp)[] = [
   'initialize',
@@ -25,7 +26,6 @@ const CLIENT_METHODS: (string | RegExp)[] = [
   /^typeHierarchy\//,
   /\/resolve$/,
   'workspace/symbol',
-  'workspace/executeCommand',
   'workspace/diagnostic',
   'workspace/didChangeWatchedFiles',
   'workspace/willCreateFiles',

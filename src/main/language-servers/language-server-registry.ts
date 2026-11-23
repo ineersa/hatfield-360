@@ -6,6 +6,7 @@ import { homedir } from 'node:os'
 import { delimiter, dirname, isAbsolute, join } from 'node:path'
 import { promisify } from 'node:util'
 import { realRoots } from '../files/path-containment'
+import { isPythonLibraryFolder, libraryFoldersBesideHome } from './library-folders'
 
 type JsonObject = Record<string, unknown>
 
@@ -138,7 +139,8 @@ const onPath =
 
 /**
  * Where Python finds modules (its standard library, site-packages, `PYTHONPATH`), as the user's
- * `python3` reports it: basedpyright resolves imports there when typeshed has no stub.
+ * `python3` reports it: basedpyright resolves imports there when typeshed has no stub. In home,
+ * only Python's own folders count.
  */
 async function pythonSources(): Promise<string[]> {
   for (const python of ['python3', 'python']) {
@@ -149,7 +151,11 @@ async function pythonSources(): Promise<string[]> {
       ])
       const paths: unknown = JSON.parse(stdout)
       if (!Array.isArray(paths)) return []
-      return paths.filter((path): path is string => typeof path === 'string' && isAbsolute(path))
+      const [home = homedir()] = await realRoots([homedir()])
+      const folders = await realRoots(
+        paths.filter((path): path is string => typeof path === 'string' && isAbsolute(path))
+      )
+      return folders.filter((folder) => isPythonLibraryFolder(folder, home))
     } catch {
       // Not installed under this name; the next one may be.
     }
@@ -269,11 +275,17 @@ const LANGUAGE_SERVERS: LanguageServerDefinition[] = [
 
 const sources = new WeakMap<LanguageServerDefinition, Promise<string[]>>()
 
-/** The server's library folders that exist, as real paths; asked once per run. */
+/** The server's library folders that exist, as real paths, none home or above it; asked once per run. */
 export function libraryRoots(definition: LanguageServerDefinition): Promise<string[]> {
   let found = sources.get(definition)
   if (!found) {
-    found = (definition.librarySources?.() ?? Promise.resolve([])).then(realRoots, () => [])
+    found = (definition.librarySources?.() ?? Promise.resolve([])).then(
+      async (folders) => {
+        const [home = homedir()] = await realRoots([homedir()])
+        return libraryFoldersBesideHome(await realRoots(folders), home)
+      },
+      () => []
+    )
     sources.set(definition, found)
   }
   return found

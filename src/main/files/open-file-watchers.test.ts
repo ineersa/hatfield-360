@@ -5,6 +5,7 @@ import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { OpenFileWatchers } from './open-file-watchers'
+import { projectCovering, watchProject } from './project-watch'
 
 describe('OpenFileWatchers', () => {
   let dir: string
@@ -112,5 +113,37 @@ describe('OpenFileWatchers', () => {
     await watchers.set(new Map([[dependency, dependency]]))
     await writeFile(dependency, 'two')
     await vi.waitFor(() => expect(sent).toContain(dependency))
+  })
+
+  it('opening a file never starts a watcher of its whole folder', async () => {
+    const notes = join(dir, 'notes.txt')
+    await writeFile(notes, 'one')
+    await watchers.set(new Map([[notes, notes]]))
+    expect(projectCovering(notes)).toBeNull()
+  })
+
+  it("hears a file through a language server's project watcher, and on its own once git ignores it", async () => {
+    const output = join(dir, 'generated', 'out.ts')
+    await mkdir(join(dir, 'generated'))
+    await writeFile(output, 'one')
+    await promisify(execFile)('git', ['init', '-q'], { cwd: dir })
+    const server = watchProject(dir, () => undefined)
+    try {
+      expect(await server.ready).toBe(true)
+      const notes = new Map([[output, output]])
+      await watchers.set(notes)
+      await writeFile(output, 'two')
+      await vi.waitFor(() => expect(sent).toContain(output))
+
+      // The project watcher stops hearing the folder; the file is watched on its own instead.
+      await writeFile(join(dir, '.gitignore'), 'generated/\n')
+      await vi.waitFor(() => expect(server.covers(output)).toBe(false))
+      await watchers.set(notes)
+      sent = []
+      await writeFile(output, 'three')
+      await vi.waitFor(() => expect(sent).toContain(output))
+    } finally {
+      server.stop()
+    }
   })
 })

@@ -133,6 +133,16 @@ describe('clientMessageVerdict', () => {
     expect((await verdict({ id: 1, method: 'textDocument/hover' })).action).toBe('drop')
   })
 
+  it("drops a server command, which can run programs (gopls' tests)", async () => {
+    const runTests = {
+      jsonrpc: '2.0',
+      id: 4,
+      method: 'workspace/executeCommand',
+      params: { command: 'gopls.run_tests', arguments: [{ URI: inside, Tests: ['TestA'] }] }
+    }
+    expect((await verdict(runTests)).action).toBe('drop')
+  })
+
   it("rewrites initialize with main's root and options, keeping only the page's capabilities", async () => {
     const result = await verdict({
       jsonrpc: '2.0',

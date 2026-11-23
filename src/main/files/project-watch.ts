@@ -21,6 +21,10 @@ type Listener = (changes: ProjectChange[]) => void
  */
 class ProjectWatch {
   readonly listeners = new Set<Listener>()
+  /** Listeners that hear changes without keeping the watcher open (open files). */
+  readonly followers = new Set<Listener>()
+  /** Watching, with git's ignored set known, so `covers` answers right. */
+  started = false
   readonly ready: Promise<boolean>
   private ignored = new Set<string>()
   private watcher: FSWatcher | null = null
@@ -43,8 +47,10 @@ class ProjectWatch {
 
   close(): void {
     this.closed = true
+    this.started = false
     if (this.timer) clearTimeout(this.timer)
     void this.watcher?.close()
+    projectsChanged()
   }
 
   private async start(): Promise<boolean> {
@@ -62,10 +68,15 @@ class ProjectWatch {
     watcher.on('unlink', (path) => this.changed({ path, kind: 'unlink', folder: false }))
     watcher.on('unlinkDir', (path) => this.changed({ path, kind: 'unlink', folder: true }))
     watcher.on('error', (error) => this.report(error))
-    return new Promise((resolve) => {
+    const ready = await new Promise<boolean>((resolve) => {
       watcher.once('ready', () => resolve(true))
       watcher.once('error', () => resolve(false))
     })
+    if (ready && !this.closed) {
+      this.started = true
+      projectsChanged()
+    }
+    return ready
   }
 
   private isIgnored(path: string): boolean {
@@ -84,7 +95,8 @@ class ProjectWatch {
       this.timer = null
       const changes = this.pending.filter((each) => !this.isIgnored(each.path))
       this.pending = []
-      if (changes.length > 0) for (const listener of this.listeners) listener(changes)
+      if (changes.length === 0) return
+      for (const listener of [...this.listeners, ...this.followers]) listener(changes)
     }, BATCH_DELAY_MS)
   }
 
@@ -94,6 +106,7 @@ class ProjectWatch {
     if (this.closed || !ignored.has(basename(folder))) return
     this.ignored.add(folder)
     this.watcher?.unwatch(folder)
+    projectsChanged()
   }
 
   private async refreshIgnored(): Promise<void> {
@@ -103,6 +116,7 @@ class ProjectWatch {
     this.ignored = now
     for (const path of before) if (!now.has(path)) this.watcher?.add(path)
     for (const path of now) if (!before.has(path)) this.watcher?.unwatch(path)
+    projectsChanged()
   }
 
   private report(error: unknown): void {
@@ -114,6 +128,43 @@ class ProjectWatch {
 }
 
 const projects = new Map<string, ProjectWatch>()
+const observers = new Set<() => void>()
+
+function projectsChanged(): void {
+  for (const observer of observers) observer()
+}
+
+/**
+ * Calls `observer` whenever what project watchers cover may have changed: one started or closed,
+ * or git's ignored set changed. Returns a function that stops it.
+ */
+export function observeProjects(observer: () => void): () => void {
+  observers.add(observer)
+  return () => observers.delete(observer)
+}
+
+export type FollowedProject = {
+  root: string
+  covers: (path: string) => boolean
+  /** Hears the watcher's changes without keeping it open; returns a function that stops. */
+  follow: (listener: Listener) => () => void
+}
+
+/** The started project watcher that hears of `path`, if one is open (no new one is made). */
+export function projectCovering(path: string): FollowedProject | null {
+  for (const project of projects.values()) {
+    if (!project.started || !project.covers(path)) continue
+    return {
+      root: project.root,
+      covers: (each) => project.started && project.covers(each),
+      follow: (listener) => {
+        project.followers.add(listener)
+        return () => project.followers.delete(listener)
+      }
+    }
+  }
+  return null
+}
 
 export type ProjectSubscription = {
   /** Resolves once changes are heard, false when the folder couldn't be watched. */

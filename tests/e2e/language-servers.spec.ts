@@ -1,7 +1,7 @@
 import { expect, test, type Page } from '@playwright/test'
 import { mkdir, realpath, symlink, writeFile } from 'node:fs/promises'
 import { execFile } from 'node:child_process'
-import { dirname, join } from 'node:path'
+import { delimiter, dirname, join } from 'node:path'
 import { promisify } from 'node:util'
 import { editor, editorText, item, openFile, showView, tab, typeAtEnd } from './editor-page'
 import { makeTempDir, withApp } from './launch-app'
@@ -380,7 +380,7 @@ test('Go to Definition, hover and references work across files, into dependencie
 async function withProjectFiles(
   prefix: string,
   files: Record<string, string>,
-  body: (page: Page) => Promise<void>,
+  body: (page: Page, dir: string) => Promise<void>,
   env: (dir: string) => Record<string, string> = () => ({})
 ): Promise<void> {
   const [made, cleanDir] = await makeTempDir(prefix)
@@ -396,7 +396,7 @@ async function withProjectFiles(
     await withApp(
       async (_app, page) => {
         await showView(page, 'Files')
-        await body(page)
+        await body(page, dir)
       },
       { userDataDir: userData, env: env(dir) }
     )
@@ -449,6 +449,35 @@ test("Go to Definition opens Python's typeshed and the interpreter's own modules
       await jumpToReadOnly(page, ['main.py', main], 'acme_size', 'acme_tools.py', /def acme_size\(/)
     },
     (dir) => ({ PYTHONPATH: join(dir, 'python-lib') })
+  )
+})
+
+test("Python's search path can't open the home folder to the page: PYTHONPATH=$HOME reads no key", async () => {
+  await withProjectFiles(
+    'library-home',
+    {
+      'project/main.py': 'size = len("abc")\n',
+      'home/.ssh/id_ed25519': 'secret key\n',
+      'home/.local/lib/python3.12/site-packages/acme.py': 'NAME = "acme"\n'
+    },
+    async (page, dir) => {
+      await openFile(page, 'project', 'main.py')
+      const read = (path: string) =>
+        page.evaluate(
+          `window.desktop.readTextFile(${JSON.stringify(path)}).then((file) => file.kind, () => 'refused')`
+        )
+      expect(await read(join(dir, 'home', '.ssh', 'id_ed25519'))).toBe('refused')
+      // Python's own folders in home stay readable, as Go to Definition needs them.
+      const sitePackages = join(dir, 'home', '.local', 'lib', 'python3.12', 'site-packages')
+      expect(await read(join(sitePackages, 'acme.py'))).toBe('text')
+    },
+    (dir) => ({
+      HOME: join(dir, 'home'),
+      PYTHONPATH: [
+        join(dir, 'home'),
+        join(dir, 'home', '.local', 'lib', 'python3.12', 'site-packages')
+      ].join(delimiter)
+    })
   )
 })
 

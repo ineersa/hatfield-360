@@ -109,7 +109,7 @@ async function write(
 export function registerEditorIpc(): void {
   // Which workspace folder's watcher hears of a file depends on the folders.
   fileRoots.onChange(() => {
-    for (const page of pages) void page.watchers.set(page.files)
+    for (const page of pages) void page.watchers.rewatch()
   })
   handleTrusted(EDITOR_CHANNELS.read, (event, path) => read(event.sender, checkedPath(path)))
 
