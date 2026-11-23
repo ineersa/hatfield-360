@@ -1,3 +1,6 @@
+import type { IReference } from '@codingame/monaco-vscode-api/vscode/vs/base/common/lifecycle'
+import type { ITextFileEditorModel } from '@codingame/monaco-vscode-api/vscode/vs/workbench/services/textfile/common/textfiles'
+import { registerFileSystemOverlay } from '@codingame/monaco-vscode-files-service-override'
 import { mainErrorMessage } from '@/lib/main-error-message'
 import { useEditorTabStore } from '@/state/editor-tab-store'
 import { notify } from '@/state/notification-store'
@@ -5,11 +8,12 @@ import type { EditorFile } from '../../../../shared/editor-api'
 import { monaco } from './monaco-environment'
 import { fileName } from './editor-tab-labels'
 import { attachLanguageServer, detachLanguageServer } from './language-clients'
+import { WorkspaceFileSystem } from './workspace-file-system'
 
 type EditorDocument = {
+  /** VS Code's text file model, whose dirty mark is the tab's; the editor tabs save and reload it. */
+  file: IReference<ITextFileEditorModel>
   model: monaco.editor.ITextModel
-  /** The undo-history position of the text on disk; undoing back to it clears the dirty mark. */
-  savedVersion: number
   /** The file's version on disk the text is based on; saving over any other asks first. */
   base: string
   /** A large file's start: never edited or saved. */
@@ -25,8 +29,21 @@ const held = new Set<string>()
 
 const tabOf = (path: string) => useEditorTabStore.getState().tabs.find((tab) => tab.path === path)
 
-const isEdited = (document: EditorDocument): boolean =>
-  document.model.getAlternativeVersionId() !== document.savedVersion
+const isEdited = (document: EditorDocument): boolean => document.file.object.isDirty()
+
+/** The model's text is what the file on disk holds. */
+const markSaved = (document: EditorDocument): Promise<void> =>
+  document.file.object.revert({ soft: true })
+
+/** Lets VS Code dispose the model once nothing else (a peek) uses it; unsaved edits are dropped. */
+function releaseModel(document: EditorDocument): void {
+  void markSaved(document)
+    .catch(() => undefined)
+    .then(() => document.file.dispose())
+}
+
+const files = new WorkspaceFileSystem((path) => held.has(path) || loading.has(path))
+registerFileSystemOverlay(1, files)
 
 export const editorDocument = (path: string): monaco.editor.ITextModel | undefined =>
   documents.get(path)?.model
@@ -53,20 +70,30 @@ export async function loadDocument(path: string): Promise<void> {
       setLoad(path, { status: 'ready', file: 'binary', size: file.size })
       return
     }
+    files.prime(path, file)
     // The URI's extension picks the language.
-    const model = monaco.editor.createModel(file.text, undefined, monaco.Uri.file(path))
+    const reference = await monaco.editor.createModelReference(monaco.Uri.file(path))
+    const model = reference.object.textEditorModel
+    if (!model || !tabOf(path)) {
+      reference.dispose()
+      if (!model) setLoad(path, { status: 'error', message: "the editor couldn't read it." })
+      return
+    }
+    // Still open in a peek since its tab closed: it gets the text on disk.
+    if (model.getValue() !== file.text) model.setValue(file.text)
+    await reference.object.revert({ soft: true })
     // Brackets keep the scheme's colour, as in JetBrains IDEs; Monaco sets this per model, not per editor.
     model.updateOptions({
       bracketColorizationOptions: { enabled: false, independentColorPoolPerBracketType: false }
     })
     const document: EditorDocument = {
+      file: reference,
       model,
-      savedVersion: model.getAlternativeVersionId(),
       base: file.version,
       readOnly: file.kind === 'large',
       disk: null
     }
-    model.onDidChangeContent(() => setDirty(path, isEdited(document)))
+    reference.object.onDidChangeDirty(() => setDirty(path, isEdited(document)))
     documents.set(path, document)
     if (!document.readOnly) void attachLanguageServer(path, model.getLanguageId())
     setLoad(path, {
@@ -138,12 +165,12 @@ async function writeDocument(path: string): Promise<boolean> {
     })
     return false
   }
-  document.savedVersion = version
   setDeleted(path, false)
   // Typing during the write leaves the tab dirty.
-  const edited = model.getAlternativeVersionId() !== version
-  setDirty(path, edited)
-  return !edited
+  if (model.getAlternativeVersionId() !== version) return false
+  await markSaved(document)
+  setDirty(path, false)
+  return true
 }
 
 /** Never split a line break or a character made of two code units. */
@@ -181,14 +208,14 @@ function showDisk(path: string, document: EditorDocument, file: EditorFile): voi
   if (file.kind === 'binary' || (file.kind === 'large') !== document.readOnly) {
     // Now another kind of file: opened afresh.
     detachLanguageServer(path)
-    document.model.dispose()
+    releaseModel(document)
     documents.delete(path)
     setLoad(path, { status: 'loading' })
     return
   }
   replaceText(document.model, file.text)
   document.base = file.version
-  document.savedVersion = document.model.getAlternativeVersionId()
+  void markSaved(document)
   setDirty(path, false)
 }
 
@@ -273,7 +300,8 @@ useEditorTabStore.subscribe((state) => {
   for (const path of held) {
     if (state.tabs.some((tab) => tab.path === path)) continue
     detachLanguageServer(path)
-    documents.get(path)?.model.dispose()
+    const document = documents.get(path)
+    if (document) releaseModel(document)
     documents.delete(path)
     held.delete(path)
     // Main stops letting the file be written once a save still running ends, unless it was reopened.

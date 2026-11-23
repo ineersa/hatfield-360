@@ -6,6 +6,7 @@ import { useSettingsStore } from '@/state/settings-store'
 import { editorViewState, setEditorViewState } from '@/state/editor-view-states'
 import { editorDocument, saveDocument } from './editor-documents'
 import { editorColorTheme, type MenuColors } from './editor-color-theme'
+import { revealJumpTarget } from './editor-navigation'
 import { monaco, setColorTheme } from './monaco-environment'
 
 /** The page's app theme (`data-theme`), which changes after the editor's own effects run. */
@@ -135,6 +136,7 @@ export function CodeEditor({
         console.error('Restoring the editor position failed:', error)
       }
     }
+    revealJumpTarget(instance, path)
     shownPath.current = path
   }, [path, ready])
 
