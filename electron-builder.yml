@@ -9,10 +9,14 @@ files:
   # The main process loads it as the Linux window icon.
   - resources/icon.png
 # Executables run from real files, not from the asar: node-pty's native addon, spawn-helper (macOS) and
-# ConPTY agents (Windows), and TypeScript's native language server.
+# ConPTY agents (Windows), and TypeScript's native language server. basedpyright changes its working
+# directory to its own folder, which can't be inside an asar; it has no dependencies to take along.
 asarUnpack:
   - node_modules/node-pty/**
   - node_modules/@typescript/**
+  - node_modules/basedpyright/**
+# TypeScript's language server needs its lib/*.d.ts, which electron-builder leaves out by default.
+onNodeModuleFile: ./config/electron-builder-node-modules.mjs
 # node-pty is an N-API addon: its prebuilt (macOS, Windows) or install-time (Linux) binary already runs in Electron.
 npmRebuild: false
 # One 1024 px PNG; electron-builder derives the .icns / .ico from it.

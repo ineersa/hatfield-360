@@ -70,11 +70,17 @@ async function intelephenseConfiguration(): Promise<ServerConfiguration> {
 // Packaged, native executables run from the unpacked copy: the OS can't execute a file inside an asar.
 const unpacked = (path: string): string => path.replace(/app\.asar([/\\])/, 'app.asar.unpacked$1')
 
-/** A script run on the app's own Node; `resolve` finds it lazily, as a literal path tools can follow. */
+/**
+ * A script run on the app's own Node; `resolve` finds it lazily, as a literal path tools can follow.
+ * Packaged, a script unpacked from the asar runs from there (basedpyright changes into its own folder).
+ */
 const nodeScript =
   (resolve: () => string, ...args: string[]) =>
-  (): Promise<ServerCommand> =>
-    Promise.resolve({ file: resolve(), args, node: true })
+  async (): Promise<ServerCommand> => {
+    const file = resolve()
+    const real = unpacked(file)
+    return { file: real !== file && (await exists(real)) ? real : file, args, node: true }
+  }
 
 /** TypeScript 7 is native and has its own language server (`tsc --lsp`). */
 async function typescriptCommand(): Promise<ServerCommand | { missing: string }> {
