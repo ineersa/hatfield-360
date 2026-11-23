@@ -34,5 +34,9 @@ export function revealJumpTarget(editor: monaco.editor.ICodeEditor, path: string
   editor.focus()
 }
 
-/** Files in a dependency folder open read-only, as in JetBrains IDEs. */
-export const isDependencyFile = (path: string): boolean => /[/\\]node_modules[/\\]/.test(path)
+/**
+ * Files in a package manager's folder (npm, Composer and Go `vendor`, a virtualenv) open read-only,
+ * as in JetBrains IDEs.
+ */
+export const isDependencyFile = (path: string): boolean =>
+  /[/\\](node_modules|vendor|\.?venv|site-packages)[/\\]/.test(path)

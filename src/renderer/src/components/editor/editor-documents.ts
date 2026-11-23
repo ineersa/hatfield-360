@@ -100,7 +100,8 @@ export async function loadDocument(path: string): Promise<void> {
     setLoad(path, {
       status: 'ready',
       file: file.kind,
-      size: file.kind === 'large' ? file.size : file.text.length
+      size: file.kind === 'large' ? file.size : file.text.length,
+      ...(file.library ? { library: true } : {})
     })
   } catch (error) {
     if (tabOf(path)) setLoad(path, { status: 'error', message: mainErrorMessage(error) })

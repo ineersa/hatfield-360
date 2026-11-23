@@ -357,6 +357,99 @@ test('Go to Definition, hover and references work across files, into dependencie
   }
 })
 
+test("Go to Definition opens a language's own sources outside the workspace read-only, with their server", async () => {
+  test.setTimeout(120_000)
+  const [dir, cleanDir] = await makeTempDir('language-server-library')
+  const project = join(await realpath(dir), 'project')
+  await mkdir(join(project, 'web'), { recursive: true })
+  await mkdir(join(project, 'tool'))
+  await mkdir(join(project, 'site'))
+  await writeFile(
+    join(project, 'web', 'tsconfig.json'),
+    '{ "compilerOptions": { "strict": true } }\n'
+  )
+  await writeFile(join(project, 'web', 'list.ts'), "export const key: PropertyKey = 'a'\n")
+  await writeFile(join(project, 'tool', 'pyproject.toml'), '[project]\nname = "tool"\n')
+  await writeFile(join(project, 'tool', 'main.py'), 'size = len("abc")\n')
+  await writeFile(join(project, 'site', 'composer.json'), '{}\n')
+  await writeFile(
+    join(project, 'site', 'index.php'),
+    "<?php\n\n$size = strlen('abc');\n$name = acme_name();\n"
+  )
+  // A Composer dependency is in the project, but read-only all the same.
+  await mkdir(join(project, 'site', 'vendor', 'acme'), { recursive: true })
+  await writeFile(
+    join(project, 'site', 'vendor', 'acme', 'names.php'),
+    "<?php\n\nfunction acme_name(): string\n{\n    return 'acme';\n}\n"
+  )
+  const [userData, cleanUserData] = await seedWorkspace([{ path: project, kind: 'folder' }])
+  try {
+    await withApp(
+      async (_app, page) => {
+        await showView(page, 'Files')
+        /**
+         * Clicks into `symbol` where it is drawn: a grammar may colour it as part of a longer token,
+         * and inlay hints add text the line's string doesn't have.
+         */
+        const cursorOn = async (symbol: string): Promise<void> => {
+          const token = editor(page).locator('.view-line span span', { hasText: symbol }).first()
+          const text = await token.innerText({ timeout: 3_000 })
+          const box = await token.boundingBox()
+          if (!box) throw new Error(`${symbol} isn't drawn`)
+          const width = box.width / text.length
+          await token.click({
+            position: { x: (text.indexOf(symbol) + 1.5) * width, y: box.height / 2 }
+          })
+        }
+        /** F12 on `symbol` until its server, still indexing, answers with the library file. */
+        const jump = async (
+          from: string,
+          symbol: string,
+          target: string,
+          declares: RegExp
+        ): Promise<void> => {
+          await expect(async () => {
+            await tab(page, from).click()
+            await cursorOn(symbol)
+            await page.keyboard.press('F12')
+            await expect(tab(page, target)).toHaveAttribute('aria-selected', 'true', {
+              timeout: 3_000
+            })
+          }).toPass({ timeout: 45_000 })
+          await expect.poll(() => editorText(page)).toMatch(declares)
+          // Read-only: typing says why and leaves the file unedited.
+          await page.keyboard.type('x')
+          await expect(page.locator('.monaco-editor-overlaymessage')).toContainText('read-only')
+          await expect(tab(page, target)).not.toContainText('●')
+          await page.keyboard.press('Escape')
+        }
+        await openFile(page, 'project', 'web', 'list.ts')
+        await jump('list.ts', 'PropertyKey', 'lib.es5.d.ts', /type PropertyKey = /)
+        // The library file has the server too: its hover answers there.
+        await expect(async () => {
+          await cursorOn('PropertyKey')
+          await page.keyboard.press('ControlOrMeta+k')
+          await page.keyboard.press('ControlOrMeta+i')
+          await expect(page.getByRole('tooltip', { name: /type PropertyKey = / })).toBeVisible({
+            timeout: 2_000
+          })
+        }).toPass({ timeout: 30_000 })
+        await page.keyboard.press('Escape')
+
+        await openFile(page, 'tool', 'main.py')
+        await jump('main.py', 'len', 'builtins.pyi', /def len\(/)
+        await openFile(page, 'site', 'index.php')
+        await jump('index.php', 'strlen', 'Core.php', /function strlen\(/)
+        await jump('index.php', 'acme_name', 'names.php', /function acme_name\(/)
+      },
+      { userDataDir: userData }
+    )
+  } finally {
+    await cleanUserData()
+    await cleanDir()
+  }
+})
+
 test('a language server that is not installed is named once, and its files still open highlighted', async () => {
   const [dir, cleanDir] = await makeTempDir('language-server-missing')
   const project = join(await realpath(dir), 'project')

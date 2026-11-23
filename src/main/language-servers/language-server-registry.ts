@@ -1,8 +1,11 @@
+import { execFile } from 'node:child_process'
 import { constants } from 'node:fs'
 import { access } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { homedir } from 'node:os'
 import { delimiter, dirname, join } from 'node:path'
+import { promisify } from 'node:util'
+import { realRoots } from '../files/path-containment'
 
 type JsonObject = Record<string, unknown>
 
@@ -26,6 +29,11 @@ export type LanguageServerDefinition = {
   command: () => Promise<ServerCommand | { missing: string }>
   /** Worked out by main for each start, never taken from the page. */
   configure?: (root: string) => Promise<ServerConfiguration>
+  /**
+   * Folders outside any project holding the language's own sources (standard library, stubs),
+   * which Go to Definition may open read-only.
+   */
+  librarySources?: () => Promise<string[]>
 }
 
 const fixed = (configuration: ServerConfiguration) => (): Promise<ServerConfiguration> =>
@@ -82,13 +90,25 @@ const nodeScript =
     return { file: real !== file && (await exists(real)) ? real : file, args, node: true }
   }
 
+/** A folder inside a bundled package, as the server running from the unpacked copy names it too. */
+const packageFolder =
+  (resolve: () => string, ...path: string[]) =>
+  async (): Promise<string[]> => {
+    const folder = join(dirname(resolve()), ...path)
+    return [...new Set([folder, unpacked(folder)])]
+  }
+
+/** The native TypeScript build's `lib` folder: its server and the standard library's `.d.ts` files. */
+function typescriptLib(): string {
+  const name = `@typescript/typescript-${process.platform}-${process.arch}`
+  const fromTypescript = createRequire(require.resolve('typescript/package.json'))
+  return unpacked(join(dirname(fromTypescript.resolve(`${name}/package.json`)), 'lib'))
+}
+
 /** TypeScript 7 is native and has its own language server (`tsc --lsp`). */
 async function typescriptCommand(): Promise<ServerCommand | { missing: string }> {
-  const name = `@typescript/typescript-${process.platform}-${process.arch}`
   try {
-    const fromTypescript = createRequire(require.resolve('typescript/package.json'))
-    const folder = dirname(fromTypescript.resolve(`${name}/package.json`))
-    const file = unpacked(join(folder, 'lib', process.platform === 'win32' ? 'tsc.exe' : 'tsc'))
+    const file = join(typescriptLib(), process.platform === 'win32' ? 'tsc.exe' : 'tsc')
     return { file, args: ['--lsp', '--stdio'], node: false }
   } catch {
     return {
@@ -116,12 +136,23 @@ const onPath =
     return { missing: `${executable} isn't installed. ${install}` }
   }
 
+/** Go's standard library and module cache, as the user's `go` reports them; none without Go. */
+async function goSources(): Promise<string[]> {
+  try {
+    const { stdout } = await promisify(execFile)('go', ['env', 'GOROOT', 'GOMODCACHE'])
+    return stdout.split(/\r?\n/).filter(Boolean)
+  } catch {
+    return []
+  }
+}
+
 const LANGUAGE_SERVERS: LanguageServerDefinition[] = [
   {
     name: 'TypeScript',
     languages: ['typescript', 'typescriptreact', 'javascript', 'javascriptreact'],
     rootMarkers: ['tsconfig.json', 'jsconfig.json', 'package.json'],
-    command: typescriptCommand
+    command: typescriptCommand,
+    librarySources: async () => [typescriptLib()]
   },
   {
     name: 'JSON',
@@ -178,6 +209,11 @@ const LANGUAGE_SERVERS: LanguageServerDefinition[] = [
       'pyrightconfig.json'
     ],
     command: nodeScript(() => require.resolve('basedpyright/langserver.index.js'), '--stdio'),
+    librarySources: packageFolder(
+      () => require.resolve('basedpyright/package.json'),
+      'dist',
+      'typeshed-fallback'
+    ),
     configure: async (root) => {
       const pythonPath = await virtualenvPython(root)
       return { settings: { python: pythonPath === undefined ? {} : { pythonPath } } }
@@ -188,6 +224,10 @@ const LANGUAGE_SERVERS: LanguageServerDefinition[] = [
     languages: ['php'],
     rootMarkers: ['composer.json'],
     command: nodeScript(() => require.resolve('intelephense/lib/intelephense.js'), '--stdio'),
+    librarySources: packageFolder(
+      () => require.resolve('intelephense/lib/intelephense.js'),
+      'stub'
+    ),
     configure: intelephenseConfiguration
   },
   {
@@ -198,9 +238,26 @@ const LANGUAGE_SERVERS: LanguageServerDefinition[] = [
       'gopls',
       ['serve'],
       'Install it with `go install golang.org/x/tools/gopls@latest`.'
-    )
+    ),
+    librarySources: goSources
   }
 ]
+
+const sources = new WeakMap<LanguageServerDefinition, Promise<string[]>>()
+
+/** The server's library folders that exist, as real paths; asked once per run. */
+export function libraryRoots(definition: LanguageServerDefinition): Promise<string[]> {
+  let found = sources.get(definition)
+  if (!found) {
+    found = (definition.librarySources?.() ?? Promise.resolve([])).then(realRoots, () => [])
+    sources.set(definition, found)
+  }
+  return found
+}
+
+/** Every server's library folders: the places outside the workspace the editor may read. */
+export const allLibraryRoots = async (): Promise<string[]> =>
+  (await Promise.all(LANGUAGE_SERVERS.map(libraryRoots))).flat()
 
 export const serverForLanguage = (languageId: string): LanguageServerDefinition | undefined =>
   LANGUAGE_SERVERS.find((server) => server.languages.includes(languageId))

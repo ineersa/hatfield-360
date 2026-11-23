@@ -257,7 +257,11 @@ export function EditorTabs({ hidden }: { hidden: boolean }): React.JSX.Element {
           <CodeEditor
             path={active.path}
             ready={showsText}
-            readOnly={activeFile?.file === 'large' || isDependencyFile(active.path)}
+            readOnly={
+              activeFile?.file === 'large' ||
+              activeFile?.library === true ||
+              isDependencyFile(active.path)
+            }
             hidden={hidden || previewing}
             focusRequest={focusRequest}
           />

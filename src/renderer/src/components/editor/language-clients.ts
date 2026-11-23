@@ -148,11 +148,13 @@ function startClient(connection: LanguageServerConnection): Client {
   const client = new MonacoLanguageClient({
     name: `${connection.server} (${connection.root})`,
     clientOptions: {
-      documentSelector: connection.languages.map((language) => ({
-        language,
-        scheme: 'file',
-        pattern: { baseUri: root.toString(), pattern: '**/*' }
-      })),
+      documentSelector: [connection.root, ...connection.libraries].flatMap((folder) =>
+        connection.languages.map((language) => ({
+          language,
+          scheme: 'file',
+          pattern: { baseUri: Uri.file(folder).toString(), pattern: '**/*' }
+        }))
+      ),
       workspaceFolder: { uri: root, name: connection.root, index: 0 },
       // Main owns the server's lifetime and reports how it ended; the client never restarts it.
       errorHandler: {

@@ -6,6 +6,7 @@ import { fileRoots } from '../files/file-roots'
 import { locateEditorFile, writeFileInRoots, writeFileReadAs } from '../files/guarded-file'
 import { OpenFileWatchers } from '../files/open-file-watchers'
 import { resolveInsideRoots } from '../files/path-containment'
+import { allLibraryRoots } from '../language-servers/language-server-registry'
 import { answerClose, setUnsaved } from '../window/unsaved-changes-guard'
 import { handleTrusted } from './trusted-ipc'
 
@@ -52,10 +53,24 @@ function hold(page: Held, path: string, real: string): void {
   void page.watchers.set(page.files)
 }
 
+/**
+ * A language's own source outside the workspace (standard library, stubs) that Go to Definition
+ * opened: read-only, so not held for saving or watched.
+ */
+async function readLibrary(path: string, outside: unknown): Promise<EditorFile> {
+  const real = await resolveInsideRoots(path, await allLibraryRoots())
+  if (real === null) throw outside
+  const file = await readEditorFile(real)
+  return file.kind === 'text' || file.kind === 'large' ? { ...file, library: true } : file
+}
+
 async function read(contents: WebContents, path: string): Promise<EditorFile> {
   const page = heldBy(contents)
-  const real = await locateEditorFile(path, await rootPaths(), page.files.get(path))
+  const real = await locateEditorFile(path, await rootPaths(), page.files.get(path)).catch(
+    (error: unknown) => readLibrary(path, error)
+  )
   if (real === null) return { kind: 'missing' }
+  if (typeof real !== 'string') return real
   const file = await readEditorFile(real)
   if (file.kind !== 'missing') hold(page, path, real)
   return file

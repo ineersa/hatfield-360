@@ -76,6 +76,18 @@ class LanguageServerSessions {
   private readonly byKey = new Map<string, Session>()
   private readonly watchedOwners = new WeakSet<WebContents>()
 
+  /**
+   * A server of `server` the page already runs, the latest started, for a file outside any project
+   * (a library source it jumped to); null when it runs none.
+   */
+  running(owner: WebContents, server: string): LanguageServerConnection | null {
+    const sessions = [...this.sessions.values()].filter(
+      (session) =>
+        session.owner === owner && session.connection.server === server && !session.stopping
+    )
+    return sessions.at(-1)?.connection ?? null
+  }
+
   /** The running server for `root`, or a new one started for the page. */
   connect(
     owner: WebContents,
@@ -83,7 +95,8 @@ class LanguageServerSessions {
     command: ServerCommand,
     root: string,
     folder: string,
-    configuration: ServerConfiguration
+    configuration: ServerConfiguration,
+    libraries: string[]
   ): LanguageServerConnection {
     const existing = this.byKey.get(key(owner, definition.name, root))
     if (existing && !existing.stopping) return existing.connection
@@ -91,7 +104,8 @@ class LanguageServerSessions {
       id: randomUUID(),
       server: definition.name,
       root,
-      languages: definition.languages
+      languages: definition.languages,
+      libraries
     }
     // A script runs on the app's own executable, as plain Node.
     const [file, args] = command.node

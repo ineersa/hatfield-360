@@ -7,6 +7,8 @@ export type LanguageServerConnection = {
   root: string
   /** The language ids whose files in `root` this connection serves. */
   languages: string[]
+  /** Folders of the language's own sources outside any project, whose files it serves read-only. */
+  libraries: string[]
 }
 
 /** What opening a file finds: its server, no server for its language, or a server that isn't installed. */

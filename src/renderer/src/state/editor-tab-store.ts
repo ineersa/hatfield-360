@@ -3,7 +3,8 @@ import { create } from 'zustand'
 type EditorTabLoad =
   | { status: 'loading' }
   /** `large` shows the file's start, read-only; `binary` shows nothing. */
-  | { status: 'ready'; file: 'text' | 'large' | 'binary'; size: number }
+  /** `library`: a language's own source outside the workspace, read-only. */
+  | { status: 'ready'; file: 'text' | 'large' | 'binary'; size: number; library?: true }
   | { status: 'error'; message: string }
 
 /**

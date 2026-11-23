@@ -6,7 +6,11 @@ import { fileRoots } from '../files/file-roots'
 import { realpath } from 'node:fs/promises'
 import { join, relative } from 'node:path'
 import { isPathInside, resolveInsideRoots } from '../files/path-containment'
-import { serverForLanguage } from '../language-servers/language-server-registry'
+import {
+  allLibraryRoots,
+  libraryRoots,
+  serverForLanguage
+} from '../language-servers/language-server-registry'
 import { languageServerSessions } from '../language-servers/language-server-sessions'
 import { projectRoot } from '../language-servers/project-root'
 import { handleTrusted } from './trusted-ipc'
@@ -21,6 +25,11 @@ const realFolders = (folders: string[]) =>
 
 const rootPaths = async (): Promise<string[]> =>
   (await fileRoots.current()).map((root) => root.path)
+
+const readableRoots = async (): Promise<string[]> => [
+  ...(await rootPaths()),
+  ...(await allLibraryRoots())
+]
 
 export function registerLanguageServerIpc(): void {
   fileRoots.onChange(() => {
@@ -44,8 +53,13 @@ export function registerLanguageServerIpc(): void {
         real === null
           ? undefined
           : (await realFolders(folders)).find((each) => isPathInside(real, each.real))
-      if (real === null || inside === undefined)
-        throw new Error(`${path} isn't in a workspace folder`)
+      if (real === null || inside === undefined) {
+        // A library source a jump opened is served by the page's server it came from, if still running.
+        const library = await resolveInsideRoots(path, await libraryRoots(definition))
+        if (library === null) throw new Error(`${path} isn't in a workspace folder`)
+        const connection = languageServerSessions.running(event.sender, definition.name)
+        return connection === null ? { kind: 'none' } : { kind: 'connected', connection }
+      }
       const { folder } = inside
       const command = await definition.command()
       if ('missing' in command)
@@ -64,7 +78,8 @@ export function registerLanguageServerIpc(): void {
           command,
           root,
           folder,
-          configuration
+          configuration,
+          await libraryRoots(definition)
         )
       }
     }
@@ -72,7 +87,8 @@ export function registerLanguageServerIpc(): void {
 
   handleTrusted(LANGUAGE_SERVER_CHANNELS.send, async (event, id, message) => {
     if (typeof id !== 'string') throw new Error('Expected a language server connection id')
-    await languageServerSessions.send(event.sender, id, message, rootPaths)
+    // Documents may be in the workspace or in a server's library sources, which open read-only.
+    await languageServerSessions.send(event.sender, id, message, readableRoots)
   })
 
   handleTrusted(LANGUAGE_SERVER_CHANNELS.disconnect, (event, id) => {
