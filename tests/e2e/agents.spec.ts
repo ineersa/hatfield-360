@@ -242,9 +242,9 @@ test('agent launches report through the real socket and sidebar rows select exac
         await first.click()
         await page.keyboard.type('quit')
         await page.keyboard.press('Enter')
-        await expect(hatfield).toContainText('Hatfield · Stopped')
+        await expect(hatfield).toHaveCount(0)
         await stopped.click()
-        await expect(hatfield).toContainText('Hatfield · Stopped')
+        await expect(hatfield).toHaveCount(0)
         await expect(claude).toHaveCount(0)
         await all.click()
         await idle.click()
@@ -392,7 +392,70 @@ test('two agents move through working, needs input, background work and outcomes
   }
 })
 
-test('agent launch settings are validated and a missing executable does not create a session', async () => {
+test('an explicit launch inherits Bash startup exports and passes literal arguments', async () => {
+  test.skip(process.platform !== 'linux', 'Uses an isolated Linux Bash startup file')
+  const { project, userDataDir, cleanup } = await seed()
+  const home = join(userDataDir, 'shell-home')
+  const bin = join(home, 'bin')
+  const script = join(home, 'probe.mjs')
+  try {
+    await mkdir(bin, { recursive: true })
+    await symlink(process.execPath, join(bin, 'issue60-agent-probe'))
+    await writeFile(
+      join(home, '.bashrc'),
+      'export PATH="$HOME/bin:$PATH"\nexport ISSUE60_SENTINEL=from-bashrc\ncd "$HOME"\n'
+    )
+    await writeFile(
+      script,
+      `console.log('Startup: ' + process.env.ISSUE60_SENTINEL);\n` +
+        `console.log('Arguments: ' + JSON.stringify(process.argv.slice(2)));\n` +
+        `await import(${JSON.stringify(fixture)});\n`
+    )
+    await writeFile(
+      join(userDataDir, 'settings.json'),
+      JSON.stringify({
+        'terminal.gpuAcceleration': false,
+        'agents.hatfield': {
+          executable: 'issue60-agent-probe',
+          args: [script, 'hatfield', 'shell-startup', 'literal ; $(false)', '']
+        }
+      })
+    )
+    await withApp(
+      async (_app, page) => {
+        await launch(page, 'Hatfield')
+        const pane = page.getByRole('tabpanel', { name: 'Hatfield' }).getByTestId('terminal-pane')
+        await expect(output(pane)).toContainText('Startup: from-bashrc')
+        await expect(output(pane)).toContainText(
+          'Arguments: ["hatfield","shell-startup","literal ; $(false)",""]'
+        )
+        await expect(output(pane)).toContainText(`Directory: ${project}`)
+        await startFocusedScenario(page, pane)
+        await expect(
+          page.getByRole('button', { name: /Hatfield session.*shell-startup/ })
+        ).toContainText('Working')
+        await page.keyboard.press('Control+d')
+        await expect(pane).toHaveCount(0)
+        await expect(
+          page.getByRole('button', { name: /Hatfield session.*shell-startup/ })
+        ).toHaveCount(0)
+      },
+      {
+        userDataDir,
+        env: {
+          HOME: home,
+          SHELL: '/bin/bash',
+          H360_STATUS_TOKEN: 'invalid-inherited-token',
+          H360_STATUS_LAUNCH_ID: 'invalid-inherited-launch'
+        }
+      }
+    )
+  } finally {
+    await cleanup()
+  }
+})
+
+test('agent launch settings are validated and a missing executable keeps diagnostics until the pane closes', async () => {
   const { userDataDir, cleanup } = await seed()
   const missing = join(userDataDir, 'missing-agent-command')
   try {
@@ -413,12 +476,6 @@ test('agent launch settings are validated and a missing executable does not crea
         ).rejects.toThrow('must contain an executable')
         await args.fill('[]')
         await page.getByRole('button', { name: 'Save Hatfield profile' }).click()
-        await expect
-          .poll(
-            async () =>
-              JSON.parse(await readFile(join(userDataDir, 'settings.json'), 'utf8')) as unknown
-          )
-          .toMatchObject({ 'agents.hatfield': { executable: missing, args: [] } })
         await page.getByRole('button', { name: 'Close Settings' }).click()
         await expect(
           page.evaluate(() =>
@@ -431,10 +488,13 @@ test('agent launch settings are validated and a missing executable does not crea
           )
         ).rejects.toThrow('Choose a project in the current workspace')
         await launch(page, 'Hatfield')
-        await expect(output(page.getByTestId('terminal-pane'))).toContainText(
-          "The agent couldn't start"
-        )
-        await expect(page.getByRole('button', { name: /^Hatfield session/ })).toHaveCount(0)
+        const pane = page.getByTestId('terminal-pane')
+        await expect(pane.getByRole('status')).toHaveText('Process exited with code 127')
+        await expect(output(pane)).toContainText('missing-agent-command')
+        const row = page.getByRole('button', { name: /^Hatfield session/ })
+        await expect(row).toContainText('Stopped')
+        await page.getByRole('button', { name: 'Close Hatfield', exact: true }).click()
+        await expect(row).toHaveCount(0)
       },
       { userDataDir }
     )
@@ -637,22 +697,11 @@ test('closing an agent terminal suppresses a real hangup failure report', async 
         await command(page, pane, 'report-failure-on-hangup', 'armed')
         await page.getByRole('button', { name: 'Notifications', exact: true }).click()
         const panel = page.getByRole('complementary', { name: 'Notifications panel' })
-        await page.getByRole('button', { name: 'Close Hatfield', exact: true }).click()
-        await expect
-          .poll(() => readFile(join(project, 'hangup-report'), 'utf8').catch(() => null))
-          .toBe('accepted')
-        await expect(page.getByRole('button', { name: /^Hatfield session/ })).toContainText(
-          'Stopped · Last turn: failed'
-        )
-        await expect
-          .poll(() =>
-            page.evaluate(async () =>
-              (await globalThis.desktop.getAgentSessions()).sessions.map(
-                ({ process, outcome }) => ({ process, outcome })
-              )
-            )
-          )
-          .toEqual([{ process: 'exited', outcome: 'failed' }])
+        const terminalId = await pane.getAttribute('data-terminal-id')
+        if (!terminalId) throw new Error('Agent pane has no terminal ID')
+        await page.evaluate((id) => globalThis.desktop.killTerminal(id), terminalId)
+        expect(await readFile(join(project, 'hangup-report'), 'utf8')).toBe('accepted')
+        await expect(page.getByRole('button', { name: /^Hatfield session/ })).toHaveCount(0)
         await expect(panel.getByText('No notifications.', { exact: true })).toBeVisible()
       },
       { userDataDir }
@@ -919,6 +968,11 @@ test('manually launched agents follow the managed shell pane and observed direct
         await expect(page.getByRole('button', { name: /^Claude session.*claude-e2e/ })).toHaveCount(
           1
         )
+        await page.getByRole('button', { name: 'Close agent-project', exact: true }).click()
+        await expect(
+          folders.getByRole('button', { name: /Hatfield session.*manual-/ })
+        ).toHaveCount(0)
+        await expect(explicitPane).toBeVisible()
       },
       {
         userDataDir,

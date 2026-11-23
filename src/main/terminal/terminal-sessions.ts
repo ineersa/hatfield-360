@@ -1,8 +1,7 @@
 import { app, type WebContents } from 'electron'
-import { constants } from 'node:fs'
 import { randomUUID } from 'node:crypto'
-import { access, chmod, stat } from 'node:fs/promises'
-import { delimiter, dirname, isAbsolute, join, resolve as resolvePath } from 'node:path'
+import { chmod, stat } from 'node:fs/promises'
+import { dirname, join } from 'node:path'
 import { type IPty, spawn } from 'node-pty'
 import {
   TERMINAL_CHANNELS,
@@ -10,6 +9,7 @@ import {
   type TerminalSession
 } from '../../shared/terminal-api'
 import { agentStatusServer } from '../agent-status/status-server'
+import { agentShellCommand } from './agent-shell-command'
 import { defaultShell } from './default-shell'
 import { descendantPids, isProcessAlive } from './process-tree'
 import { terminalEnvironment } from './terminal-environment'
@@ -65,32 +65,14 @@ async function ensureSpawnHelperExecutable(): Promise<void> {
   }
 }
 
-// Unix node-pty can report a missing executable only as a child exit, after spawn returns.
-async function agentExecutable(
-  file: string,
-  cwd: string,
-  path: string | undefined
-): Promise<string> {
-  if (process.platform === 'win32')
-    return !isAbsolute(file) && /[\\/]/.test(file) ? resolvePath(cwd, file) : file
-  const candidates = isAbsolute(file)
-    ? [file]
-    : file.includes('/')
-      ? [resolvePath(cwd, file)]
-      : (path ?? '/usr/bin:/bin')
-          .split(delimiter)
-          .map((directory) => resolvePath(cwd, directory, file))
-  for (const candidate of candidates) {
-    const executable = await access(candidate, constants.X_OK)
-      .then(() => stat(candidate))
-      .catch(() => null)
-    if (executable?.isFile()) return candidate
-  }
-  throw new Error('Agent executable not found.')
-}
-
 /** Shells in ptys, each owned by the window that started it and ended with it. */
 class TerminalSessions {
+  private readonly paneClosedListeners = new Set<(owner: WebContents, id: string) => void>()
+
+  onPaneClosed(listener: (owner: WebContents, id: string) => void): void {
+    this.paneClosedListeners.add(listener)
+  }
+
   private readonly sessions = new Map<string, Session>()
   private readonly trackedOwners = new WeakSet<WebContents>()
   /** Endings still waiting on lingering jobs; kept after their shell leaves `sessions`. */
@@ -129,7 +111,7 @@ class TerminalSessions {
       appVersion: app.getVersion()
     })
     const shell = agent
-      ? { file: await agentExecutable(agent.executable, request.cwd, env.PATH), args: agent.args }
+      ? agentShellCommand(agent, request.cwd)
       : defaultShell(process.env, process.platform)
     const id = agent?.id ?? randomUUID()
     const bootstrap = agent
@@ -225,6 +207,7 @@ class TerminalSessions {
 
   kill(owner: WebContents, id: string): Promise<void> {
     const session = this.owned(owner, id)
+    for (const listener of this.paneClosedListeners) listener(owner, id)
     return session ? this.end(session) : Promise.resolve()
   }
 

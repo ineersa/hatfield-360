@@ -11,6 +11,7 @@ import type {
 } from '../../shared/agent-api'
 import { worktreeStore } from '../git/worktree-store'
 import { workspaceStore } from '../workspace/workspace-store'
+import { UnsupportedAgentShell } from '../terminal/agent-shell-command'
 import { terminalSessions } from '../terminal/terminal-sessions'
 import { AgentNotificationPolicy } from './agent-notifications'
 import { agentStatusServer } from './status-server'
@@ -141,6 +142,22 @@ export function trackAgentSessions(
   }
   worktreeStore.onChange(() => void refreshPlacements())
   workspaceStore.onChange(() => void refreshPlacements())
+  terminalSessions.onPaneClosed((owner, terminalId) => {
+    const removed = new Set<string>()
+    for (const [id, record] of records) {
+      if (record.owner !== owner || record.session.terminalId !== terminalId) continue
+      records.delete(id)
+      removed.add(id)
+    }
+    if (!removed.size) return
+    const history = manualHistory.get(owner)
+    if (history)
+      manualHistory.set(
+        owner,
+        history.filter((id) => !removed.has(id))
+      )
+    changed(owner)
+  })
   agentStatusServer.subscribe((change) => {
     if (change.kind === 'manual-registered') {
       const placement = terminalSessions.manualPlacement(change.terminalId)
@@ -281,15 +298,18 @@ export function trackAgentSessions(
             wait: null,
             updatedAt: Date.now()
           })
-          changed(owner)
+          if (records.has(session.id)) changed(owner)
         }
       })
       recordSession(owner, session)
       changed(owner)
       return terminal
-    } catch {
+    } catch (error) {
       release()
-      throw new Error('Could not start the agent. Check the agent executable in Settings.')
+      if (error instanceof UnsupportedAgentShell) throw error
+      throw new Error('Could not start the agent. Check the agent executable in Settings.', {
+        cause: error
+      })
     }
   }
 }

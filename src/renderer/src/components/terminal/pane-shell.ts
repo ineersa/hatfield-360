@@ -28,7 +28,7 @@ function showExited(pane: ManagedPane, exit: TerminalExit): void {
  * Starts a shell for the pane once its terminal has its first size, and wires keys, output and
  * resizes. A shell that ends itself (`exit`, Ctrl+D) calls `onShellEnded`, whatever its exit code:
  * bash exits with its last command's status. One killed by a signal keeps its pane, with a badge,
- * so its last output can be read.
+ * so its last output can be read, as does an agent that exits with a nonzero code.
  */
 export function startPaneShell(
   pane: ManagedPane,
@@ -88,7 +88,7 @@ export function startPaneShell(
               }),
             exit: (exit) => {
               exited = true
-              if (!agent && !exit.signal) onShellEnded()
+              if (!exit.signal && (!agent || exit.exitCode === 0)) onShellEnded()
               else showExited(pane, exit)
             }
           })
@@ -118,7 +118,7 @@ export function startPaneShell(
       onData.dispose()
       onResize.dispose()
       stopListening?.()
-      if (sessionId && !exited) void window.desktop.killTerminal(sessionId).catch(() => undefined)
+      if (sessionId) void window.desktop.killTerminal(sessionId).catch(() => undefined)
     }
   }
 }
