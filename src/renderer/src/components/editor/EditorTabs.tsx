@@ -114,14 +114,14 @@ function Tab({
         if (event.button === 1) onClose()
       }}
       className={cn(
-        'type-tab group flex max-w-60 min-w-0 shrink-0 items-center gap-2 border-r border-separator pr-2 pl-3 select-none',
+        'type-tab group flex max-w-60 min-w-0 shrink-0 items-stretch border-r border-separator select-none',
         active
           ? 'bg-island text-foreground'
           : 'text-muted-foreground hover:bg-tab-hover hover:text-foreground',
         dragging && 'opacity-50'
       )}
     >
-      <FileTreeIcon kind="file" name={label.name} className="size-4 shrink-0" />
+      {/* The whole tab box selects it, not just its text. */}
       <button
         type="button"
         role="tab"
@@ -129,8 +129,9 @@ function Tab({
         aria-label={[title, ...state].join(', ')}
         title={tab.deleted ? `${tab.path} (deleted on disk)` : tab.path}
         onClick={onActivate}
-        className="flex min-w-0 items-baseline gap-1.5 outline-none focus-visible:underline"
+        className="flex min-w-0 flex-1 items-center gap-2 pr-2 pl-3 outline-none focus-visible:underline"
       >
+        <FileTreeIcon kind="file" name={label.name} className="size-4 shrink-0" />
         <span className={cn('truncate', tab.deleted && 'line-through')}>{label.name}</span>
         {label.folder ? <span className="type-hint truncate">{label.folder}</span> : null}
       </button>
@@ -139,19 +140,21 @@ function Tab({
         aria-label={`Close ${title}`}
         onClick={onClose}
         className={cn(
-          'flex size-5 shrink-0 items-center justify-center rounded-button text-muted-foreground hover:bg-hover hover:text-foreground focus-visible:opacity-100',
+          'group/close flex shrink-0 items-center pr-2 text-muted-foreground hover:text-foreground focus-visible:opacity-100',
           active || tab.dirty ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
         )}
       >
-        {/* An unsaved tab shows a dot where its close button is, until the pointer is over it. */}
-        {tab.dirty ? (
-          <>
-            <span className="size-2 rounded-full bg-foreground group-hover:hidden" aria-hidden />
-            <X className="hidden size-3.5 group-hover:block" aria-hidden />
-          </>
-        ) : (
-          <X className="size-3.5" aria-hidden />
-        )}
+        <span className="flex size-5 items-center justify-center rounded-button group-hover/close:bg-hover">
+          {/* An unsaved tab shows a dot where its close button is, until the pointer is over it. */}
+          {tab.dirty ? (
+            <>
+              <span className="size-2 rounded-full bg-foreground group-hover:hidden" aria-hidden />
+              <X className="hidden size-3.5 group-hover:block" aria-hidden />
+            </>
+          ) : (
+            <X className="size-3.5" aria-hidden />
+          )}
+        </span>
       </button>
     </div>
   )

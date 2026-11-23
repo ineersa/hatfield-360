@@ -112,6 +112,16 @@ test('files open in editor tabs that switch, reorder and close, with highlightin
         await expect(tabs(page)).toHaveCount(2)
         await expect(tab(page, 'index.ts src')).toHaveAttribute('aria-selected', 'true')
         await expect(lines(page)).toContainText('const greeting')
+        // The whole tab box selects it: its left edge, beside the icon, and its bottom edge.
+        const box = await tab(page, 'index.ts test').locator('xpath=..').boundingBox()
+        if (!box) throw new Error('The tab box is not drawn')
+        await page.mouse.click(box.x + 2, box.y + box.height / 2)
+        await expect(tab(page, 'index.ts test')).toHaveAttribute('aria-selected', 'true')
+        await expect(lines(page)).toContainText('export const tested')
+        const other = await tab(page, 'index.ts src').locator('xpath=..').boundingBox()
+        if (!other) throw new Error('The tab box is not drawn')
+        await page.mouse.click(other.x + other.width / 2, other.y + other.height - 2)
+        await expect(tab(page, 'index.ts src')).toHaveAttribute('aria-selected', 'true')
         await tab(page, 'index.ts test').click()
         await expect(lines(page)).toContainText('export const tested')
 
