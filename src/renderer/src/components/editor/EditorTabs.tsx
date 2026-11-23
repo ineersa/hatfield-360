@@ -259,7 +259,7 @@ export function EditorTabs({ hidden }: { hidden: boolean }): React.JSX.Element {
             ready={showsText}
             readOnly={
               activeFile?.file === 'large' ||
-              activeFile?.library === true ||
+              activeFile?.outside === true ||
               isDependencyFile(active.path)
             }
             hidden={hidden || previewing}

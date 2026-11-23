@@ -8,13 +8,13 @@ export const EDITOR_FILE_LIMITS = {
 
 /**
  * A file as the editor gets it. `version` changes whenever the file on disk does: a hash of a text
- * file's bytes, so the app's own save of the same text keeps it. `library` marks a language's own
- * source outside the workspace (standard library, stubs), opened by Go to Definition: read-only.
+ * file's bytes, so the app's own save of the same text keeps it. `outside` marks a file outside the
+ * workspace (a system file, a language's standard library), which is read-only.
  */
 export type EditorFile =
-  | { kind: 'text'; text: string; version: string; library?: true }
+  | { kind: 'text'; text: string; version: string; outside?: true }
   /** Over the editable limit: its start, read-only. */
-  | { kind: 'large'; text: string; size: number; version: string; library?: true }
+  | { kind: 'large'; text: string; size: number; version: string; outside?: true }
   | { kind: 'binary'; size: number; version: string }
   | { kind: 'missing' }
 

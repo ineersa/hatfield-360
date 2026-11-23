@@ -370,7 +370,17 @@ test("Go to Definition opens a language's own sources outside the workspace read
   )
   await writeFile(join(project, 'web', 'list.ts'), "export const key: PropertyKey = 'a'\n")
   await writeFile(join(project, 'tool', 'pyproject.toml'), '[project]\nname = "tool"\n')
-  await writeFile(join(project, 'tool', 'main.py'), 'size = len("abc")\n')
+  await writeFile(
+    join(project, 'tool', 'main.py'),
+    'from acme_tools import acme_size\n\nsize = len("abc")\n'
+  )
+  // A module the interpreter finds outside the project, as one installed system-wide would be.
+  const pythonPath = join(await realpath(dir), 'python-lib')
+  await mkdir(pythonPath)
+  await writeFile(
+    join(pythonPath, 'acme_tools.py'),
+    'def acme_size(text: str) -> int:\n    return len(text)\n'
+  )
   await writeFile(join(project, 'site', 'composer.json'), '{}\n')
   await writeFile(
     join(project, 'site', 'index.php'),
@@ -438,11 +448,12 @@ test("Go to Definition opens a language's own sources outside the workspace read
 
         await openFile(page, 'tool', 'main.py')
         await jump('main.py', 'len', 'builtins.pyi', /def len\(/)
+        await jump('main.py', 'acme_size', 'acme_tools.py', /def acme_size\(/)
         await openFile(page, 'site', 'index.php')
         await jump('index.php', 'strlen', 'Core.php', /function strlen\(/)
         await jump('index.php', 'acme_name', 'names.php', /function acme_name\(/)
       },
-      { userDataDir: userData }
+      { userDataDir: userData, env: { PYTHONPATH: pythonPath } }
     )
   } finally {
     await cleanUserData()

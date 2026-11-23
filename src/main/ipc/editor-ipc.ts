@@ -1,11 +1,12 @@
 import type { BrowserWindow, WebContents } from 'electron'
 import { realpath } from 'node:fs/promises'
+import { homedir } from 'node:os'
 import { EDITOR_CHANNELS, type EditorFile, type EditorWriteResult } from '../../shared/editor-api'
 import { readEditorFile, textVersion } from '../files/editor-file-read'
 import { fileRoots } from '../files/file-roots'
 import { locateEditorFile, writeFileInRoots, writeFileReadAs } from '../files/guarded-file'
 import { OpenFileWatchers } from '../files/open-file-watchers'
-import { resolveInsideRoots } from '../files/path-containment'
+import { resolveInsideRoots, resolveOutsideHome } from '../files/path-containment'
 import { allLibraryRoots } from '../language-servers/language-server-registry'
 import { answerClose, setUnsaved } from '../window/unsaved-changes-guard'
 import { handleTrusted } from './trusted-ipc'
@@ -54,20 +55,22 @@ function hold(page: Held, path: string, real: string): void {
 }
 
 /**
- * A language's own source outside the workspace (standard library, stubs) that Go to Definition
- * opened: read-only, so not held for saving or watched.
+ * A file outside the workspace, read-only, so not held for saving or watched: anywhere outside the
+ * user's home folder, or in a language's library folders (a Go module cache, a pyenv install).
  */
-async function readLibrary(path: string, outside: unknown): Promise<EditorFile> {
-  const real = await resolveInsideRoots(path, await allLibraryRoots())
-  if (real === null) throw outside
+async function readOutside(path: string, refused: unknown): Promise<EditorFile> {
+  const real =
+    (await resolveInsideRoots(path, await allLibraryRoots())) ??
+    (await resolveOutsideHome(path, homedir()))
+  if (real === null) throw refused
   const file = await readEditorFile(real)
-  return file.kind === 'text' || file.kind === 'large' ? { ...file, library: true } : file
+  return file.kind === 'text' || file.kind === 'large' ? { ...file, outside: true } : file
 }
 
 async function read(contents: WebContents, path: string): Promise<EditorFile> {
   const page = heldBy(contents)
   const real = await locateEditorFile(path, await rootPaths(), page.files.get(path)).catch(
-    (error: unknown) => readLibrary(path, error)
+    (error: unknown) => readOutside(path, error)
   )
   if (real === null) return { kind: 'missing' }
   if (typeof real !== 'string') return real

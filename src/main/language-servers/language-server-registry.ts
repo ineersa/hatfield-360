@@ -3,7 +3,7 @@ import { constants } from 'node:fs'
 import { access } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { homedir } from 'node:os'
-import { delimiter, dirname, join } from 'node:path'
+import { delimiter, dirname, isAbsolute, join } from 'node:path'
 import { promisify } from 'node:util'
 import { realRoots } from '../files/path-containment'
 
@@ -136,6 +136,27 @@ const onPath =
     return { missing: `${executable} isn't installed. ${install}` }
   }
 
+/**
+ * Where Python finds modules (its standard library, site-packages, `PYTHONPATH`), as the user's
+ * `python3` reports it: basedpyright resolves imports there when typeshed has no stub.
+ */
+async function pythonSources(): Promise<string[]> {
+  for (const python of ['python3', 'python']) {
+    try {
+      const { stdout } = await promisify(execFile)(python, [
+        '-c',
+        'import json, sys; print(json.dumps(sys.path))'
+      ])
+      const paths: unknown = JSON.parse(stdout)
+      if (!Array.isArray(paths)) return []
+      return paths.filter((path): path is string => typeof path === 'string' && isAbsolute(path))
+    } catch {
+      // Not installed under this name; the next one may be.
+    }
+  }
+  return []
+}
+
 /** Go's standard library and module cache, as the user's `go` reports them; none without Go. */
 async function goSources(): Promise<string[]> {
   try {
@@ -209,11 +230,14 @@ const LANGUAGE_SERVERS: LanguageServerDefinition[] = [
       'pyrightconfig.json'
     ],
     command: nodeScript(() => require.resolve('basedpyright/langserver.index.js'), '--stdio'),
-    librarySources: packageFolder(
-      () => require.resolve('basedpyright/package.json'),
-      'dist',
-      'typeshed-fallback'
-    ),
+    librarySources: async () => [
+      ...(await packageFolder(
+        () => require.resolve('basedpyright/package.json'),
+        'dist',
+        'typeshed-fallback'
+      )()),
+      ...(await pythonSources())
+    ],
     configure: async (root) => {
       const pythonPath = await virtualenvPython(root)
       return { settings: { python: pythonPath === undefined ? {} : { pythonPath } } }

@@ -45,6 +45,18 @@ export async function resolveInsideRoots(path: string, roots: string[]): Promise
 }
 
 /**
+ * The real location of the existing `path` when it is outside the user's home folder (system
+ * folders, `/tmp`, other installs), or null. Home holds the user's secrets (keys, tokens, browser
+ * profiles), so only the workspace and the languages' library folders are read there.
+ */
+export async function resolveOutsideHome(path: string, home: string): Promise<string | null> {
+  if (!isAbsolute(path)) return null
+  const [real, realHome] = await Promise.all([realpathOrNull(resolve(path)), realpathOrNull(home)])
+  if (real === null) return null
+  return isPathInside(real, realHome ?? home) ? null : real
+}
+
+/**
  * Where `path` really is when it is inside `roots`, or null: an existing path (a link followed to
  * its target) as `resolveInsideRoots` finds it, and a path not created yet by its folder's real
  * location. A link that leads nowhere is refused: what it would create is wherever it points.

@@ -49,10 +49,9 @@ export function registerLanguageServerIpc(): void {
       if (!definition) return { kind: 'none' }
       const folders = await rootPaths()
       const real = await resolveInsideRoots(path, folders)
+      const realFolder = await realFolders(folders)
       const inside =
-        real === null
-          ? undefined
-          : (await realFolders(folders)).find((each) => isPathInside(real, each.real))
+        real === null ? undefined : realFolder.find((each) => isPathInside(real, each.real))
       if (real === null || inside === undefined) {
         // A library source a jump opened is served by the page's server it came from, if still running.
         const library = await resolveInsideRoots(path, await libraryRoots(definition))
@@ -79,7 +78,13 @@ export function registerLanguageServerIpc(): void {
           root,
           folder,
           configuration,
-          await libraryRoots(definition)
+          // A library folder overlapping a workspace folder would hand its projects to every client.
+          (await libraryRoots(definition)).filter(
+            (library) =>
+              !realFolder.some(
+                (each) => isPathInside(each.real, library) || isPathInside(library, each.real)
+              )
+          )
         )
       }
     }
