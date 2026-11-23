@@ -36,6 +36,8 @@ type Session = {
   initializeId: unknown
   stopping: Promise<void> | null
   exited: Promise<void>
+  /** Why main stopped it as failed (it refused to start), reported once it has exited. */
+  failure: string | null
 }
 
 /** Every message written carries `jsonrpc: '2.0'`; the policy has already checked the page's. */
@@ -88,6 +90,7 @@ class LanguageServerSessions {
       log: [],
       initializeId: undefined,
       stopping: null,
+      failure: null,
       exited: new Promise((resolve) => child.once('close', () => resolve()))
     }
     this.sessions.set(connection.id, session)
@@ -173,7 +176,17 @@ class LanguageServerSessions {
       message['id'] === session.initializeId &&
       !('method' in message)
     ) {
-      this.status(session, 'error' in message ? 'failed' : 'ready')
+      if ('error' in message) {
+        const { error } = message
+        const reason =
+          isPlainObject(error) && typeof error['message'] === 'string'
+            ? error['message']
+            : 'no reason given'
+        session.failure = `The ${session.connection.server} language server couldn't start: ${reason}`
+        void this.stop(session)
+      } else {
+        this.status(session, 'ready')
+      }
     }
     this.toPage(session, LANGUAGE_SERVER_CHANNELS.message, session.connection.id, message)
   }
@@ -204,6 +217,10 @@ class LanguageServerSessions {
     this.sessions.delete(connection.id)
     if (this.byKey.get(key(owner, connection.server, connection.root)) === session) {
       this.byKey.delete(key(owner, connection.server, connection.root))
+    }
+    if (session.failure !== null) {
+      this.status(session, 'failed', [session.failure, ...session.log].join('\n'))
+      return
     }
     // A clean exit is the page's own client shutting it down.
     if (session.stopping || code === 0) {

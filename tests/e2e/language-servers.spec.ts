@@ -7,6 +7,20 @@ import { editor, editorText, openFile, showView, tab } from './editor-page'
 import { makeTempDir, withApp } from './launch-app'
 import { seedWorkspace } from './workspace-seed'
 
+/** The TypeScript, Python and PHP servers' command lines. */
+const LANGUAGE_SERVERS = /tsc --lsp|langserver\.index\.js|intelephense\.js/
+const TYPESCRIPT_SERVER = /tsc --lsp/
+
+/** The app's child processes whose command line matches `match`. */
+async function serverPids(appPid: number, match: RegExp): Promise<number[]> {
+  const { stdout } = await promisify(execFile)('ps', ['-A', '-o', 'pid=,ppid=,args='])
+  return stdout
+    .split('\n')
+    .map((line) => /^\s*(\d+)\s+(\d+)\s+(.*)$/.exec(line))
+    .filter((row) => row !== null && Number(row[2]) === appPid && match.test(row[3] ?? ''))
+    .map((row) => Number(row?.[1]))
+}
+
 /** Hovers the editor's first error squiggle and expects the server's message in the hover. */
 async function expectError(page: Page, message: RegExp): Promise<void> {
   const squiggle = editor(page).locator('.squiggly-error').first()
@@ -42,7 +56,7 @@ test('TypeScript, Python and PHP files get errors from their language servers', 
   const [userData, cleanUserData] = await seedWorkspace([{ path: project, kind: 'folder' }])
   try {
     await withApp(
-      async (_app, page) => {
+      async (app, page) => {
         await showView(page, 'Files')
         await openFile(page, 'project', 'web', 'label.ts')
         await expectError(page, /Type 'number' is not assignable to type 'string'/)
@@ -50,6 +64,14 @@ test('TypeScript, Python and PHP files get errors from their language servers', 
         await expectError(page, /is not assignable to declared type "int"/)
         await openFile(page, 'site', 'index.php')
         await expectError(page, /Undefined function 'missing_function'/)
+        const appPid = app.process().pid
+        if (appPid === undefined) throw new Error('The app has no process id')
+        expect(await serverPids(appPid, LANGUAGE_SERVERS)).toHaveLength(3)
+        // A server stops once none of its files is open, leaving no process behind.
+        for (const name of ['label.ts', 'main.py', 'index.php']) {
+          await page.getByRole('button', { name: `Close ${name}` }).click()
+        }
+        await expect.poll(() => serverPids(appPid, LANGUAGE_SERVERS)).toEqual([])
       },
       { userDataDir: userData }
     )
@@ -59,17 +81,8 @@ test('TypeScript, Python and PHP files get errors from their language servers', 
   }
 })
 
-/** The app's language server processes whose command line includes `match`. */
-async function serverPids(appPid: number, match: string): Promise<number[]> {
-  const { stdout } = await promisify(execFile)('ps', ['-A', '-o', 'pid=,ppid=,args='])
-  return stdout
-    .split('\n')
-    .map((line) => /^\s*(\d+)\s+(\d+)\s+(.*)$/.exec(line))
-    .filter((row) => row !== null && Number(row[2]) === appPid && (row[3] ?? '').includes(match))
-    .map((row) => Number(row?.[1]))
-}
-
-test('a language server that dies is reported in the notifications with its reason', async () => {
+test('a crashed language server restarts, and one that keeps crashing is reported once with its log', async () => {
+  test.setTimeout(90_000)
   const [dir, cleanDir] = await makeTempDir('language-server-crash')
   const project = join(await realpath(dir), 'project')
   await mkdir(project)
@@ -81,22 +94,43 @@ test('a language server that dies is reported in the notifications with its reas
       async (app, page) => {
         await showView(page, 'Files')
         await openFile(page, 'project', 'main.ts')
-        await expect(editor(page).locator('.squiggly-error').first()).toBeVisible({
-          timeout: 30_000
-        })
+        const status = page.getByRole('status').filter({ hasText: 'TypeScript language server' })
+        await expect(status).toHaveText('TypeScript language server ready', { timeout: 30_000 })
         const appPid = app.process().pid
         if (appPid === undefined) throw new Error('The app has no process id')
-        const [server] = await serverPids(appPid, '--lsp')
-        if (server === undefined) throw new Error('The TypeScript server is not running')
-        process.kill(server, 'SIGKILL')
-        const bell = page
-          .getByRole('navigation', { name: 'Tool windows' })
-          .getByRole('button', { name: 'Notifications (1)' })
-        await bell.click()
+        const running = async (): Promise<number> => {
+          const [server] = await serverPids(appPid, TYPESCRIPT_SERVER)
+          return server ?? 0
+        }
+        let killed = 0
+        for (let crash = 1; crash <= 4; crash += 1) {
+          await expect.poll(running, { timeout: 30_000 }).not.toBe(0)
+          const server = await running()
+          expect(server).not.toBe(killed)
+          process.kill(server, 'SIGKILL')
+          killed = server
+          if (crash < 4) {
+            // Started again for the open file, which gets its errors back.
+            await expect(status).toHaveText('TypeScript language server ready', { timeout: 30_000 })
+            await expect(editor(page).locator('.squiggly-error').first()).toBeVisible({
+              timeout: 30_000
+            })
+          }
+        }
+        const stopped = page.getByRole('button', {
+          name: 'TypeScript language server stopped: show log'
+        })
+        await expect(stopped).toBeVisible()
+        await expect(
+          page
+            .getByRole('navigation', { name: 'Tool windows' })
+            .getByRole('button', { name: 'Notifications (1)' })
+        ).toBeVisible()
+        await stopped.click()
         const panel = page.getByRole('complementary', { name: 'Notifications panel' })
-        await expect(panel).toContainText('The typescript language server stopped')
+        await expect(panel).toContainText('The TypeScript language server keeps stopping')
         await expect(panel).toContainText('was killed (SIGKILL)')
-        await expect.poll(() => serverPids(appPid, '--lsp')).toEqual([])
+        await expect.poll(() => serverPids(appPid, TYPESCRIPT_SERVER)).toEqual([])
       },
       { userDataDir: userData }
     )
@@ -175,5 +209,44 @@ test('Go to Definition, hover and references work across files, into dependencie
   } finally {
     await cleanUserData()
     await cleanDir()
+  }
+})
+
+test('a language server that is not installed is named once, and its files still open highlighted', async () => {
+  const [dir, cleanDir] = await makeTempDir('language-server-missing')
+  const project = join(await realpath(dir), 'project')
+  await mkdir(project)
+  await writeFile(join(project, 'go.mod'), 'module example.com/project\n')
+  await writeFile(join(project, 'main.go'), 'package main\n\nfunc main() {}\n')
+  await writeFile(join(project, 'other.go'), 'package main\n\nfunc other() {}\n')
+  const [userData, cleanUserData] = await seedWorkspace([{ path: project, kind: 'folder' }])
+  const [emptyPath, cleanPath] = await makeTempDir('empty-path')
+  try {
+    await withApp(
+      async (_app, page) => {
+        await showView(page, 'Files')
+        await openFile(page, 'project', 'main.go')
+        const bell = page.getByRole('navigation', { name: 'Tool windows' })
+        await expect(bell.getByRole('button', { name: 'Notifications (1)' })).toBeVisible()
+        await openFile(page, 'project', 'other.go')
+        await expect.poll(() => editorText(page)).toContain('func other() {}')
+        // Highlighted by its grammar: the keyword has its own token.
+        await expect(
+          editor(page).locator('.view-line span span', { hasText: /^func$/ })
+        ).toBeVisible()
+        await bell.getByRole('button', { name: 'Notifications (1)' }).click()
+        const panel = page.getByRole('complementary', { name: 'Notifications panel' })
+        await expect(panel).toContainText('No Go language server')
+        await expect(panel).toContainText(
+          "gopls isn't installed. Install it with `go install golang.org/x/tools/gopls@latest`."
+        )
+      },
+      // gopls is looked up on PATH; this one has nothing in it.
+      { userDataDir: userData, env: { PATH: emptyPath } }
+    )
+  } finally {
+    await cleanUserData()
+    await cleanDir()
+    await cleanPath()
   }
 })

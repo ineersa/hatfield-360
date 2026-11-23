@@ -1,7 +1,7 @@
 /** A page's link to a language server process: one per server and project root, shared by its files. */
 export type LanguageServerConnection = {
   id: string
-  /** The server's name from main's configuration, such as `typescript`. */
+  /** The server's name from main's configuration, such as `TypeScript`. */
   server: string
   /** The project folder the server was started in. */
   root: string

@@ -17,6 +17,7 @@ export type ServerConfiguration = {
 export type ServerCommand = { file: string; args: string[]; node: boolean }
 
 export type LanguageServerDefinition = {
+  /** Shown to the user, as in "The PHP language server". */
   name: string
   languages: string[]
   /** Files that mark a project's root; the nearest folder holding one is the server's root. */
@@ -111,13 +112,13 @@ const onPath =
 
 const LANGUAGE_SERVERS: LanguageServerDefinition[] = [
   {
-    name: 'typescript',
+    name: 'TypeScript',
     languages: ['typescript', 'typescriptreact', 'javascript', 'javascriptreact'],
     rootMarkers: ['tsconfig.json', 'jsconfig.json', 'package.json'],
     command: typescriptCommand
   },
   {
-    name: 'json',
+    name: 'JSON',
     languages: ['json', 'jsonc'],
     rootMarkers: ['package.json'],
     command: nodeScript(
@@ -132,7 +133,7 @@ const LANGUAGE_SERVERS: LanguageServerDefinition[] = [
     })
   },
   {
-    name: 'css',
+    name: 'CSS',
     languages: ['css', 'scss', 'less'],
     rootMarkers: ['package.json'],
     command: nodeScript(
@@ -145,7 +146,7 @@ const LANGUAGE_SERVERS: LanguageServerDefinition[] = [
     })
   },
   {
-    name: 'html',
+    name: 'HTML',
     languages: ['html'],
     rootMarkers: ['package.json'],
     command: nodeScript(
@@ -161,7 +162,7 @@ const LANGUAGE_SERVERS: LanguageServerDefinition[] = [
     })
   },
   {
-    name: 'python',
+    name: 'Python',
     languages: ['python'],
     rootMarkers: [
       'pyproject.toml',
@@ -177,14 +178,14 @@ const LANGUAGE_SERVERS: LanguageServerDefinition[] = [
     }
   },
   {
-    name: 'php',
+    name: 'PHP',
     languages: ['php'],
     rootMarkers: ['composer.json'],
     command: nodeScript(() => require.resolve('intelephense/lib/intelephense.js'), '--stdio'),
     configure: intelephenseConfiguration
   },
   {
-    name: 'go',
+    name: 'Go',
     languages: ['go'],
     rootMarkers: ['go.work', 'go.mod'],
     command: onPath(
