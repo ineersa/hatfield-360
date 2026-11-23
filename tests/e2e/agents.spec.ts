@@ -204,7 +204,8 @@ test('agent launches report through the real socket and sidebar rows select exac
         await expect(hatfield).not.toContainText('agent running')
         await expect(hatfield).toContainText('1 script running')
         await idle.click()
-        await expect(hatfield).toHaveCount(0)
+        await expect(hatfield).toContainText('Idle · Last turn: completed')
+        await expect(hatfield.getByRole('img', { name: 'Background scripts' })).toBeVisible()
         await command(page, first, 'script-done')
         await expect(hatfield).toContainText('Idle · Last turn: completed')
         expect((await hatfield.boundingBox())?.height).toBe(rowHeight)
@@ -221,7 +222,7 @@ test('agent launches report through the real socket and sidebar rows select exac
         await expect(hatfield).toContainText('Stopped · Last turn: failed')
         await expect(claude).toContainText('Stopped · Last turn: cancelled')
         await all.click()
-        await command(page, first, 'script')
+        await command(page, first, 'child-working')
         await expect(hatfield).toContainText('Working · Last turn: failed')
         await command(page, second, 'child')
         await expect(claude).toContainText('Needs input: question · Last turn: cancelled')
@@ -229,7 +230,7 @@ test('agent launches report through the real socket and sidebar rows select exac
         await expect(hatfield).toHaveCount(0)
         await expect(claude).toHaveCount(0)
         await all.click()
-        await command(page, first, 'script-done')
+        await command(page, first, 'child-done')
         await expect(hatfield).toContainText('Stopped · Last turn: failed')
         await command(page, second, 'end-reporting')
         await expect(claude).toContainText('Running · Last turn: cancelled')
@@ -489,10 +490,8 @@ test('agent notifications follow accepted transitions and open only the owning t
         const completed = panel.getByRole('listitem', { name: 'Agent turn completed' })
         await command(page, hatfield, 'duplicate', 'duplicate')
         await command(page, hatfield, 'stale', 'stale')
-        await command(page, hatfield, 'child')
-        await command(page, hatfield, 'resolve')
+        await command(page, hatfield, 'child-working')
         await expect(needsInput).toHaveCount(1)
-        await command(page, hatfield, 'child-done')
         const hatfieldId = await hatfield.getAttribute('data-terminal-id')
         if (!hatfieldId) throw new Error('Hatfield terminal missing')
         const send = (input: string) =>
@@ -505,18 +504,17 @@ test('agent notifications follow accepted transitions and open only the owning t
         await command(page, hatfield, 'script')
         await command(page, hatfield, 'completed')
         await expect(completed).toHaveCount(0)
-        await send('child-done')
-        await expect(page.getByRole('button', { name: /^Hatfield session/ })).not.toContainText(
-          'Needs input'
-        )
-        await expect(completed).toHaveCount(0)
-        await command(page, hatfield, 'child-working')
+        await command(page, hatfield, 'child-done')
+        const row = page.getByRole('button', { name: /^Hatfield session/ })
+        await expect(row).toContainText('Idle · Last turn: completed')
+        await expect(row.getByRole('img', { name: 'Background scripts' })).toBeVisible()
+        await expect(completed).toHaveCount(1)
         await command(page, hatfield, 'script-done')
-        await expect(completed).toHaveCount(0)
-        await send('child-done')
+        await command(page, hatfield, 'script')
         await expect(completed).toHaveCount(1)
         await command(page, hatfield, 'again')
         await command(page, hatfield, 'failed')
+        await command(page, hatfield, 'script-done')
         await expect(panel.getByRole('listitem', { name: 'Agent turn failed' })).toHaveCount(1)
 
         await launch(page, 'Claude')
@@ -565,7 +563,7 @@ test('agent notifications follow accepted transitions and open only the owning t
   }
 })
 
-test('an announced child blocks completion before reporting its first turn', async () => {
+test('an active subagent blocks completion until the count settles', async () => {
   test.skip(process.platform === 'win32', 'The agent reporting transport is Unix only')
   const { userDataDir, cleanup } = await seed()
   try {
@@ -577,7 +575,7 @@ test('an announced child blocks completion before reporting its first turn', asy
         await page.getByRole('button', { name: 'Notifications', exact: true }).click()
         const panel = page.getByRole('complementary', { name: 'Notifications panel' })
         const completion = panel.getByRole('listitem', { name: 'Agent turn completed' })
-        await command(page, pane, 'child-start-only')
+        await command(page, pane, 'child-working')
         await command(page, pane, 'completed')
         await expect(page.getByRole('button', { name: /^Hatfield session/ })).toContainText(
           'Last turn: completed'
@@ -595,7 +593,7 @@ test('an announced child blocks completion before reporting its first turn', asy
   }
 })
 
-test('an idle child with an open turn still blocks agent completion', async () => {
+test('an unavailable subagent count does not prove completion', async () => {
   test.skip(process.platform === 'win32', 'The agent reporting transport is Unix only')
   const { userDataDir, cleanup } = await seed()
   try {
@@ -612,12 +610,11 @@ test('an idle child with an open turn still blocks agent completion', async () =
         await command(page, pane, 'completed')
         await expect(session).toContainText('Working · Last turn: completed')
         await expect(completion).toHaveCount(0)
-        await command(page, pane, 'child-idle')
-        await expect(session).toContainText('Idle · Last turn: completed')
+        await command(page, pane, 'children-unknown')
+        await expect(session).toContainText('Running · Last turn: completed')
         await expect(completion).toHaveCount(0)
-        await command(page, pane, 'child-turn-done')
-        await expect(completion).toHaveCount(1)
         await command(page, pane, 'child-done')
+        await expect(completion).toHaveCount(1)
         await command(page, pane, 'duplicate', 'duplicate')
         await expect(completion).toHaveCount(1)
       },
@@ -677,12 +674,12 @@ test('a newer main turn supersedes a pending agent completion', async () => {
         await page.getByRole('button', { name: 'Notifications', exact: true }).click()
         const panel = page.getByRole('complementary', { name: 'Notifications panel' })
         const completed = panel.getByRole('listitem', { name: 'Agent turn completed' })
-        await command(page, pane, 'script')
+        await command(page, pane, 'child-working')
         await command(page, pane, 'completed')
         await expect(completed).toHaveCount(0)
         await command(page, pane, 'again')
         await command(page, pane, 'cancelled')
-        await command(page, pane, 'script-done')
+        await command(page, pane, 'child-done')
         await expect(completed).toHaveCount(0)
         await command(page, pane, 'again')
         await command(page, pane, 'completed')

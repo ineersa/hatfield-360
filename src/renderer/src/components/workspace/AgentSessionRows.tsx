@@ -1,7 +1,7 @@
 import claudeCodeIcon from '@/assets/claudecode-color.svg'
 import hatfieldIcon from '@/assets/hatfield-plushie.svg'
 import { cn } from '@/lib/class-names'
-import { Activity, Check, MessageCircle, X } from 'lucide-react'
+import { Activity, Check, MessageCircle, TerminalSquare, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import {
   AGENT_PROVIDERS,
@@ -209,6 +209,13 @@ export function AgentSessionRows({
                   )}
                   title={counts || undefined}
                 >
+                  {session.runningScripts ? (
+                    <TerminalSquare
+                      role="img"
+                      aria-label="Background scripts"
+                      className="mr-1 inline size-3"
+                    />
+                  ) : null}
                   {counts || '\u00a0'}
                 </span>
               </span>

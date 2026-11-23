@@ -62,6 +62,7 @@ it.skipIf(process.platform !== 'linux')(
         owner: first
       }
       const send = (value: object) => register(bootstrap.endpoint, value)
+      expect(await send({ ...request, version: 2 })).toEqual({ ok: false, error: 'version' })
       expect(await send({ ...request, bootstrapToken: 'a'.repeat(64) })).toEqual({
         ok: false,
         error: 'unauthorized'

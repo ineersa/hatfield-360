@@ -12,12 +12,15 @@ let {
 const [provider = 'hatfield', sessionId = 'demo', marker = 'demo'] = process.argv.slice(2)
 let sequence = 0
 let last
-let turn
-let waitStart
-let childTurn
-let scriptStart
 let initial
-const main = { actorId: 'main', actorStart: 1 }
+const snapshot = {
+  provider,
+  turn: null,
+  attention: null,
+  activeSubagents: 0,
+  backgroundScripts: provider === 'hatfield' ? 0 : null,
+  tool: null
+}
 const print = (message) => process.stdout.write(`${message}\n`)
 const send = (event) =>
   new Promise((resolve, reject) => {
@@ -81,6 +84,8 @@ async function emit(kind, fields = {}) {
   return sendEvent(last)
 }
 
+const report = () => emit('session.snapshot', snapshot)
+
 print(`Scenario ready: ${marker}`)
 print(`Directory: ${process.cwd()}`)
 const input = createInterface({ input: process.stdin, terminal: false })
@@ -89,47 +94,37 @@ for await (const command of input) {
     let reply
     switch (command) {
       case 'start':
-        await emit('session.started', {
-          provider,
-          capabilities: [
-            'waits',
-            'actors',
-            'session-end',
-            'notifications',
-            ...(provider === 'hatfield' ? ['scripts'] : [])
-          ]
-        })
-        turn = { ...main, turnId: 'turn', turnStart: sequence + 1 }
-        reply = await emit('turn.started', { ...main, turnId: turn.turnId })
-        initial = last
+      case 'again':
+        snapshot.turn = { id: `turn-${sequence + 1}`, status: 'working' }
+        snapshot.attention = null
+        snapshot.tool = null
+        reply = await report()
+        if (command === 'start') initial = last
         break
       case 'end-reporting':
         reply = await emit('session.ended')
         break
-      case 'again':
-        turn = { ...main, turnId: 'turn', turnStart: sequence + 1 }
-        reply = await emit('turn.started', { ...main, turnId: turn.turnId })
-        break
       case 'tool':
-        reply = await emit('activity.changed', { ...turn, activity: 'working', tool: 'Read' })
+        snapshot.tool = 'Read'
+        reply = await report()
         break
       case 'wait':
-        waitStart = sequence + 1
-        reply = await emit('wait.started', { ...turn, waitId: 'permission', reason: 'permission' })
+        snapshot.attention = { id: `input-${sequence + 1}`, reason: 'permission' }
+        reply = await report()
         break
       case 'resolve':
-        reply = await emit('wait.resolved', { ...turn, waitId: 'permission', waitStart })
+        snapshot.attention = null
+        reply = await report()
         break
       case 'script':
-        scriptStart = sequence + 1
-        reply = await emit('script.started', { scriptId: 'background' })
-        break
       case 'script-done':
-        reply = await emit('script.ended', { scriptId: 'background', scriptStart })
+        snapshot.backgroundScripts = command === 'script' ? 1 : 0
+        reply = await report()
         break
       case 'report-failure-on-hangup':
         process.once('SIGHUP', () => {
-          void emit('turn.ended', { ...turn, outcome: 'failed' })
+          snapshot.turn = { ...snapshot.turn, status: 'failed' }
+          void report()
             .then((status) => writeFile(join(process.cwd(), 'hangup-report'), status))
             .then(
               () => process.exit(0),
@@ -141,42 +136,25 @@ for await (const command of input) {
         })
         reply = 'armed'
         break
-      case 'child-start-only':
       case 'child-working':
-      case 'child': {
-        const actor = { actorId: 'child', actorStart: sequence + 1 }
-        reply = await emit('actor.started', {
-          actorId: actor.actorId,
-          parentId: 'main',
-          parentStart: 1
-        })
-        childTurn = { ...actor, turnId: 'child-turn', turnStart: sequence + 1 }
-        if (command === 'child-start-only') break
-        reply = await emit('turn.started', { ...actor, turnId: childTurn.turnId })
+      case 'child':
+        snapshot.activeSubagents = 1
         if (command === 'child')
-          reply = await emit('wait.started', {
-            ...childTurn,
-            waitId: 'question',
-            reason: 'question'
-          })
+          snapshot.attention = { id: `input-${sequence + 1}`, reason: 'question' }
+        reply = await report()
         break
-      }
+      case 'children-unknown':
       case 'child-done':
-        reply = await emit('actor.ended', {
-          actorId: childTurn.actorId,
-          actorStart: childTurn.actorStart
-        })
-        break
-      case 'child-idle':
-        reply = await emit('activity.changed', { ...childTurn, activity: 'idle' })
-        break
-      case 'child-turn-done':
-        reply = await emit('turn.ended', { ...childTurn, outcome: 'completed' })
+        snapshot.activeSubagents = command === 'child-done' ? 0 : null
+        if (snapshot.attention?.reason === 'question') snapshot.attention = null
+        reply = await report()
         break
       case 'completed':
       case 'failed':
       case 'cancelled':
-        reply = await emit('turn.ended', { ...turn, outcome: command })
+        snapshot.turn = { ...snapshot.turn, status: command }
+        snapshot.tool = null
+        reply = await report()
         break
       case 'message':
         reply = await emit('notification', {
@@ -195,7 +173,7 @@ for await (const command of input) {
         break
       default:
         print(
-          'Commands: start, again, tool, wait, resolve, child, child-start-only, child-working, child-idle, child-turn-done, child-done, completed, failed, cancelled, message, duplicate, stale, report-failure-on-hangup, quit'
+          'Commands: start, again, tool, wait, resolve, child, child-working, children-unknown, child-done, completed, failed, cancelled, message, duplicate, stale, report-failure-on-hangup, quit'
         )
     }
     if (reply) print(`ACK ${command}: ${reply}`)
