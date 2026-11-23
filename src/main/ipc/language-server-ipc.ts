@@ -4,7 +4,6 @@ import {
 } from '../../shared/language-server-api'
 import { fileRoots } from '../files/file-roots'
 import { realpath } from 'node:fs/promises'
-import { join, relative } from 'node:path'
 import { isPathInside, resolveInsideRoots } from '../files/path-containment'
 import {
   allLibraryRoots,
@@ -12,7 +11,6 @@ import {
   serverForLanguage
 } from '../language-servers/language-server-registry'
 import { languageServerSessions } from '../language-servers/language-server-sessions'
-import { projectRoot } from '../language-servers/project-root'
 import { handleTrusted } from './trusted-ipc'
 
 const LANGUAGE_ID = /^[a-z0-9][a-z0-9._-]{0,63}$/i
@@ -55,7 +53,7 @@ export function registerLanguageServerIpc(): void {
       if (real === null || inside === undefined) {
         // A library source a jump opened is served by the page's server it came from, if still running.
         const library = await resolveInsideRoots(path, await libraryRoots(definition))
-        if (library === null) throw new Error(`${path} isn't in a workspace folder`)
+        if (library === null) return { kind: 'outside' }
         const connection = languageServerSessions.running(event.sender, definition.name)
         return connection === null ? { kind: 'none' } : { kind: 'connected', connection }
       }
@@ -63,11 +61,8 @@ export function registerLanguageServerIpc(): void {
       const command = await definition.command()
       if ('missing' in command)
         return { kind: 'missing', server: definition.name, message: command.missing }
-      // Found by real paths, but named under the folder as the page knows it (maybe through a link).
-      const root = join(
-        folder,
-        relative(inside.real, await projectRoot(real, inside.real, definition.rootMarkers))
-      )
+      // One server per workspace folder, as in VS Code: it finds the projects inside it itself.
+      const root = folder
       const configuration = (await definition.configure?.(root)) ?? {}
       return {
         kind: 'connected',

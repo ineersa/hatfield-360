@@ -12,6 +12,8 @@ import {
 import { restartDelay } from '@/lib/restart-backoff'
 import { useLanguageServerStore } from '@/state/language-server-store'
 import { notify } from '@/state/notification-store'
+import { useWorkspaceStore } from '@/state/workspace-store'
+import { useWorktreeStore } from '@/state/worktree-store'
 import { isPlainObject } from '../../../../shared/plain-object'
 import type {
   LanguageServerConnection,
@@ -69,9 +71,9 @@ const closing = new Map<string, Client>()
 const released = new Set<string>()
 /** Which connection each open file uses. */
 const fileConnections = new Map<string, string>()
-/** Files whose tab is open, so a connection that arrives after the tab closed is dropped. */
+/** Files whose tab is open and that have or are getting a server, so a late connection to a closed tab is dropped. */
 const wanted = new Set<string>()
-/** Each open file's language, to connect it again when its server restarts. */
+/** Each open file's language, to connect it again when its server restarts or its folder comes back. */
 const fileLanguages = new Map<string, string>()
 /** Servers that aren't installed are reported once each. */
 const reportedMissing = new Set<string>()
@@ -139,7 +141,24 @@ window.desktop.subscribeLanguageServerStatus((status: LanguageServerStatus) => {
   for (const path of entry.files) fileConnections.delete(path)
   entry.reader.closed()
   if (status.state === 'failed') restartAfterCrash(entry, status.message)
-  else useLanguageServerStore.getState().clearFiles(entry.files)
+  else {
+    // Main stopped it: its folder left the workspace. The tabs connect again if it comes back.
+    for (const path of entry.files) wanted.delete(path)
+    useLanguageServerStore.getState().clearFiles(entry.files)
+  }
+})
+
+/** Open files left without a server because their folder left the workspace try again. */
+function reattachOutside(): void {
+  for (const [path, language] of fileLanguages) {
+    if (!wanted.has(path)) void attachLanguageServer(path, language)
+  }
+}
+useWorkspaceStore.subscribe((state, previous) => {
+  if (state.workspace !== previous.workspace) reattachOutside()
+})
+useWorktreeStore.subscribe((state, previous) => {
+  if (state.projects !== previous.projects) reattachOutside()
 })
 
 function startClient(connection: LanguageServerConnection): Client {
@@ -202,8 +221,13 @@ async function connect(path: string, languageId: string) {
 export async function attachLanguageServer(path: string, languageId: string): Promise<void> {
   if (wanted.has(path)) return
   wanted.add(path)
+  fileLanguages.set(path, languageId)
   try {
     const result = await connect(path, languageId)
+    if (result.kind === 'outside') {
+      wanted.delete(path)
+      return
+    }
     if (result.kind === 'missing' && !reportedMissing.has(result.server)) {
       reportedMissing.add(result.server)
       notify({
@@ -222,7 +246,6 @@ export async function attachLanguageServer(path: string, languageId: string): Pr
     const entry = clients.get(result.connection.id) ?? startClient(result.connection)
     entry.files.add(path)
     fileConnections.set(path, result.connection.id)
-    fileLanguages.set(path, languageId)
     showStatus([path], entry.connection.server, entry.state)
   } catch (error) {
     console.error(`Connecting ${path} to its language server failed:`, error)

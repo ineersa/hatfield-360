@@ -40,6 +40,18 @@ describe('clientMessageVerdict', () => {
     expect(await verdict(response)).toEqual({ action: 'forward', message: response })
   })
 
+  it('forwards text that only looks like a document, such as a pasted file URL', async () => {
+    const change = {
+      jsonrpc: '2.0',
+      method: 'textDocument/didChange',
+      params: {
+        textDocument: { uri: inside, version: 2 },
+        contentChanges: [{ text: outside }]
+      }
+    }
+    expect(await verdict(change)).toEqual({ action: 'forward', message: change })
+  })
+
   it('forwards a file not created yet when its folder is inside', async () => {
     const created = pathToFileURL(join(folder, 'src', 'new.ts')).href
     const message = {

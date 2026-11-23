@@ -11,10 +11,14 @@ export type LanguageServerConnection = {
   libraries: string[]
 }
 
-/** What opening a file finds: its server, no server for its language, or a server that isn't installed. */
+/**
+ * What opening a file finds: its server, no server for its language, a server that isn't installed,
+ * or a file outside the workspace folders (a folder removed while its tab stays open).
+ */
 export type LanguageServerConnectResult =
   | { kind: 'connected'; connection: LanguageServerConnection }
   | { kind: 'none' }
+  | { kind: 'outside' }
   | { kind: 'missing'; server: string; message: string }
 
 export type LanguageServerState = 'starting' | 'ready' | 'restarting' | 'failed' | 'stopped'

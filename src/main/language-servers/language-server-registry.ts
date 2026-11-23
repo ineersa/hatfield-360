@@ -1,9 +1,9 @@
 import { execFile } from 'node:child_process'
 import { constants } from 'node:fs'
-import { access } from 'node:fs/promises'
+import { access, readdir } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { homedir } from 'node:os'
-import { delimiter, dirname, isAbsolute, join } from 'node:path'
+import { delimiter, dirname, isAbsolute, join, parse } from 'node:path'
 import { promisify } from 'node:util'
 import { realRoots } from '../files/path-containment'
 import { isPythonLibraryFolder, libraryFoldersBesideHome } from './library-folders'
@@ -24,11 +24,9 @@ export type LanguageServerDefinition = {
   /** Shown to the user, as in "The PHP language server". */
   name: string
   languages: string[]
-  /** Files that mark a project's root; the nearest folder holding one is the server's root. */
-  rootMarkers: string[]
   /** The command, or why it isn't available and how to install it. */
   command: () => Promise<ServerCommand | { missing: string }>
-  /** Worked out by main for each start, never taken from the page. */
+  /** Worked out by main for each start (its workspace folder), never taken from the page. */
   configure?: (root: string) => Promise<ServerConfiguration>
   /**
    * Folders outside any project holding the language's own sources (standard library, stubs),
@@ -46,15 +44,71 @@ const exists = (path: string): Promise<boolean> =>
     () => false
   )
 
-/** The project's virtualenv interpreter (`.venv` or `venv` in its root), if it has one. */
-async function virtualenvPython(root: string): Promise<string | undefined> {
-  const executable =
-    process.platform === 'win32' ? join('Scripts', 'python.exe') : join('bin', 'python')
+/**
+ * The `site-packages` folders of the project's virtualenv (`.venv` or `venv` in its root), found by
+ * listing it. Its interpreter is the repository's own file, so it is never run.
+ */
+async function virtualenvPackages(root: string): Promise<string[]> {
   for (const folder of ['.venv', 'venv']) {
-    const python = join(root, folder, executable)
-    if (await exists(python)) return python
+    const venv = join(root, folder)
+    const candidates =
+      process.platform === 'win32'
+        ? [join(venv, 'Lib', 'site-packages')]
+        : (await readdir(join(venv, 'lib')).catch(() => []))
+            .filter((name) => /^python\d/.test(name))
+            .map((name) => join(venv, 'lib', name, 'site-packages'))
+    const present = await Promise.all(candidates.map(exists))
+    const found = candidates.filter((_, index) => present[index])
+    if (found.length > 0) return found
   }
-  return undefined
+  return []
+}
+
+/** A tool that hangs or waits on the network (a toolchain download) gives up and counts as missing. */
+const TOOL_TIMEOUT_MS = 10_000
+
+/**
+ * Runs one of the user's tools from the file system's root, never from a folder holding a project
+ * (Python would import modules from it), and stops it if it hangs.
+ */
+const runTool = (file: string, args: string[], env?: NodeJS.ProcessEnv) =>
+  promisify(execFile)(file, args, {
+    cwd: parse(process.execPath).root,
+    timeout: TOOL_TIMEOUT_MS,
+    ...(env && { env })
+  })
+
+type UserPython = { executable: string; path: string[] }
+
+let userPythonFound: Promise<UserPython | null> | undefined
+
+/** The user's own interpreter (`python3` on PATH) and where it finds modules, asked once per run. */
+function userPython(): Promise<UserPython | null> {
+  userPythonFound ??= findUserPython()
+  return userPythonFound
+}
+
+async function findUserPython(): Promise<UserPython | null> {
+  for (const python of ['python3', 'python']) {
+    try {
+      const { stdout } = await runTool(python, [
+        '-c',
+        'import json, sys; print(json.dumps([sys.executable, sys.path]))'
+      ])
+      const found: unknown = JSON.parse(stdout)
+      const executable: unknown = Array.isArray(found) ? found.at(0) : undefined
+      const paths: unknown = Array.isArray(found) ? found.at(1) : undefined
+      if (typeof executable !== 'string' || !isAbsolute(executable) || !Array.isArray(paths))
+        return null
+      const path = paths.filter(
+        (each): each is string => typeof each === 'string' && isAbsolute(each)
+      )
+      return { executable, path }
+    } catch {
+      // Not installed under this name; the next one may be.
+    }
+  }
+  return null
 }
 
 /**
@@ -143,33 +197,41 @@ const onPath =
  * only Python's own folders count.
  */
 async function pythonSources(): Promise<string[]> {
-  for (const python of ['python3', 'python']) {
-    try {
-      const { stdout } = await promisify(execFile)(python, [
-        '-c',
-        'import json, sys; print(json.dumps(sys.path))'
-      ])
-      const paths: unknown = JSON.parse(stdout)
-      if (!Array.isArray(paths)) return []
-      const [home = homedir()] = await realRoots([homedir()])
-      const folders = await realRoots(
-        paths.filter((path): path is string => typeof path === 'string' && isAbsolute(path))
-      )
-      return folders.filter((folder) => isPythonLibraryFolder(folder, home))
-    } catch {
-      // Not installed under this name; the next one may be.
-    }
-  }
-  return []
+  const python = await userPython()
+  if (!python) return []
+  const [home = homedir()] = await realRoots([homedir()])
+  const folders = await realRoots(python.path)
+  return folders.filter((folder) => isPythonLibraryFolder(folder, home))
 }
 
 /** Go's standard library and module cache, as the user's `go` reports them; none without Go. */
 async function goSources(): Promise<string[]> {
   try {
-    const { stdout } = await promisify(execFile)('go', ['env', 'GOROOT', 'GOMODCACHE'])
+    // The installed toolchain answers; `go` never downloads another to do it.
+    const { stdout } = await runTool('go', ['env', 'GOROOT', 'GOMODCACHE'], {
+      ...process.env,
+      GOTOOLCHAIN: 'local'
+    })
     return stdout.split(/\r?\n/).filter(Boolean)
   } catch {
     return []
+  }
+}
+
+/**
+ * basedpyright runs the interpreter it is given, or else the project's own `.venv/bin/python`: a
+ * file from the repository. So it always gets the user's interpreter (or, without one, a venv
+ * folder, which stops it looking), and the project's packages as extra import paths.
+ */
+export async function pythonConfiguration(root: string): Promise<ServerConfiguration> {
+  const [python, packages] = await Promise.all([userPython(), virtualenvPackages(root)])
+  return {
+    settings: {
+      python: {
+        ...(python ? { pythonPath: python.executable } : { venvPath: root }),
+        analysis: { extraPaths: packages }
+      }
+    }
   }
 }
 
@@ -177,14 +239,12 @@ const LANGUAGE_SERVERS: LanguageServerDefinition[] = [
   {
     name: 'TypeScript',
     languages: ['typescript', 'typescriptreact', 'javascript', 'javascriptreact'],
-    rootMarkers: ['tsconfig.json', 'jsconfig.json', 'package.json'],
     command: typescriptCommand,
     librarySources: async () => [typescriptLib()]
   },
   {
     name: 'JSON',
     languages: ['json', 'jsonc'],
-    rootMarkers: ['package.json'],
     command: nodeScript(
       () =>
         require.resolve('vscode-langservers-extracted/lib/json-language-server/node/jsonServerMain.js'),
@@ -199,7 +259,6 @@ const LANGUAGE_SERVERS: LanguageServerDefinition[] = [
   {
     name: 'CSS',
     languages: ['css', 'scss', 'less'],
-    rootMarkers: ['package.json'],
     command: nodeScript(
       () =>
         require.resolve('vscode-langservers-extracted/lib/css-language-server/node/cssServerMain.js'),
@@ -212,7 +271,6 @@ const LANGUAGE_SERVERS: LanguageServerDefinition[] = [
   {
     name: 'HTML',
     languages: ['html'],
-    rootMarkers: ['package.json'],
     command: nodeScript(
       () =>
         require.resolve('vscode-langservers-extracted/lib/html-language-server/node/htmlServerMain.js'),
@@ -228,13 +286,6 @@ const LANGUAGE_SERVERS: LanguageServerDefinition[] = [
   {
     name: 'Python',
     languages: ['python'],
-    rootMarkers: [
-      'pyproject.toml',
-      'setup.py',
-      'setup.cfg',
-      'requirements.txt',
-      'pyrightconfig.json'
-    ],
     command: nodeScript(() => require.resolve('basedpyright/langserver.index.js'), '--stdio'),
     librarySources: async () => [
       ...(await packageFolder(
@@ -244,15 +295,11 @@ const LANGUAGE_SERVERS: LanguageServerDefinition[] = [
       )()),
       ...(await pythonSources())
     ],
-    configure: async (root) => {
-      const pythonPath = await virtualenvPython(root)
-      return { settings: { python: pythonPath === undefined ? {} : { pythonPath } } }
-    }
+    configure: (root) => pythonConfiguration(root)
   },
   {
     name: 'PHP',
     languages: ['php'],
-    rootMarkers: ['composer.json'],
     command: nodeScript(() => require.resolve('intelephense/lib/intelephense.js'), '--stdio'),
     librarySources: packageFolder(
       () => require.resolve('intelephense/lib/intelephense.js'),
@@ -263,7 +310,6 @@ const LANGUAGE_SERVERS: LanguageServerDefinition[] = [
   {
     name: 'Go',
     languages: ['go'],
-    rootMarkers: ['go.work', 'go.mod'],
     command: onPath(
       'gopls',
       ['serve'],

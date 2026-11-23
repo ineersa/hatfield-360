@@ -16,7 +16,7 @@ import { CodeEditor } from './CodeEditor'
 import { loadDocument, saveDocument } from './editor-documents'
 import { fileName, type TabLabel, tabLabels } from './editor-tab-labels'
 import { EDITOR_FILE_LIMITS } from '../../../../shared/editor-api'
-import { isDependencyFile } from './editor-navigation'
+import { isDependencyFile } from '../../../../shared/dependency-folders'
 import { ExternalChangeDialog } from './ExternalChangeDialog'
 import { isMarkdown, MarkdownPreview } from './MarkdownPreview'
 

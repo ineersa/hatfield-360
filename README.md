@@ -21,4 +21,4 @@ Contributor and agent rules live in [AGENTS.md](AGENTS.md). Agent skills are in 
 
 - Tasks are GitHub issues tracked through the **Hatfield Status** issue field (task-workflow plugin / Hatfield extension). Config: `.hatfield/settings.yaml`; hooks: `.hatfield/task-hooks/` (setup installs deps, validate runs `pnpm verify`, under xvfb on headless Linux).
 - Observational memory is served by the local Librarian (`http://127.0.0.1:8093/_mcp`), configured in `~/.hatfield/settings.yaml`.
-- There is no PR CI; the validate hook is the gate. Releases: publish a GitHub release (or dispatch `.github/workflows/release.yml` with a ref) to check, package and smoke-test the app on Linux, macOS and Windows and upload the installers. macOS builds are unsigned for now.
+- There is no PR CI; the validate hook is the gate. Releases: publish a GitHub release (or dispatch `.github/workflows/release.yml` with a ref) to check, package and smoke-test the app on Linux and macOS and upload the installers. macOS builds are unsigned for now.

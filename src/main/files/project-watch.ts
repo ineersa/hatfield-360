@@ -1,5 +1,6 @@
 import { type FSWatcher, watch } from 'chokidar'
 import { basename, dirname } from 'node:path'
+import { isDependencyFolder } from '../../shared/dependency-folders'
 import { ignoredNames, ignoredPaths } from '../git/git-ignore'
 import { isPathInside } from './path-containment'
 
@@ -15,7 +16,8 @@ export type ProjectChange = {
 type Listener = (changes: ProjectChange[]) => void
 
 /**
- * One workspace folder watched with chokidar, all of it but what git ignores and `.git` itself.
+ * One workspace folder watched with chokidar, all of it but what git ignores, `.git` itself and
+ * dependency folders (`node_modules`, a virtualenv), which git may not ignore or not manage at all.
  * The ignored set is git's answer, asked again when a `.gitignore` changes; a folder that appears
  * later is checked with git when it arrives.
  */
@@ -81,7 +83,8 @@ class ProjectWatch {
 
   private isIgnored(path: string): boolean {
     for (let each = path; isPathInside(each, this.root); each = dirname(each)) {
-      if (basename(each) === '.git' || this.ignored.has(each)) return true
+      const name = basename(each)
+      if (name === '.git' || isDependencyFolder(name) || this.ignored.has(each)) return true
       if (each === this.root) break
     }
     return false

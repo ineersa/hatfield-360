@@ -44,12 +44,12 @@ const allowedMethod = (method: string): boolean =>
 
 const URI_SCHEME = /^[a-z][a-z0-9+.-]*:/i
 
-/** Every string in `value` that names a document: a `...uri`/`...Uri` field, or any `file:` URL. */
+/**
+ * Every document `value` names: the protocol puts each in a `...uri`/`...Uri` field. Other strings
+ * are free text (a document's contents), which may start with `file:` without naming anything.
+ */
 function uris(value: unknown, key = ''): string[] {
-  if (typeof value === 'string') {
-    const named = /uri$/i.test(key) && URI_SCHEME.test(value)
-    return named || value.startsWith('file:') ? [value] : []
-  }
+  if (typeof value === 'string') return /uri$/i.test(key) && URI_SCHEME.test(value) ? [value] : []
   if (Array.isArray(value)) return value.flatMap((each) => uris(each, key))
   if (isPlainObject(value)) return Object.entries(value).flatMap(([name, each]) => uris(each, name))
   return []

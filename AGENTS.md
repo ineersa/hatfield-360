@@ -19,7 +19,7 @@ Electron desktop app: React renderer, Node main process, sandboxed preload bridg
 > [!IMPORTANT]
 > Run `pnpm verify` after your last edit and before every push (`pnpm check` alone while iterating). Never `--no-verify`, and never silence a lint rule with a disable comment.
 
-There is no PR CI: the task workflow's validate hook (`pnpm verify`) is the gate. `.github/workflows/release.yml` runs only for a published release or a manual dispatch; it runs `pnpm check`, packages the app on Linux, macOS and Windows, smoke-tests each packaged executable with the E2E spec and uploads the installers. Watch it with `gh run watch <run-id> --compact --exit-status`; don't poll.
+There is no PR CI: the task workflow's validate hook (`pnpm verify`) is the gate. `.github/workflows/release.yml` runs only for a published release or a manual dispatch; it runs `pnpm check`, packages the app on Linux and macOS, smoke-tests each packaged executable with the E2E spec and uploads the installers. Watch it with `gh run watch <run-id> --compact --exit-status`; don't poll.
 
 # Architecture
 
@@ -78,5 +78,5 @@ Process boundary rules, enforced by lint (`.oxlintrc.json` overrides plus `confi
 
 Every change considers:
 
-1. **Cross-platform (macOS, Linux, Windows).** Guard platform-specific behavior at runtime (`process.platform`), build paths with `node:path`, never hardcode separators, shells or shortcuts. Use `CommandOrControl` for accelerators.
+1. **Cross-platform (macOS, Linux; Windows isn't supported).** Guard platform-specific behavior at runtime (`process.platform`), build paths with `node:path`, never hardcode separators, shells or shortcuts. Use `CommandOrControl` for accelerators.
 2. **Security.** Untrusted renderer, no remote code, no `shell.openExternal` on unvalidated URLs, strict CSP in `index.html`.
