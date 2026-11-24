@@ -27,13 +27,11 @@ export function NotificationsBar(): React.JSX.Element {
             )}
           >
             <Bell className="size-5.5" strokeWidth={1.75} aria-hidden />
-            {count > 0 ? (
+            {count > 0 && !panelOpen ? (
               <span
                 aria-hidden
-                className="type-badge absolute -top-0.5 -right-0.5 grid h-4 min-w-4 place-items-center rounded-full bg-primary px-0.5 text-center leading-none ring-2 ring-frame"
-              >
-                {count > 99 ? '99+' : count}
-              </span>
+                className="absolute top-1 right-1 size-2.5 rounded-full bg-primary ring-2 ring-frame"
+              />
             ) : null}
           </button>
         </TooltipTrigger>
