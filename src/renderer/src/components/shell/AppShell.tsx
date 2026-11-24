@@ -12,6 +12,7 @@ import { TooltipProvider } from '@/components/ui/tooltip'
 import { WelcomeScreen } from '@/components/workspace/WelcomeScreen'
 import { connectFilesSession } from '@/state/files-session'
 import { useEditorTabStore } from '@/state/editor-tab-store'
+import { useKeymapStore } from '@/state/keymap-store'
 import { useNotificationStore } from '@/state/notification-store'
 import { useSettingsStore } from '@/state/settings-store'
 import { SIDE_PANEL_MIN_WIDTH, useShellLayoutStore } from '@/state/shell-layout-store'
@@ -38,6 +39,7 @@ export function AppShell(): React.JSX.Element {
 
   const connectWorktrees = useWorktreeStore((state) => state.connect)
   const connectSettings = useSettingsStore((state) => state.connect)
+  const connectKeymap = useKeymapStore((state) => state.connect)
   const settingsOpen = useShellLayoutStore((state) => state.settingsOpen)
   const openSettings = useShellLayoutStore((state) => state.openSettings)
   const connectLayout = useShellLayoutStore((state) => state.connect)
@@ -49,6 +51,7 @@ export function AppShell(): React.JSX.Element {
   useEffect(() => connectWorkspace(), [connectWorkspace])
   useEffect(() => connectWorktrees(), [connectWorktrees])
   useEffect(() => connectSettings(), [connectSettings])
+  useEffect(() => connectKeymap(), [connectKeymap])
   useEffect(() => connectLayout(), [connectLayout])
   useEffect(() => connectFilesSession(), [])
   useEffect(() => window.desktop.subscribeShowSettings(openSettings), [openSettings])

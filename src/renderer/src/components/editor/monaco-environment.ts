@@ -14,6 +14,7 @@ import getFilesServiceOverride, {
 } from '@codingame/monaco-vscode-files-service-override'
 import getLanguagesServiceOverride from '@codingame/monaco-vscode-languages-service-override'
 import getModelServiceOverride from '@codingame/monaco-vscode-model-service-override'
+import getQuickAccessServiceOverride from '@codingame/monaco-vscode-quickaccess-service-override'
 import getTextmateServiceOverride from '@codingame/monaco-vscode-textmate-service-override'
 import TextMateWorker from '@codingame/monaco-vscode-textmate-service-override/worker?worker'
 import getThemeServiceOverride from '@codingame/monaco-vscode-theme-service-override'
@@ -60,6 +61,8 @@ await initialize({
   ...getConfigurationServiceOverride(),
   ...getModelServiceOverride(),
   ...getLanguagesServiceOverride(),
+  // Go to Line, File Structure and the command palette.
+  ...getQuickAccessServiceOverride(),
   ...getThemeServiceOverride(),
   ...getTextmateServiceOverride(),
   ...getExtensionsServiceOverride({ enableWorkerExtensionHost: false })

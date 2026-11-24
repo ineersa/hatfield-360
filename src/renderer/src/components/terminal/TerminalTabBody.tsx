@@ -2,7 +2,8 @@ import type { AgentLaunch } from '../../../../shared/agent-api'
 import type { ITerminalOptions } from '@xterm/xterm'
 import { useEffect, useRef } from 'react'
 import { PaneManager } from '@/lib/pane-manager/pane-manager'
-import { terminalShortcutLabel } from '@/lib/terminal-shortcut-label'
+import { terminalShortcutLabel } from '@/lib/keymap-match'
+import { useKeymapStore } from '@/state/keymap-store'
 import { terminalTheme } from '@/lib/terminal-theme'
 import { useSettingsStore } from '@/state/settings-store'
 import { useTerminalStore, type TerminalTab } from '@/state/terminal-store'
@@ -70,7 +71,7 @@ export function TerminalTabBody({
         shells.delete(paneId)
         if (panes.getPanes().length === 0) closeTab(tab.id)
       },
-      closePaneTitle: `Close Pane (${terminalShortcutLabel('close-pane')})`,
+      closePaneTitle: `Close Pane (${terminalShortcutLabel(useKeymapStore.getState().shell, 'close-pane')})`,
       onLinkClick: (event, url) => {
         // Ctrl/Cmd+click, as in VS Code, so selecting text across a link doesn't open it.
         if (!event.ctrlKey && !event.metaKey) return

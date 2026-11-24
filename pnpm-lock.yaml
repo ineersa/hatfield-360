@@ -166,6 +166,9 @@ importers:
 
   .:
     dependencies:
+      '@codingame/monaco-vscode-quickaccess-service-override':
+        specifier: 37.6.1
+        version: 37.6.1
       basedpyright:
         specifier: 1.40.2
         version: 1.40.2

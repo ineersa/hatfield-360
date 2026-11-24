@@ -7,6 +7,7 @@ import { fileRoots } from '../files/file-roots'
 import { locateEditorFile, writeFileInRoots, writeFileReadAs } from '../files/guarded-file'
 import { OpenFileWatchers } from '../files/open-file-watchers'
 import { resolveInsideRoots, resolveOutsideHome } from '../files/path-containment'
+import { keybindingsStore } from '../keybindings/keybindings-store'
 import { allLibraryRoots } from '../language-servers/language-server-registry'
 import { answerClose, setUnsaved } from '../window/unsaved-changes-guard'
 import { handleTrusted } from './trusted-ipc'
@@ -69,9 +70,13 @@ async function readOutside(path: string, refused: unknown): Promise<EditorFile> 
 
 async function read(contents: WebContents, path: string): Promise<EditorFile> {
   const page = heldBy(contents)
-  const real = await locateEditorFile(path, await rootPaths(), page.files.get(path)).catch(
-    (error: unknown) => readOutside(path, error)
-  )
+  // keybindings.json is the one file outside the workspace the app's editor saves.
+  const real =
+    path === keybindingsStore.file()
+      ? await realpath(path).catch(() => null)
+      : await locateEditorFile(path, await rootPaths(), page.files.get(path)).catch(
+          (error: unknown) => readOutside(path, error)
+        )
   if (real === null) return { kind: 'missing' }
   if (typeof real !== 'string') return real
   const file = await readEditorFile(real)

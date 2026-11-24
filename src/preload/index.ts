@@ -4,6 +4,7 @@ import { type DesktopApi, IPC_CHANNELS } from '../shared/desktop-api'
 import { EDITOR_CHANNELS } from '../shared/editor-api'
 import { FILES_SESSION_CHANNELS } from '../shared/files-session-api'
 import { FILE_TREE_CHANNELS } from '../shared/file-tree-api'
+import { KEYBINDINGS_CHANNELS, type KeybindingsView } from '../shared/keybindings-api'
 import { SETTINGS_CHANNELS, type SettingsView } from '../shared/settings-api'
 import { SHELL_LAYOUT_CHANNELS } from '../shared/shell-layout-api'
 import { LANGUAGE_SERVER_CHANNELS, type LanguageServerStatus } from '../shared/language-server-api'
@@ -85,6 +86,18 @@ const desktopApi: DesktopApi = {
     const listener = (_event: unknown, settings: SettingsView): void => callback(settings)
     ipcRenderer.on(SETTINGS_CHANNELS.changed, listener)
     return () => ipcRenderer.removeListener(SETTINGS_CHANNELS.changed, listener)
+  },
+  getKeybindings: () => ipcRenderer.invoke(KEYBINDINGS_CHANNELS.get),
+  openKeybindingsFile: () => ipcRenderer.invoke(KEYBINDINGS_CHANNELS.openFile),
+  subscribeKeybindings: (callback) => {
+    const listener = (_event: unknown, view: KeybindingsView): void => callback(view)
+    ipcRenderer.on(KEYBINDINGS_CHANNELS.changed, listener)
+    return () => ipcRenderer.removeListener(KEYBINDINGS_CHANNELS.changed, listener)
+  },
+  subscribeShowKeybindingsFile: (callback) => {
+    const listener = (_event: unknown, path: string): void => callback(path)
+    ipcRenderer.on(KEYBINDINGS_CHANNELS.showFile, listener)
+    return () => ipcRenderer.removeListener(KEYBINDINGS_CHANNELS.showFile, listener)
   },
   getShellLayout: () => ipcRenderer.invoke(SHELL_LAYOUT_CHANNELS.get),
   saveShellLayout: (layout) => ipcRenderer.invoke(SHELL_LAYOUT_CHANNELS.save, layout),
