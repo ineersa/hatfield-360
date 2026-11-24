@@ -28,7 +28,8 @@ export type Row = Placement &
   )
 
 const worktreeKey = (parent: string, path: string): string => `${parent}\0\0worktree\0${path}`
-const entryKey = (parent: string, name: string): string => `${parent}\0${name}`
+/** The row key of the entry `name` in the folder row `parent`. */
+export const entryKey = (parent: string, name: string): string => `${parent}\0${name}`
 
 const branchOf = (worktree: Worktree): string =>
   worktree.branch ?? `detached ${worktree.head.slice(0, 7)}`

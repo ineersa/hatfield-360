@@ -4,6 +4,7 @@ import {
   appendFile,
   chmod,
   mkdir,
+  readdir,
   readFile,
   realpath,
   rename,
@@ -596,6 +597,79 @@ test('Select Opened File reveals the active tab in the tree, from the button or 
     )
   } finally {
     await cleanUserData()
+    await cleanProjects()
+  }
+})
+
+const selected = (page: Page) => tree(page).locator('[role=treeitem][aria-selected=true]')
+
+test('rows are selected as ranges and all at once, and can be renamed and moved to the trash', async () => {
+  const [projects, cleanProjects] = await makeProjectsDir()
+  const root = join(projects, 'notes')
+  await mkdir(join(root, 'drafts'), { recursive: true })
+  for (const name of ['a.md', 'b.md', 'c.md', 'd.md']) await writeFile(join(root, name), name)
+  // The system trash is kept in this folder, never the user's own.
+  const [dataHome, cleanDataHome] = await makeTempDir('data-home')
+  const [userData, cleanUserData] = await seedWorkspace([{ path: root, kind: 'folder' }])
+  try {
+    await withApp(
+      async (_app, page) => {
+        await showView(page, 'Files')
+        await item(page, 'notes').click()
+        await item(page, 'a.md').click()
+        await item(page, 'c.md').click({ modifiers: ['Shift'] })
+        await expect(selected(page)).toHaveText(['a.md', 'b.md', 'c.md'])
+        await item(page, 'drafts').click({ modifiers: ['ControlOrMeta'] })
+        await expect(selected(page)).toHaveText(['drafts', 'a.md', 'b.md', 'c.md'])
+        await page.keyboard.press('ControlOrMeta+KeyA')
+        await expect(selected(page)).toHaveText(['notes', 'drafts', 'a.md', 'b.md', 'c.md', 'd.md'])
+
+        // Delete asks first and names what goes; roots are never part of it.
+        await item(page, 'b.md').click()
+        await item(page, 'c.md').click({ modifiers: ['Shift'] })
+        await page.keyboard.press(process.platform === 'darwin' ? 'Meta+Backspace' : 'Delete')
+        const dialog = page.getByRole('alertdialog', { name: 'Delete 2 items?' })
+        await expect(dialog.getByRole('list', { name: 'Items to delete' })).toHaveText(
+          /b\.md\s*c\.md/
+        )
+        await saveScreenshot(page, 'file-tree-delete')
+        await dialog.getByRole('button', { name: 'Cancel' }).click()
+        await expect(item(page, 'b.md')).toBeVisible()
+        await contextMenu(page, item(page, 'b.md'), 'Delete…')
+        await dialog.getByRole('button', { name: 'Move to Trash' }).click()
+        await expect(tree(page).getByRole('treeitem')).toHaveText([
+          'notes',
+          'drafts',
+          'a.md',
+          'd.md'
+        ])
+        expect((await readdir(join(dataHome, 'Trash', 'files'))).toSorted()).toEqual([
+          'b.md',
+          'c.md'
+        ])
+
+        // F2 edits the name in place; Escape keeps it, Enter renames.
+        await item(page, 'd.md').click()
+        await page.keyboard.press('F2')
+        const name = tree(page).getByRole('textbox', { name: 'New name for d.md' })
+        await expect(name).toBeFocused()
+        await page.keyboard.type('e')
+        await page.keyboard.press('Escape')
+        await expect(name).toHaveCount(0)
+        await expect(item(page, 'd.md')).toBeVisible()
+        await contextMenu(page, item(page, 'a.md'), 'Rename…')
+        await expect(tree(page).getByRole('textbox', { name: 'New name for a.md' })).toBeFocused()
+        await page.keyboard.type('intro')
+        await page.keyboard.press('Enter')
+        await expect(item(page, 'intro.md')).toHaveAttribute('aria-selected', 'true')
+        expect(await readFile(join(root, 'intro.md'), 'utf8')).toBe('a.md')
+        await expect(item(page, 'a.md')).toHaveCount(0)
+      },
+      { userDataDir: userData, env: { XDG_DATA_HOME: dataHome } }
+    )
+  } finally {
+    await cleanUserData()
+    await cleanDataHome()
     await cleanProjects()
   }
 })

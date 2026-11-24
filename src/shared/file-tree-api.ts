@@ -17,7 +17,9 @@ export const FILE_TREE_CHANNELS = {
   watch: 'file-tree:watch',
   changed: 'file-tree:changed',
   copyPath: 'file-tree:copy-path',
-  reveal: 'file-tree:reveal'
+  reveal: 'file-tree:reveal',
+  trash: 'file-tree:trash',
+  rename: 'file-tree:rename'
 } as const
 
 /** How Copy Path writes a path: as is, or from the root folder it is under. */
@@ -34,4 +36,8 @@ export type FileTreeApi = {
   copyPath: (path: string, form: PathForm) => Promise<void>
   /** Shows a file or folder inside the workspace in the system file manager. */
   revealPath: (path: string) => Promise<void>
+  /** Moves files and folders inside the workspace to the system trash; never a root folder or one holding a root. */
+  trashPaths: (paths: string[]) => Promise<void>
+  /** Renames a file or folder inside the workspace within its folder, never over an existing name; resolves with the new path. */
+  renamePath: (path: string, name: string) => Promise<string>
 }
