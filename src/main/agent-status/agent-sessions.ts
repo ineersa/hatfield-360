@@ -186,8 +186,13 @@ export function trackAgentSessions(
       launches.delete(change.launchId)
       if (!launch || !records.has(launch.session.id)) return
       const { owner, session } = launch
+      if (change.exited) {
+        records.delete(session.id)
+        changed(owner)
+        return
+      }
       Object.assign(session, {
-        process: change.exited ? 'exited' : 'unknown',
+        process: 'unknown',
         activity: 'unknown',
         runningChildren: null,
         runningScripts: null,
@@ -293,20 +298,14 @@ export function trackAgentSessions(
         onClosing: () => policy.beginClosing(),
         onExit: () => {
           release()
-          Object.assign(session, {
-            process: 'exited',
-            activity: 'unknown',
-            runningChildren: null,
-            runningScripts: null,
-            tool: null,
-            wait: null,
-            updatedAt: Date.now()
-          })
-          if (records.has(session.id)) changed(owner)
+          session.process = 'exited'
+          if (records.delete(session.id)) changed(owner)
         }
       })
-      recordSession(owner, session)
-      changed(owner)
+      if (session.process !== 'exited') {
+        recordSession(owner, session)
+        changed(owner)
+      }
       return terminal
     } catch (error) {
       release()

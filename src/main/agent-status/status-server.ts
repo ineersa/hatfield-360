@@ -129,7 +129,7 @@ export class AgentStatusServer {
     const bootstrap = this.#bootstraps.get(token)
     if (!bootstrap) return
     const root = await pinProcess(pid)
-    if (root.tty !== '0' && this.#bootstraps.get(token) === bootstrap) bootstrap.root = root
+    if (this.#bootstraps.get(token) === bootstrap) bootstrap.root = root
     else await root.handle.close()
   }
 
@@ -182,7 +182,8 @@ export class AgentStatusServer {
     bootstrap.attempts = bootstrap.attempts.filter((time) => now - time < 1000)
     if (bootstrap.attempts.length >= 4) return { ok: false, error: 'limit' }
     bootstrap.attempts.push(now)
-    if (!bootstrap.root) return { ok: false, error: 'unavailable' }
+    const root = bootstrap.root
+    if (!root) return { ok: false, error: 'unavailable' }
     if (bootstrap.lookup) return { ok: false, error: 'limit' }
     const controller = new AbortController()
     bootstrap.lookup = controller
@@ -207,7 +208,19 @@ export class AgentStatusServer {
       }
       if (bootstrap.owners.size >= 4 || this.#launches.size >= maxLaunches)
         return { ok: false, error: 'limit' }
-      const process = await findOwner(bootstrap.root, request.owner, lookup)
+      const shell = await observeProcess(root.handle)
+      if (
+        lookup.aborted ||
+        this.#bootstraps.get(request.token) !== bootstrap ||
+        !shell.alive ||
+        shell.startTicks !== root.startTicks ||
+        shell.tty === '0' ||
+        (root.tty !== '0' && shell.tty !== root.tty)
+      )
+        return { ok: false, error: 'unavailable' }
+      // forkpty can return before the pinned child acquires its controlling TTY.
+      if (root.tty === '0') root.tty = shell.tty
+      const process = await findOwner(root, request.owner, lookup)
       if (!process) return { ok: false, error: 'unavailable' }
       let keep = false
       try {

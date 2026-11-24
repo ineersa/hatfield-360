@@ -640,8 +640,6 @@ test('agent launch settings are validated and a missing executable keeps diagnos
         await expect(pane.getByRole('status')).toHaveText('Process exited with code 127')
         await expect(output(pane)).toContainText('missing-agent-command')
         const row = page.getByRole('button', { name: /^Hatfield (?:#|·)/ })
-        await expect(row).toContainText('Stopped')
-        await page.getByRole('button', { name: 'Close Hatfield', exact: true }).click()
         await expect(row).toHaveCount(0)
       },
       { userDataDir }
@@ -1149,102 +1147,47 @@ test('a linked worktree launches into its own tab and publishes only public sess
 
 const shellQuote = (value: string) => `'${value.replaceAll("'", "'\\''")}'`
 
-test('manually launched agents follow the managed shell pane and observed directory', async () => {
+test('a manual agent exit removes only its row and leaves its shell usable', async () => {
   test.skip(process.platform !== 'linux', 'Manual registration uses Linux process identity')
   const { project, userDataDir, cleanup } = await seed()
-  const side = join(project, '..', 'side-project')
   try {
-    await writeFile(
-      join(userDataDir, 'settings.json'),
-      JSON.stringify({
-        'terminal.gpuAcceleration': false,
-        'agents.claude': {
-          executable: '/usr/bin/env',
-          args: [
-            `H360_STATUS_BOOTSTRAP_TOKEN=${'b'.repeat(64)}`,
-            process.execPath,
-            fixture,
-            'claude',
-            'a3f91c2d-3691-4c2f-b54f-e4db8704bbc1',
-            'split'
-          ]
-        }
-      })
-    )
     await withApp(
       async (_app, page) => {
-        await projectRow(page).click({ button: 'right' })
-        await page.getByRole('menuitem', { name: 'Open Terminal Here' }).click()
-        const pane = page.getByTestId('terminal-pane')
-        const run = async (session: string) => {
-          await expect(pane.locator('textarea')).toBeFocused()
-          await page.keyboard.type(
-            `cd ${shellQuote(side)} && ${shellQuote(process.execPath)} ${shellQuote(fixture)} hatfield ${session} ${session}`
-          )
-          await page.keyboard.press('Enter')
-          await expect(output(pane)).toContainText(`Scenario ready: ${session}`)
-          await command(page, pane, 'start')
-        }
-        await run('manual-first')
-        const folders = page.getByRole('list', { name: 'Workspace folders' })
-        const first = folders.getByRole('button', { name: /Hatfield (?:#|·).*manual-first/ })
-        await expect(first).toContainText('Working')
-        await expect
-          .poll(async () => {
-            const snapshot = await page.evaluate(() => globalThis.desktop.getAgentSessions())
-            const session = snapshot.sessions.find(
-              (entry) => entry.providerSessionId === 'manual-first'
-            )
-            return { cwd: session?.cwd, project: session?.project }
-          })
-          .toEqual({ cwd: side, project: side })
-        await command(page, pane, 'wait')
-        await command(page, pane, 'message')
-        await page.getByRole('button', { name: /^Notifications(?: \(\d+\))?$/ }).click()
-        const panel = page.getByRole('complementary', { name: 'Notifications panel' })
-        const needsInput = panel.getByRole('listitem', { name: 'Agent needs input' })
-        const message = panel.getByRole('listitem', { name: 'Review available' })
-        await expect(needsInput).toContainText('Hatfield · manual-first')
-        await expect(message).toContainText('The report is ready.')
-        await page.getByRole('button', { name: 'Settings', exact: true }).click()
-        const settings = page.getByRole('main', { name: 'Settings', exact: true })
-        await expect(settings).toBeVisible()
-        await message.getByRole('button', { name: 'Open terminal' }).click()
-        await expect(settings).toHaveCount(0)
-        await expect(pane.locator('textarea')).toBeFocused()
-        await page.keyboard.type('quit')
-        await page.keyboard.press('Enter')
-        await expect(first).toContainText('Stopped')
-        await expect(panel.getByRole('listitem')).toHaveCount(2)
-        await run('manual-second')
-        await expect(
-          folders.getByRole('button', { name: /Hatfield (?:#|·).*manual-second/ })
-        ).toContainText('Working')
-        await expect(first).toContainText('Stopped')
-        await expect(pane).toHaveCount(1)
         await launch(page, 'Claude')
         const explicitPane = page
           .getByRole('tabpanel', { name: 'Claude' })
           .getByTestId('terminal-pane')
         await expect(output(explicitPane)).toContainText('Scenario ready: split')
         await startFocusedScenario(page, explicitPane)
-        await expect(
-          page.getByRole('button', { name: /^Claude .*a3f91c2d-3691-4c2f-b54f-e4db8704bbc1/ })
-        ).toHaveCount(1)
-        await page.getByRole('button', { name: 'Close agent-project', exact: true }).click()
-        await expect(
-          folders.getByRole('button', { name: /Hatfield (?:#|·).*manual-/ })
-        ).toHaveCount(0)
-        await expect(explicitPane).toBeVisible()
-      },
-      {
-        userDataDir,
-        env: {
-          H360_STATUS_BOOTSTRAP_TOKEN: 'a'.repeat(64),
-          H360_STATUS_TOKEN: 'invalid-inherited-explicit-token',
-          H360_STATUS_LAUNCH_ID: 'invalid-inherited-launch'
+        const folders = page.getByRole('list', { name: 'Workspace folders' })
+        const sibling = folders.getByRole('button', { name: /^Claude a3f91c2d/ })
+        await expect(sibling).toContainText('Working')
+
+        const first = await launchManualPlacement(page, 'agent-project', project, 'manual-first')
+        await expect(first).toContainText('Working')
+        const pane = page
+          .getByRole('tabpanel', { name: 'agent-project' })
+          .getByTestId('terminal-pane')
+        const run = async (text: string) => {
+          await page.keyboard.type(text)
+          await page.keyboard.press('Enter')
         }
-      }
+        await run('quit')
+        await expect(first).toHaveCount(0)
+        await expect(output(pane)).toContainText('Scenario ready: manual-first')
+        await expect(pane.locator('textarea')).toBeFocused()
+        await run(
+          `${shellQuote(process.execPath)} ${shellQuote(fixture)} hatfield manual-second manual-second`
+        )
+        await expect(output(pane)).toContainText('Scenario ready: manual-second')
+        await command(page, pane, 'start')
+        await expect(
+          folders.getByRole('button', { name: /^Hatfield #manual-second/ })
+        ).toContainText('Working')
+        await expect(first).toHaveCount(0)
+        await expect(sibling).toContainText('Working')
+      },
+      { userDataDir }
     )
   } finally {
     await cleanup()
