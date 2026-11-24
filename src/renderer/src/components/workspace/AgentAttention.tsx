@@ -51,28 +51,25 @@ export function AgentAttention({
           const project =
             folders.find((folder) => folder.path === session.project)?.name ?? 'Other terminals'
           return (
-            <li key={session.id} className="flex min-w-0 items-center gap-2 py-1">
-              <div className="min-w-0 flex-1">
-                <p className="type-hint truncate text-warning">
-                  {session.wait && reasons[session.wait]} · {project}
-                </p>
-                <div className="type-tree-row flex min-w-0 items-center gap-1.5">
-                  <AgentProviderIcon provider={session.provider} />
-                  <span className="truncate">{displayName}</span>
-                </div>
-              </div>
+            <li key={session.id} className="min-w-0">
               <Tooltip>
                 <TooltipTrigger asChild>
                   <button
                     type="button"
                     aria-label={`Open terminal for ${displayName}`}
-                    className="type-button h-control shrink-0 rounded-button px-1.5 text-warning hover:bg-hover focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                    className="block w-full min-w-0 cursor-pointer rounded-component px-1.5 py-1 text-left hover:bg-hover focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
                     onClick={() => {
                       if (!selectTerminal(session.terminalId))
                         notify({ severity: 'warning', title: 'Terminal is no longer available' })
                     }}
                   >
-                    Open terminal
+                    <span className="type-hint block truncate text-warning">
+                      {session.wait && reasons[session.wait]} · {project}
+                    </span>
+                    <span className="type-tree-row flex min-w-0 items-center gap-1.5">
+                      <AgentProviderIcon provider={session.provider} />
+                      <span className="truncate">{displayName}</span>
+                    </span>
                   </button>
                 </TooltipTrigger>
                 <TooltipContent className="max-w-72 break-words">

@@ -206,13 +206,16 @@ test('agent launches report through the real socket and sidebar rows select exac
         const attentionStrip = page.getByRole('region', { name: 'Agents needing attention' })
         await expect(attentionStrip).toContainText('Approval needed · agent-project')
         await expect(attentionStrip).toContainText('#hatfield-e2e — Review <draft>')
-        await attentionStrip
-          .getByRole('button', {
-            name: 'Open terminal for #hatfield-e2e — Review <draft>',
-            exact: true
-          })
-          .click()
+        const attentionItem = attentionStrip.getByRole('button', {
+          name: 'Open terminal for #hatfield-e2e — Review <draft>',
+          exact: true
+        })
+        await attentionItem.getByText('Approval needed · agent-project', { exact: true }).click()
         await expect(first).toHaveClass(/is-active/)
+        await second.click()
+        await attentionItem.press('Enter')
+        await expect(first).toHaveClass(/is-active/)
+        await expect(first.locator('textarea')).toBeFocused()
         await expect(panes).toHaveCount(2)
         await filter.getByRole('button', { name: 'Needs input' }).click()
         await expect(claude).toHaveCount(0)
