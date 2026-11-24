@@ -2,6 +2,7 @@ extensions:
     enabled:
         - Ineersa\HatfieldExt\ObservationalMemory\ObservationalMemoryExtension
         - Ineersa\HatfieldExt\TaskWorkflow\TaskWorkflowExtension
+        - Ineersa\HatfieldExt\Hatfield360\Hatfield360Extension
     settings:
         task_workflow:
             repository: ineersa/hatfield-360
