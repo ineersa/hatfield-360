@@ -6,6 +6,9 @@ import type { ITerminalOptions, Terminal } from '@xterm/xterm'
 
 export type SplitDirection = 'vertical' | 'horizontal'
 
+/** The edge of a target pane that a dragged pane docks to. */
+export type DropZone = 'left' | 'right' | 'top' | 'bottom'
+
 export type PaneManagerOptions = {
   /** A new pane's terminal is open and in the tree; bind it to a shell here. */
   onPaneCreated: (pane: ManagedPane) => void
