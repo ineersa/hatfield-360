@@ -66,7 +66,11 @@ export function createPaneDom(
   container.appendChild(xtermContainer)
   container.appendChild(createCloseButton(options.closePaneTitle, () => onClose(id)))
 
-  const terminal = new Terminal({ ...defaultTerminalOptions(), ...options.terminalOptions() })
+  const terminal = new Terminal({
+    ...defaultTerminalOptions(),
+    ...options.terminalOptions(),
+    linkHandler: { activate: options.onLinkClick }
+  })
   const pane: ManagedPaneInternal = {
     id,
     terminal,

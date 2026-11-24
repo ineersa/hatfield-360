@@ -19,7 +19,10 @@ the title alone. Without a reported title, use the Hatfield `#ID` or the first
 eight characters of the Claude ID. The tooltip gives the full title and ID,
 wait or tool details, and background counts. Use existing app theme roles and
 independently configured terminal themes. Sessions are newest-first within
-their checkout or project. Clicking a live session selects its actual tab/pane.
+their checkout or project. A bounded attention strip above the tree keeps open
+requests visible even when browsing filters hide the session. It names the reason
+and opens the owning terminal, where the user answers or approves the request.
+Clicking a live session also selects its actual tab/pane.
 
 Search is a project-scoped Librarian popup above the mounted terminal workspace,
 not a new page or a separate transcript engine. Keyboard opening, Escape,

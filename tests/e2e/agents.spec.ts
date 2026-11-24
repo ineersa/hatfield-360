@@ -84,7 +84,7 @@ test('agent launches report through the real socket and sidebar rows select exac
         const treeTop = async () => (await projectRow(page).boundingBox())?.y
         await expect(projectRow(page)).toBeVisible()
         const originalTop = await treeTop()
-        expect(originalTop).toBeDefined()
+        if (originalTop === undefined) throw new Error('Project row not on screen')
         await launch(page, 'Hatfield')
         const panes = page.getByTestId('terminal-pane')
         const first = panes.first()
@@ -152,7 +152,7 @@ test('agent launches report through the real socket and sidebar rows select exac
             .getByRole('button', { name: /^(?:Hatfield #|Claude [a-f0-9])/ })
             .filter({ hasText: 'Needs input' })
         ).toHaveCount(1)
-        expect(await treeTop()).toBe(originalTop)
+        expect(await treeTop()).toBeGreaterThan(originalTop)
         expect(await hatfield.evaluate((node, original) => node === original, originalRow)).toBe(
           true
         )
@@ -170,14 +170,22 @@ test('agent launches report through the real socket and sidebar rows select exac
             .getByRole('button', { name: /^(?:Hatfield #|Claude [a-f0-9])/ })
             .filter({ hasText: 'Needs input' })
         ).toHaveCount(2)
-        expect(await treeTop()).toBe(originalTop)
+        expect(await treeTop()).toBeGreaterThan(originalTop)
         await command(page, second, 'resolve')
         await expect(
           projectList
             .getByRole('button', { name: /^(?:Hatfield #|Claude [a-f0-9])/ })
             .filter({ hasText: 'Needs input' })
         ).toHaveCount(1)
-        await hatfield.click()
+        const attentionStrip = page.getByRole('region', { name: 'Agents needing attention' })
+        await expect(attentionStrip).toContainText('Approval needed · agent-project')
+        await expect(attentionStrip).toContainText('#hatfield-e2e — Review <draft>')
+        await attentionStrip
+          .getByRole('button', {
+            name: 'Open terminal for #hatfield-e2e — Review <draft>',
+            exact: true
+          })
+          .click()
         await expect(first).toHaveClass(/is-active/)
         await expect(panes).toHaveCount(2)
         await filter.getByRole('button', { name: 'Needs input' }).click()
@@ -185,6 +193,7 @@ test('agent launches report through the real socket and sidebar rows select exac
         const working = filter.getByRole('button', { name: 'Working', exact: true })
         await working.click()
         await working.click()
+        await expect(attentionStrip).toBeVisible()
         await expect(working).toHaveAttribute('aria-pressed', 'true')
         await expect(filter.getByRole('button', { name: 'Needs input' })).toHaveAttribute(
           'aria-pressed',
@@ -194,6 +203,7 @@ test('agent launches report through the real socket and sidebar rows select exac
         await expect(hatfield).toHaveAttribute('aria-description', /Needs input: permission/)
         await filter.getByRole('button', { name: 'All', exact: true }).click()
         await command(page, first, 'resolve')
+        await expect(attentionStrip).toHaveCount(0)
         await expect(
           projectList
             .getByRole('button', { name: /^(?:Hatfield #|Claude [a-f0-9])/ })
@@ -678,9 +688,12 @@ test('agent notifications follow accepted transitions and open only the owning t
         await command(page, hatfield, 'script')
         await command(page, hatfield, 'completed')
         await expect(completed).toHaveCount(0)
+        await bell.click()
+        await expect(panel).toHaveCount(0)
         await page.getByRole('button', { name: 'Files', exact: true }).click()
         await send('child-done')
         await expect(page.getByRole('alert', { name: 'Agent turn completed' })).toBeVisible()
+        await bell.click()
         await expect(completed).toHaveCount(1)
         await page.getByRole('button', { name: 'Agents', exact: true }).click()
         const row = page.getByRole('button', { name: /^Hatfield (?:#|·)/ })

@@ -1,3 +1,5 @@
+import { notify } from '@/state/notification-store'
+import { mainErrorMessage } from '@/lib/main-error-message'
 import type { AgentLaunch } from '../../../../shared/agent-api'
 import type { ITerminalOptions } from '@xterm/xterm'
 import { useEffect, useRef } from 'react'
@@ -74,7 +76,13 @@ export function TerminalTabBody({
       onLinkClick: (event, url) => {
         // Ctrl/Cmd+click, as in VS Code, so selecting text across a link doesn't open it.
         if (!event.ctrlKey && !event.metaKey) return
-        void window.desktop.openWebLink(url).catch(() => undefined)
+        void window.desktop.openWebLink(url).catch((error: unknown) =>
+          notify({
+            severity: 'error',
+            title: 'Could not open terminal link',
+            body: mainErrorMessage(error)
+          })
+        )
       }
     })
     manager.current = panes

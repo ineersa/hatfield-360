@@ -54,7 +54,9 @@ async function answerFolderPicker(app: ElectronApplication, folder: string): Pro
 }
 
 const projectRows = (page: Page) =>
-  page.getByRole('list', { name: 'Workspace folders' }).getByRole('listitem')
+  page.getByRole('list', { name: 'Workspace folders' }).locator(':scope > li[aria-label]')
+const checkoutRows = (page: Page) =>
+  page.getByRole('list', { name: 'Project checkouts' }).getByRole('listitem')
 const tree = (page: Page) => page.getByRole('tree', { name: 'Files' })
 const item = (page: Page, name: string) => tree(page).getByRole('treeitem', { name, exact: true })
 const showView = (page: Page, name: 'Agents' | 'Files') =>
@@ -89,7 +91,8 @@ test('folders added to the workspace become projects or plain folders, and can b
           await page.getByRole('button', { name: 'Add Folder to Workspace' }).first().click()
         }
         // Only the repository is a project; the plain folder shows only in the file tree.
-        await expect(projectRows(page)).toHaveText(['appmain', 'featureapp-feature'])
+        await expect(projectRows(page)).toHaveText(['app'])
+        await expect(checkoutRows(page)).toHaveText(['main', 'featureapp-feature'])
         await expectSavedKinds(['project', 'folder'])
 
         // The worktree sits under its project, as in Projects.
@@ -107,10 +110,12 @@ test('folders added to the workspace become projects or plain folders, and can b
         git(notes, 'init', '-q', '-b', 'trunk')
         await contextMenu(page, item(page, 'notes'), 'Show in Projects')
         await showView(page, 'Agents')
-        await expect(projectRows(page)).toHaveText(['appmain', 'featureapp-feature', 'notestrunk'])
+        await expect(projectRows(page)).toHaveText(['app', 'notestrunk'])
+        await expect(checkoutRows(page)).toHaveText(['main', 'featureapp-feature'])
 
         await contextMenu(page, projectRows(page).first(), 'Hide from Projects')
         await expect(projectRows(page)).toHaveText(['notestrunk'])
+        await expect(checkoutRows(page)).toHaveCount(0)
         await expectSavedKinds(['folder', 'project'])
       },
       { userDataDir: userData }
@@ -120,6 +125,7 @@ test('folders added to the workspace become projects or plain folders, and can b
       async (electronApp, page) => {
         // The kinds were saved: app stays out of Projects, and with it its worktree.
         await expect(projectRows(page)).toHaveText(['notestrunk'])
+        await expect(checkoutRows(page)).toHaveCount(0)
         await showView(page, 'Files')
         // app was left expanded, and reopens so.
         await expect(item(page, 'app')).toHaveAttribute('aria-expanded', 'true')
@@ -131,7 +137,8 @@ test('folders added to the workspace become projects or plain folders, and can b
         await page.getByRole('button', { name: 'Add Folder to Workspace' }).click()
         await expect(tree(page).getByRole('treeitem')).toHaveText(['appmain', 'notestrunk'])
         await showView(page, 'Agents')
-        await expect(projectRows(page)).toHaveText(['appmain', 'featureapp-feature', 'notestrunk'])
+        await expect(projectRows(page)).toHaveText(['app', 'notestrunk'])
+        await expect(checkoutRows(page)).toHaveText(['main', 'featureapp-feature'])
       },
       { userDataDir: userData }
     )

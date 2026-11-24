@@ -17,7 +17,9 @@ async function seedWorkspace(folders: string[]): Promise<[string, () => Promise<
 }
 
 const rows = (page: Page) =>
-  page.getByRole('list', { name: 'Workspace folders' }).getByRole('listitem')
+  page.getByRole('list', { name: 'Workspace folders' }).locator(':scope > li[aria-label]')
+const checkoutRows = (page: Page) =>
+  page.getByRole('list', { name: 'Project checkouts' }).getByRole('listitem')
 
 test('projects list their git worktrees and follow git as worktrees come and go', async () => {
   const { projects, repo, cleanup } = await makeRepo()
@@ -30,7 +32,8 @@ test('projects list their git worktrees and follow git as worktrees come and go'
     await withApp(
       async (_app, page) => {
         // The project shows its own branch; its linked worktree gets a row; the plain folder has none.
-        await expect(rows(page)).toHaveText(['appmain', 'featureapp-feature', 'notes'])
+        await expect(rows(page)).toHaveText(['app', 'notes'])
+        await expect(checkoutRows(page)).toHaveText(['main', 'featureapp-feature'])
 
         git(repo, 'worktree', 'add', '-q', '-b', 'second', join(projects, 'app-second'))
         await expect(page.getByRole('listitem', { name: 'second worktree' })).toBeVisible()
@@ -67,14 +70,17 @@ test('projects list their git worktrees and follow git as worktrees come and go'
 
         git(notes, 'init', '-q', '-b', 'trunk')
         // A plain folder that becomes a repository shows its branch.
-        await expect(rows(page)).toHaveText(['appmain', 'renamedapp-feature', 'notestrunk'])
+        await expect(rows(page)).toHaveText(['app', 'notestrunk'])
+        await expect(checkoutRows(page)).toHaveText(['main', 'renamedapp-feature'])
 
         // Clicking a project folds its worktrees away and back.
         await page.getByRole('listitem', { name: 'app', exact: true }).click()
-        await expect(rows(page)).toHaveText(['appmain', 'notestrunk'])
+        await expect(rows(page)).toHaveText(['app', 'notestrunk'])
+        await expect(checkoutRows(page)).toHaveCount(0)
         await expect(page.getByRole('button', { name: 'Expand app' })).toBeVisible()
         await page.getByRole('listitem', { name: 'app', exact: true }).click()
-        await expect(rows(page)).toHaveText(['appmain', 'renamedapp-feature', 'notestrunk'])
+        await expect(rows(page)).toHaveText(['app', 'notestrunk'])
+        await expect(checkoutRows(page)).toHaveText(['main', 'renamedapp-feature'])
 
         // A repository git can't read shows why instead of passing for a plain folder.
         await writeFile(join(notes, '.git', 'HEAD'), 'not a ref\n')

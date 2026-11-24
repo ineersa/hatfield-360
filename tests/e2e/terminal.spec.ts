@@ -348,3 +348,40 @@ test('main refuses terminal requests it cannot trust', async () => {
     )
   })
 })
+
+test('an OSC 8 link uses the trusted link handler only with a modifier', async () => {
+  test.skip(isWindows, 'The fixture uses a POSIX shell')
+  const { userData, project, cleanup } = await seedProject()
+  try {
+    const label = 'Open sample reference'
+    const url = `https://example.invalid/${'x'.repeat(2048)}`
+    await writeFile(
+      join(project, 'osc-link.sh'),
+      `printf '\\033]8;;${url}\\033\\\\${label}\\033]8;;\\033\\\\\\n'\n`
+    )
+    await withApp(
+      async (_app, page) => {
+        await openProjectTerminal(page)
+        const pane = panes(page).first()
+        await panePid(pane)
+        await run(page, pane, 'sh ./osc-link.sh')
+        const link = screenText(pane).getByText(label, { exact: true })
+        const notice = page.getByRole('alert', {
+          name: 'Could not open terminal link',
+          exact: true
+        })
+        await link.hover({ position: { x: 10, y: 5 } })
+        await link.click({ position: { x: 10, y: 5 } })
+        await expect(notice).toHaveCount(0)
+        await link.click({
+          position: { x: 10, y: 5 },
+          modifiers: [process.platform === 'darwin' ? 'Meta' : 'Control']
+        })
+        await expect(notice).toContainText('Only http and https links can be opened.')
+      },
+      { userDataDir: userData }
+    )
+  } finally {
+    await cleanup()
+  }
+})

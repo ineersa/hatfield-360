@@ -310,6 +310,7 @@ export function SettingsPage(): React.JSX.Element {
         {editable ? null : (
           <p
             role="status"
+            aria-label="Settings file errors"
             className="rounded-banner border border-error-border bg-error-background px-3 py-2"
           >
             settings.json has errors, so settings can't be changed here. Fix the file with Open
@@ -336,7 +337,7 @@ export function SettingsPage(): React.JSX.Element {
             <FlagSetting
               settingKey="notifications.agentSounds"
               label="Agent notification sounds"
-              description="Play a cue for agent completion, input requests, and failures when the app shows a toast."
+              description="Play a cue for agent completion, input requests, and failures when you’re not viewing the agent’s terminal in the focused app."
             />
             <AgentSoundPreviews />
           </div>

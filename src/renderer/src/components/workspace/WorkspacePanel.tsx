@@ -1,3 +1,4 @@
+import { AgentAttention } from './AgentAttention'
 import { ProjectPicker } from './ProjectPicker'
 import {
   AgentSessionRows,
@@ -319,6 +320,7 @@ export function WorkspacePanel(): React.JSX.Element {
         </p>
       ) : null}
       {problem ? <WorkspaceProblemBanner problem={problem} /> : null}
+      <AgentAttention sessions={sessions} folders={folders} />
       {workspace && folders.length === 0 && sessions.length === 0 && !workspace.problem ? (
         <OpenFolderEmptyState
           message={

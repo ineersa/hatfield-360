@@ -38,7 +38,7 @@ export function AgentSoundPreviews(): React.JSX.Element {
           </button>
         ))}
       </div>
-      <p className="type-description pt-1" role="status">
+      <p className="type-description pt-1" role="status" aria-label="Sound preview result">
         {result}
       </p>
     </div>

@@ -220,7 +220,9 @@ test('the Settings page applies each change as it is made and writes it into set
         )
         await expect(settingsPage.getByLabel('App font size', { exact: true })).toHaveValue('14')
         await writeFile(settings, '{ "terminal.fontSize": ')
-        await expect(settingsPage.getByRole('status')).toContainText('settings.json has errors')
+        await expect(
+          settingsPage.getByRole('status', { name: 'Settings file errors' })
+        ).toContainText('settings.json has errors')
         await expect(settingsPage.getByLabel('Terminal font size', { exact: true })).toBeDisabled()
 
         // Only the font list permission is granted to the page.

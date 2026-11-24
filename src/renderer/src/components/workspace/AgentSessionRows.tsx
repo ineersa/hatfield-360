@@ -96,28 +96,34 @@ function activeTerminalId(state: ReturnType<typeof useTerminalStore.getState>): 
   return state.activeTabId ? (state.paneByTab[state.activeTabId] ?? null) : null
 }
 
+export function agentSessionIdentity(session: AgentSession) {
+  const provider = AGENT_PROVIDERS[session.provider]
+  const id = session.providerSessionId
+  const identity = id
+    ? session.provider === 'hatfield'
+      ? `#${id}`
+      : id.slice(0, 8)
+    : 'ID not reported'
+  const title = session.title?.trim()
+  const displayName = title
+    ? session.provider === 'hatfield' && id
+      ? `${identity} — ${title}`
+      : title
+    : identity
+  const providerIdentity = id
+    ? `${provider} ${session.provider === 'hatfield' ? '#' : ''}${id}`
+    : `${provider} · ID not reported`
+  return { title, displayName, providerIdentity }
+}
+
 export function AgentSessionRows({ sessions }: { sessions: AgentSession[] }): React.JSX.Element {
   const selected = useTerminalStore(activeTerminalId)
   const focusAfterMenu = useRef<string | null>(null)
   return (
     <>
       {sessions.map((session) => {
-        const provider = AGENT_PROVIDERS[session.provider]
         const id = session.providerSessionId
-        const identity = id
-          ? session.provider === 'hatfield'
-            ? `#${id}`
-            : id.slice(0, 8)
-          : 'ID not reported'
-        const title = session.title?.trim()
-        const displayName = title
-          ? session.provider === 'hatfield' && id
-            ? `${identity} — ${title}`
-            : title
-          : identity
-        const providerIdentity = id
-          ? `${provider} ${session.provider === 'hatfield' ? '#' : ''}${id}`
-          : `${provider} · ID not reported`
+        const { title, displayName, providerIdentity } = agentSessionIdentity(session)
         const state = isStopped(session)
           ? 'stopped'
           : session.wait
