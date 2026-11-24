@@ -1,3 +1,4 @@
+import type { PaneLayout } from '../../../../shared/terminal-workspace-api'
 // Ported from Orca (MIT, see THIRD_PARTY_NOTICES.md): pane-manager.ts, pane-manager-pane-creation.ts
 // and pane-layout/pane-split-close.ts.
 import type { ITerminalOptions } from '@xterm/xterm'
@@ -21,6 +22,7 @@ import {
   findPaneChildren,
   paneIdsInOrder,
   promoteSibling,
+  restoreSplit,
   wrapInSplit
 } from './pane-tree'
 
@@ -42,7 +44,8 @@ export class PaneManager {
 
   constructor(
     private readonly root: HTMLElement,
-    private readonly options: PaneManagerOptions
+    private readonly options: PaneManagerOptions,
+    private readonly onLayoutChange: () => void
   ) {
     root.classList.add('pane-manager-root')
   }
@@ -60,15 +63,75 @@ export class PaneManager {
     return toPublic(pane)
   }
 
+  restore(
+    layout: PaneLayout,
+    active: string | null,
+    create: (pane: ManagedPane, leaf: Extract<PaneLayout, { kind: 'pane' }>) => void
+  ): void {
+    const leaves: [ManagedPaneInternal, Extract<PaneLayout, { kind: 'pane' }>][] = []
+    const build = (node: PaneLayout): HTMLElement => {
+      if (node.kind === 'pane') {
+        const pane = this.createPane()
+        leaves.push([pane, node])
+        return pane.container
+      }
+      const vertical = node.direction === 'vertical'
+      return restoreSplit(
+        build(node.first),
+        build(node.second),
+        vertical,
+        node.ratio,
+        this.divider(vertical)
+      )
+    }
+    const root = build(layout)
+    root.style.width = '100%'
+    root.style.height = '100%'
+    this.root.appendChild(root)
+    for (const [pane, leaf] of leaves) {
+      openTerminal(pane)
+      create(toPublic(pane), leaf)
+    }
+    const selected = leaves.find(([, leaf]) => leaf.id === active) ?? leaves[0]
+    if (selected) this.activate(selected[0], false)
+  }
+
+  layout(leaf: (pane: HTMLElement) => PaneLayout): PaneLayout | null {
+    const read = (element: HTMLElement): PaneLayout | null => {
+      if (element.classList.contains('pane')) return leaf(element)
+      const [a, b] = findPaneChildren(element)
+      if (!a || !b) return null
+      const first = read(a)
+      const second = read(b)
+      if (!first || !second) return null
+      const left = Number(a.style.flexGrow) || 1
+      const right = Number(b.style.flexGrow) || 1
+      return {
+        kind: 'split',
+        direction: element.classList.contains('is-vertical') ? 'vertical' : 'horizontal',
+        ratio: left / (left + right),
+        first,
+        second
+      }
+    }
+    const item = findPaneChildren(this.root)[0]
+    return item ? read(item) : null
+  }
+
+  private divider(vertical: boolean): HTMLElement {
+    return createDivider(vertical, {
+      refitPanesUnder: (el) => this.refitPanesUnder(el),
+      onResize: this.onLayoutChange
+    })
+  }
+
   /** `vertical` puts the new pane on the right, `horizontal` below. */
   splitPane(paneId: number, direction: SplitDirection): ManagedPane | null {
     const existing = this.panes.get(paneId)
     if (!existing?.container.parentElement) return null
     const pane = this.createPane()
     const isVertical = direction === 'vertical'
-    const divider = createDivider(isVertical, {
-      refitPanesUnder: (el) => this.refitPanesUnder(el)
-    })
+    const divider = this.divider(isVertical)
     // Reparenting can silently invalidate a WebGL canvas; it is rebuilt once the layout settles.
     const hadWebgl = !!existing.webglAddon
     disposeWebgl(existing)

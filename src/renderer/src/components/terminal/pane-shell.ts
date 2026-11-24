@@ -1,7 +1,7 @@
 import type { AgentLaunch } from '../../../../shared/agent-api'
 import type { ManagedPane } from '@/lib/pane-manager/pane-manager-types'
 import { listenToSession } from '@/lib/terminal-output-router'
-import type { TerminalExit } from '../../../../shared/terminal-api'
+import type { TerminalSession, TerminalExit } from '../../../../shared/terminal-api'
 import { mainErrorMessage } from '@/lib/main-error-message'
 
 /** A shell resizes once the size settles, not on every frame of a window or divider drag. */
@@ -35,7 +35,8 @@ export function startPaneShell(
   cwd: string | null,
   onShellEnded: () => void,
   agent?: AgentLaunch,
-  onStarted?: () => void
+  onStarted?: () => void,
+  resume?: (cols: number, rows: number) => Promise<TerminalSession | null>
 ): PaneShell {
   const { terminal } = pane
   let sessionId: string | null = null
@@ -65,11 +66,14 @@ export function startPaneShell(
     requestAnimationFrame(() => {
       if (disposed) return
       const { cols, rows } = terminal
-      const spawn = agent
-        ? window.desktop.launchAgent({ ...agent, cols, rows })
-        : window.desktop.spawnTerminal({ ...(cwd ? { cwd } : {}), cols, rows })
+      const spawn = resume
+        ? resume(cols, rows)
+        : agent
+          ? window.desktop.launchAgent({ ...agent, cols, rows })
+          : window.desktop.spawnTerminal({ ...(cwd ? { cwd } : {}), cols, rows })
       spawn
         .then((session) => {
+          if (!session) return
           if (disposed) {
             void window.desktop.killTerminal(session.id)
             return
@@ -88,7 +92,7 @@ export function startPaneShell(
               }),
             exit: (exit) => {
               exited = true
-              if (!exit.signal && (!agent || exit.exitCode === 0)) onShellEnded()
+              if (!exit.signal && ((!agent && !resume) || exit.exitCode === 0)) onShellEnded()
               else showExited(pane, exit)
             }
           })

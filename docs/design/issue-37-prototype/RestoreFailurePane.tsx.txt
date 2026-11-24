@@ -1,0 +1,116 @@
+// PROTOTYPE for #37: the pane a session keeps when it can't be resumed. Not for merging.
+import { Copy, LoaderCircle, RotateCw, Settings, TriangleAlert, X } from 'lucide-react'
+import { AGENT_PROVIDERS } from '../../../shared/agent-api'
+import { cn } from '@/lib/class-names'
+import { useShellLayoutStore } from '@/state/shell-layout-store'
+import { useTerminalStore, type TerminalTab } from '@/state/terminal-store'
+import { useWorkspaceStore } from '@/state/workspace-store'
+import { notify } from '@/state/notification-store'
+import { prototypeSessions, usePrototypeStore } from './session-restore-prototype'
+
+const buttonClass =
+  'type-button flex h-control items-center gap-2 rounded-button px-3 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none'
+const primaryClass = 'bg-primary text-primary-foreground hover:bg-primary/90'
+const secondaryClass = 'border border-separator hover:bg-hover'
+
+export function RestoreFailurePane({
+  tab,
+  active
+}: {
+  tab: TerminalTab
+  active: boolean
+}): React.JSX.Element {
+  const folders = useWorkspaceStore((state) => state.workspace?.folders ?? [])
+  const started = usePrototypeStore((state) => state.started)
+  const resumed = usePrototypeStore((state) => state.resumed)
+  const restore = usePrototypeStore((state) =>
+    tab.prototypeFailure ? state.restore[tab.prototypeFailure] : undefined
+  )
+  const retry = usePrototypeStore((state) => state.retry)
+  const closeTab = useTerminalStore((state) => state.closeTab)
+  const session = prototypeSessions(folders, started, resumed).find(
+    (candidate) => candidate.id === tab.prototypeFailure
+  )
+  if (!session) return <div hidden={!active} />
+  const name = session.title ?? session.providerSessionId?.slice(0, 8) ?? 'this session'
+  const failure = restore?.state === 'failed' ? restore.failure : null
+  const resuming = restore?.state === 'resuming'
+
+  return (
+    <div
+      role="tabpanel"
+      aria-label={tab.title}
+      hidden={!active}
+      className="flex min-h-0 flex-1 items-center justify-center rounded-b-island bg-terminal px-6"
+    >
+      <div className="flex max-w-md flex-col gap-4">
+        <div className="flex gap-3">
+          {resuming ? (
+            <LoaderCircle
+              className="mt-0.5 size-5 shrink-0 text-muted-foreground motion-safe:animate-spin"
+              aria-hidden
+            />
+          ) : (
+            <TriangleAlert className="mt-0.5 size-5 shrink-0 text-error" aria-hidden />
+          )}
+          <div className="flex min-w-0 flex-col gap-1">
+            <h2 className="type-section-title">
+              {resuming ? `Resuming “${name}”…` : `Couldn't resume “${name}”`}
+            </h2>
+            {failure ? <p className="type-body">{failure.detail}</p> : null}
+            <p className="type-hint break-all">
+              {AGENT_PROVIDERS[session.provider]} · {session.providerSessionId} · {session.cwd}
+            </p>
+          </div>
+        </div>
+        <div className="flex flex-wrap items-center gap-2 pl-8">
+          <button
+            type="button"
+            disabled={resuming}
+            onClick={() => retry(session.id, folders)}
+            className={cn(
+              buttonClass,
+              failure?.fix === 'retry' ? primaryClass : secondaryClass,
+              'disabled:opacity-50'
+            )}
+          >
+            <RotateCw className="size-4" aria-hidden />
+            Retry
+          </button>
+          {failure?.fix === 'settings' ? (
+            <button
+              type="button"
+              onClick={() => useShellLayoutStore.getState().openSettings()}
+              className={cn(buttonClass, primaryClass)}
+            >
+              <Settings className="size-4" aria-hidden />
+              Open Settings
+            </button>
+          ) : null}
+          <button
+            type="button"
+            onClick={() => closeTab(tab.id)}
+            className={cn(buttonClass, secondaryClass)}
+          >
+            <X className="size-4" aria-hidden />
+            Close pane
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              void window.desktop.writeTerminalClipboard(session.providerSessionId ?? '')
+              notify({ severity: 'info', title: 'Session ID copied' })
+            }}
+            className={cn(
+              buttonClass,
+              'text-muted-foreground hover:bg-hover hover:text-foreground'
+            )}
+          >
+            <Copy className="size-4" aria-hidden />
+            Copy session ID
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}

@@ -1,3 +1,4 @@
+import { terminalWorkspaceStore } from './terminal-workspace/terminal-workspace-store'
 import { registerLanguageServerIpc } from './ipc/language-server-ipc'
 import { languageServerSessions } from './language-servers/language-server-sessions'
 import { registerAgentIpc } from './ipc/agent-ipc'
@@ -50,7 +51,11 @@ void app.whenReady().then(async () => {
   installAppMenu()
   followAppTheme()
   // The window opens where it was left and in the chosen theme, so both are read first.
-  const [, theme] = await Promise.all([windowStateStore.load(), chosenAppTheme()])
+  const [, theme] = await Promise.all([
+    windowStateStore.load(),
+    chosenAppTheme(),
+    terminalWorkspaceStore.view()
+  ])
   createMainWindow(theme)
 
   app.on('activate', () => {
@@ -71,7 +76,9 @@ app.on('before-quit', (event) => {
   // Unsaved edits are saved or discarded first; a cancelled quit leaves everything running.
   if (quitWaitsForUnsavedChanges()) return
   quitting = true
+  const savedTerminals = terminalWorkspaceStore.freeze()
   void Promise.allSettled([
+    savedTerminals,
     agentStatusServer.stop().catch((error: unknown) => {
       console.error('Stopping agent status server failed:', error)
     }),

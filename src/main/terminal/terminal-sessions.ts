@@ -101,7 +101,7 @@ class TerminalSessions {
       args: string[]
       env: Record<string, string>
       onClosing: () => void
-      onExit: () => void
+      onExit: (exitCode: number) => void
     }
   ): Promise<TerminalSession> {
     this.helperChecked ??= ensureSpawnHelperExecutable()
@@ -171,7 +171,7 @@ class TerminalSessions {
       this.flushOutput(session)
       this.sessions.delete(id)
       closeBootstrap()
-      agent?.onExit()
+      agent?.onExit(exitCode)
       const exit: TerminalExit = { id, exitCode, signal: signal ?? null }
       if (!session.detached && !owner.isDestroyed()) owner.send(TERMINAL_CHANNELS.exit, exit)
     })

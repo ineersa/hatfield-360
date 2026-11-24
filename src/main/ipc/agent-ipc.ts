@@ -1,3 +1,7 @@
+import { TERMINAL_WORKSPACE_CHANNELS } from '../../shared/terminal-workspace-api'
+import { parseTerminalLayout } from '../terminal-workspace/terminal-workspace-document'
+import { terminalWorkspaceStore } from '../terminal-workspace/terminal-workspace-store'
+import { resumeConversations } from '../terminal-workspace/resume-conversation'
 import { BrowserWindow } from 'electron'
 import { AGENT_CHANNELS, type AgentNotification } from '../../shared/agent-api'
 import { isPlainObject } from '../../shared/plain-object'
@@ -12,7 +16,13 @@ import { handleTrusted } from './trusted-ipc'
 
 export function registerAgentIpc(): void {
   const launch = trackAgentSessions(
-    (owner) => owner.send(AGENT_CHANNELS.changed, agentSnapshot(owner)),
+    (owner) => {
+      const snapshot = agentSnapshot(owner)
+      owner.send(AGENT_CHANNELS.changed, snapshot)
+      void terminalWorkspaceStore
+        .observe(owner, snapshot.sessions)
+        .catch((error: unknown) => console.error('Saving terminal workspace failed:', error))
+    },
     (owner, notice) => {
       const window = BrowserWindow.fromWebContents(owner)
       owner.send(AGENT_CHANNELS.notification, {
@@ -21,6 +31,31 @@ export function registerAgentIpc(): void {
       } satisfies AgentNotification)
     }
   )
+  const resume = resumeConversations(launch)
+  handleTrusted(TERMINAL_WORKSPACE_CHANNELS.load, () => terminalWorkspaceStore.view())
+  handleTrusted(TERMINAL_WORKSPACE_CHANNELS.checkpoint, (event, value) => {
+    const layout = parseTerminalLayout(value, true)
+    if (!layout) throw new Error('Invalid terminal layout.')
+    return terminalWorkspaceStore.checkpoint(event.sender, layout)
+  })
+  handleTrusted(TERMINAL_WORKSPACE_CHANNELS.forget, (event, id) => {
+    if (!isTerminalId(id)) throw new Error('Invalid conversation.')
+    return terminalWorkspaceStore.forget(event.sender, id)
+  })
+  handleTrusted(TERMINAL_WORKSPACE_CHANNELS.resume, async (event, id, cols, rows) => {
+    const size = gridSize(cols, rows)
+    if (!isTerminalId(id) || !size) throw new Error('Invalid resume request.')
+    const saved = (await terminalWorkspaceStore.view()).conversations.find((item) => item.id === id)
+    if (!saved)
+      return {
+        failure: {
+          reason: 'conversation unavailable',
+          detail: 'This conversation is no longer in session history.',
+          settings: false
+        }
+      }
+    return resume(event.sender, saved, size)
+  })
   handleTrusted(AGENT_CHANNELS.get, (event) => agentSnapshot(event.sender))
   handleTrusted(AGENT_CHANNELS.launch, async (event, value) => {
     if (

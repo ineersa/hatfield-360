@@ -1,3 +1,4 @@
+import type { SavedTerminalTab } from '../../../shared/terminal-workspace-api'
 import { AGENT_PROVIDERS, type AgentLaunch } from '../../../shared/agent-api'
 import { create } from 'zustand'
 import { useShellLayoutStore } from './shell-layout-store'
@@ -11,6 +12,7 @@ export type TerminalTab = {
   /** The folder new shells in this tab start in; null for the home folder. */
   cwd: string | null
   agent?: AgentLaunch
+  saved?: SavedTerminalTab
 }
 
 type TerminalState = {
@@ -19,14 +21,12 @@ type TerminalState = {
   tabs: TerminalTab[]
   activeTabId: string | null
   /** Opens a tab with one shell and shows it in the Agents view. */
-  openTerminal: (cwd: string | null, agent?: AgentLaunch) => void
+  openTerminal: (cwd: string | null, agent?: AgentLaunch, saved?: SavedTerminalTab) => void
   /** Removes the tab; its panes' shells end as the tab unmounts. */
   closeTab: (id: string) => void
   activateTab: (id: string) => void
   cycleTab: (step: 1 | -1) => void
 }
-
-let nextTabNumber = 1
 
 function folderName(path: string): string {
   return path.split(/[\\/]/).findLast((part) => part.length > 0) ?? path
@@ -38,14 +38,15 @@ export const useTerminalStore = create<TerminalState>((set, get) => ({
     set((state) => ({ paneByTab: { ...state.paneByTab, [tabId]: id } })),
   tabs: [],
   activeTabId: null,
-  openTerminal: (cwd, agent) => {
+  openTerminal: (cwd, agent, saved) => {
     const label = cwd ? folderName(cwd) : 'Terminal'
     const tab: TerminalTab = {
-      id: `terminal-tab-${nextTabNumber++}`,
+      id: saved?.id ?? crypto.randomUUID(),
       label,
       title: agent ? `${AGENT_PROVIDERS[agent.provider]} · ${label}` : label,
       cwd,
-      ...(agent ? { agent } : {})
+      ...(agent ? { agent } : {}),
+      ...(saved ? { saved } : {})
     }
     set((state) => ({ tabs: [...state.tabs, tab], activeTabId: tab.id }))
     useShellLayoutStore.getState().showAgents()

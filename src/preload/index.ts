@@ -1,3 +1,7 @@
+import {
+  TERMINAL_WORKSPACE_CHANNELS,
+  type SavedConversation
+} from '../shared/terminal-workspace-api'
 import { AGENT_CHANNELS, type AgentNotification, type AgentSnapshot } from '../shared/agent-api'
 import { contextBridge, ipcRenderer } from 'electron'
 import { type DesktopApi, IPC_CHANNELS } from '../shared/desktop-api'
@@ -14,6 +18,18 @@ import { WEB_LINK_CHANNELS } from '../shared/web-link-api'
 import { type ProjectWorktrees, WORKTREE_CHANNELS } from '../shared/worktree-api'
 
 const desktopApi: DesktopApi = {
+  loadTerminalWorkspace: () => ipcRenderer.invoke(TERMINAL_WORKSPACE_CHANNELS.load),
+  checkpointTerminalLayout: (layout) =>
+    ipcRenderer.invoke(TERMINAL_WORKSPACE_CHANNELS.checkpoint, layout),
+  forgetTerminalConversation: (id) => ipcRenderer.invoke(TERMINAL_WORKSPACE_CHANNELS.forget, id),
+  resumeTerminalConversation: (id, cols, rows) =>
+    ipcRenderer.invoke(TERMINAL_WORKSPACE_CHANNELS.resume, id, cols, rows),
+  subscribeTerminalHistory: (callback) => {
+    const listener = (_event: unknown, conversations: SavedConversation[]): void =>
+      callback(conversations)
+    ipcRenderer.on(TERMINAL_WORKSPACE_CHANNELS.history, listener)
+    return () => ipcRenderer.removeListener(TERMINAL_WORKSPACE_CHANNELS.history, listener)
+  },
   launchAgent: (request) => ipcRenderer.invoke(AGENT_CHANNELS.launch, request),
   getAgentSessions: () => ipcRenderer.invoke(AGENT_CHANNELS.get),
   subscribeAgentNotifications: (callback) => {

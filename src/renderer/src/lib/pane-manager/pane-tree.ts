@@ -25,6 +25,30 @@ function applyPaneFlexStyle(el: HTMLElement): void {
   el.style.height = ''
 }
 
+function splitElement(isVertical: boolean): HTMLElement {
+  const split = document.createElement('div')
+  split.className = `pane-split ${isVertical ? 'is-vertical' : 'is-horizontal'}`
+  split.style.display = 'flex'
+  split.style.flexDirection = isVertical ? 'row' : 'column'
+  return split
+}
+
+export function restoreSplit(
+  first: HTMLElement,
+  second: HTMLElement,
+  isVertical: boolean,
+  ratio: number,
+  divider: HTMLElement
+): HTMLElement {
+  const split = splitElement(isVertical)
+  applyPaneFlexStyle(first)
+  applyPaneFlexStyle(second)
+  first.style.flexGrow = String(ratio)
+  second.style.flexGrow = String(1 - ratio)
+  split.append(first, divider, second)
+  return split
+}
+
 /** Replaces `existing` with a flex split holding [existing] [divider] [added]. */
 export function wrapInSplit(
   existing: HTMLElement,
@@ -34,12 +58,10 @@ export function wrapInSplit(
 ): void {
   const parent = existing.parentElement
   if (!parent) return
-  const split = document.createElement('div')
-  split.className = `pane-split ${isVertical ? 'is-vertical' : 'is-horizontal'}`
-  split.style.display = 'flex'
-  split.style.flexDirection = isVertical ? 'row' : 'column'
+  const split = splitElement(isVertical)
+  const previousFlex = existing.style.flex
   if (parent.classList.contains('pane-split')) {
-    split.style.flex = existing.style.flex || '1 1 0%'
+    split.style.flex = previousFlex || '1 1 0%'
     split.style.minWidth = existing.style.minWidth || '0'
     split.style.minHeight = existing.style.minHeight || '0'
   } else {

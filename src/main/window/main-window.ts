@@ -1,3 +1,4 @@
+import { terminalWorkspaceStore } from '../terminal-workspace/terminal-workspace-store'
 import { BrowserWindow } from 'electron'
 import { join } from 'node:path'
 import appIcon from '../../../resources/icon.png?asset'
@@ -11,6 +12,7 @@ import type { AppThemeId } from '../../shared/settings-api'
 
 /** Opens the app window in the given app theme, so it doesn't flash another theme's colours. */
 export function createMainWindow(theme: AppThemeId): BrowserWindow {
+  terminalWorkspaceStore.thaw()
   const background = isBackgroundLaunch(process.env)
   const { bounds, maximized } = windowStateStore.initialPlacement()
   const window = new BrowserWindow({
@@ -45,6 +47,12 @@ export function createMainWindow(theme: AppThemeId): BrowserWindow {
   }
   windowStateStore.track(window, { background, requested: bounds })
   guardUnsavedChanges(window)
+  window.on('close', (event) => {
+    if (!event.defaultPrevented)
+      void terminalWorkspaceStore
+        .freeze()
+        .catch((error: unknown) => console.error('Saving terminal workspace failed:', error))
+  })
 
   // The window only ever shows the app. Opening external links needs an explicit, validated IPC capability.
   window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))

@@ -1,3 +1,4 @@
+import { claudeSessionTitle } from './claude-session-title'
 import { randomUUID } from 'node:crypto'
 import { realpath } from 'node:fs/promises'
 import { isPathInside } from '../files/path-containment'
@@ -14,6 +15,7 @@ import { workspaceStore } from '../workspace/workspace-store'
 import { UnsupportedAgentShell } from '../terminal/agent-shell-command'
 import { terminalSessions } from '../terminal/terminal-sessions'
 import { AgentNotificationPolicy } from './agent-notifications'
+import type { SavedConversation } from '../../shared/terminal-workspace-api'
 import { agentStatusServer } from './status-server'
 
 const records = new Map<
@@ -24,7 +26,14 @@ const trackedOwners = new WeakSet<WebContents>()
 const manualHistory = new WeakMap<WebContents, string[]>()
 const launches = new Map<
   string,
-  { owner: WebContents; session: AgentSession; policy: AgentNotificationPolicy; manual?: true }
+  {
+    owner: WebContents
+    session: AgentSession
+    policy: AgentNotificationPolicy
+    manual?: true
+    confirm?: (id: string) => boolean
+    titleRead?: { id: string; epoch: number }
+  }
 >()
 let revision = 0
 
@@ -222,24 +231,61 @@ export function trackAgentSessions(
       .snapshot()
       .find((entry) => entry.launchId === change.launchId)?.session
     const trusted = reported?.provider === session.provider ? reported : undefined
+    const confirming = !!launch.confirm
+    if (trusted && launch.confirm) {
+      if (!launch.confirm(trusted.id)) return
+      delete launch.confirm
+      recordSession(owner, session)
+    }
     if (change.kind === 'event') {
       if (trusted && !owner.isDestroyed()) {
         for (const message of policy.accept(change.event, trusted)) {
-          notify(owner, {
-            provider: session.provider,
-            terminalId: session.terminalId,
-            providerSessionId: trusted.id,
-            message
-          })
+          if (!confirming)
+            notify(owner, {
+              provider: session.provider,
+              terminalId: session.terminalId,
+              providerSessionId: trusted.id,
+              message
+            })
         }
       }
       if (change.event.kind === 'notification') return
     }
     if (trusted) {
+      if (session.providerSessionId !== trusted.id || trusted.title !== null)
+        session.title = trusted.title
       session.providerSessionId = trusted.id
-      session.title = trusted.title
+      if (
+        session.provider === 'claude' &&
+        change.kind === 'event' &&
+        change.event.kind === 'session.snapshot'
+      ) {
+        if (trusted.title !== null) {
+          delete launch.titleRead
+        } else if (
+          launch.titleRead?.id !== trusted.id ||
+          launch.titleRead.epoch !== trusted.epoch
+        ) {
+          const read = { id: trusted.id, epoch: trusted.epoch }
+          launch.titleRead = read
+          void claudeSessionTitle(read.id, session.cwd).then((title) => {
+            if (launch.titleRead !== read) return
+            delete launch.titleRead
+            if (
+              !title ||
+              session.title === title ||
+              owner.isDestroyed() ||
+              launches.get(change.launchId) !== launch ||
+              records.get(session.id)?.session !== session
+            )
+              return
+            session.title = title
+            changed(owner)
+          })
+        }
+      }
     }
-    const live = trusted?.telemetry
+    const live = confirming ? null : trusted?.telemetry
     const status = live?.turn?.status
     session.runningChildren = live?.activeSubagents ?? null
     session.runningScripts = live?.backgroundScripts ?? null
@@ -262,7 +308,12 @@ export function trackAgentSessions(
     provider: AgentProvider,
     profile: AgentProfile,
     project: string | null,
-    request: { cwd: string; cols: number; rows: number }
+    request: { cwd: string; cols: number; rows: number },
+    resume?: {
+      saved: SavedConversation
+      confirm: (id: string) => boolean
+      exited: (exitCode: number) => void
+    }
   ) => {
     if (process.platform === 'win32' && /\.(cmd|bat|ps1)[. ]*$/i.test(profile.executable)) {
       throw new Error(
@@ -272,11 +323,25 @@ export function trackAgentSessions(
     const terminalId = randomUUID()
     const endpoint = await agentStatusServer.start().catch(() => undefined)
     const credential = endpoint
-      ? agentStatusServer.registerLaunch({ terminalId, cwd: request.cwd })
+      ? agentStatusServer.registerLaunch({ terminalId, cwd: request.cwd }, provider)
       : undefined
     const session = newSession(terminalId, provider, request.cwd, project)
     const policy = new AgentNotificationPolicy()
-    if (credential) launches.set(credential.launchId, { owner, session, policy })
+    if (resume && !credential) throw new Error('Could not authorize agent status reporting.')
+    if (resume)
+      Object.assign(session, {
+        id: resume.saved.id,
+        providerSessionId: resume.saved.providerSessionId,
+        title: resume.saved.title,
+        worktree: resume.saved.worktree
+      })
+    if (credential)
+      launches.set(credential.launchId, {
+        owner,
+        session,
+        policy,
+        ...(resume ? { confirm: resume.confirm } : {})
+      })
     const release = () => {
       if (!credential) return
       launches.delete(credential.launchId)
@@ -296,13 +361,14 @@ export function trackAgentSessions(
             }
           : {},
         onClosing: () => policy.beginClosing(),
-        onExit: () => {
+        onExit: (exitCode) => {
+          resume?.exited(exitCode)
           release()
           session.process = 'exited'
           if (records.delete(session.id)) changed(owner)
         }
       })
-      if (session.process !== 'exited') {
+      if (!resume && session.process !== 'exited') {
         recordSession(owner, session)
         changed(owner)
       }

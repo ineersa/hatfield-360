@@ -1,3 +1,4 @@
+import { initializeTerminalWorkspace } from './state/terminal-workspace'
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { receiveAgentNotification } from './state/agent-notifications'
@@ -15,8 +16,13 @@ if (!root) {
 const stopAgentNotifications = window.desktop.subscribeAgentNotifications(receiveAgentNotification)
 if (import.meta.hot) import.meta.hot.dispose(stopAgentNotifications)
 
-createRoot(root).render(
-  <StrictMode>
-    <App />
-  </StrictMode>
-)
+const appRoot = createRoot(root)
+void initializeTerminalWorkspace()
+  .catch((error: unknown) => console.error('Loading terminal workspace failed:', error))
+  .then(() =>
+    appRoot.render(
+      <StrictMode>
+        <App />
+      </StrictMode>
+    )
+  )
