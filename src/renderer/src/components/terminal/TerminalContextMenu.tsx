@@ -11,7 +11,9 @@ import {
   ContextMenuShortcut,
   ContextMenuTrigger
 } from '@/components/ui/context-menu'
-import { rendererPlatform, terminalShortcutLabel } from '@/lib/terminal-shortcut-label'
+import { terminalShortcutLabel } from '@/lib/keymap-match'
+import { rendererPlatform } from '@/lib/shortcut-keys'
+import { useKeymapStore } from '@/state/keymap-store'
 import { copyTerminalSelection, pasteIntoTerminal } from './terminal-clipboard'
 
 const CLIPBOARD_KEYS =
@@ -34,6 +36,7 @@ export function TerminalContextMenu({
   canLaunch: () => boolean
   children: ReactNode
 }): React.JSX.Element {
+  const keymap = useKeymapStore((state) => state.shell)
   const [launchable, setLaunchable] = useState(false)
   const [hasSelection, setHasSelection] = useState(false)
   const withTerminal = (action: (terminal: Terminal) => void) => () => {
@@ -68,12 +71,12 @@ export function TerminalContextMenu({
         <ContextMenuItem onSelect={() => runCommand('split-right')}>
           <Columns2 aria-hidden />
           Split Right
-          <ContextMenuShortcut>{terminalShortcutLabel('split-right')}</ContextMenuShortcut>
+          <ContextMenuShortcut>{terminalShortcutLabel(keymap, 'split-right')}</ContextMenuShortcut>
         </ContextMenuItem>
         <ContextMenuItem onSelect={() => runCommand('split-down')}>
           <Rows2 aria-hidden />
           Split Down
-          <ContextMenuShortcut>{terminalShortcutLabel('split-down')}</ContextMenuShortcut>
+          <ContextMenuShortcut>{terminalShortcutLabel(keymap, 'split-down')}</ContextMenuShortcut>
         </ContextMenuItem>
         <ContextMenuSeparator />
         <ContextMenuItem disabled={!launchable} onSelect={() => launchSplit('hatfield')}>
@@ -92,7 +95,7 @@ export function TerminalContextMenu({
         <ContextMenuItem onSelect={() => runCommand('close-pane')}>
           <X aria-hidden />
           Close Pane
-          <ContextMenuShortcut>{terminalShortcutLabel('close-pane')}</ContextMenuShortcut>
+          <ContextMenuShortcut>{terminalShortcutLabel(keymap, 'close-pane')}</ContextMenuShortcut>
         </ContextMenuItem>
       </ContextMenuContent>
     </ContextMenu>

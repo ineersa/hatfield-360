@@ -390,9 +390,9 @@ test('after a restart the Files view has the same folders expanded and tabs open
         await openFile(page, 'app', 'notes.txt')
         await openFile(page, 'app', 'src', 'long.ts')
         await expect(lines(page)).toContainText('function outer()')
-        // Folds `outer`, then goes to the last line, which scrolls the file.
+        // Folds `outer` (JetBrains' Collapse), then goes to the last line, which scrolls the file.
         await lines(page).getByText('function outer()').click()
-        await page.keyboard.press('ControlOrMeta+Shift+BracketLeft')
+        await page.keyboard.press('ControlOrMeta+Minus')
         await expect(folded(page)).toHaveCount(1)
         await page.keyboard.press('ControlOrMeta+End')
         await expect(activeLine(page)).toHaveText('123')

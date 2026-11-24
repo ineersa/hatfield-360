@@ -1,7 +1,7 @@
-import { rendererPlatform } from '@/lib/terminal-shortcut-label'
 import { useEffect } from 'react'
 import { connectTerminalOutput } from '@/lib/terminal-output-router'
-import { terminalCommandForKey } from '@/lib/terminal-shortcut-match'
+import { terminalCommandForKey } from '@/lib/keymap-match'
+import { useKeymapStore } from '@/state/keymap-store'
 import { useTerminalStore } from '@/state/terminal-store'
 import { useWorkspaceStore } from '@/state/workspace-store'
 import type { TerminalCommand } from '../../../../shared/terminal-api'
@@ -52,7 +52,7 @@ export function useTerminalCommands(): void {
     })
     // Capture phase, before xterm turns the keys into input for the shell.
     const onKeyDown = (event: KeyboardEvent): void => {
-      const command = terminalCommandForKey(event, rendererPlatform)
+      const command = terminalCommandForKey(event, useKeymapStore.getState().shell)
       if (!command || !runTerminalCommand(command)) return
       event.preventDefault()
       event.stopPropagation()

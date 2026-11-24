@@ -171,8 +171,8 @@ test('terminal tab upper edge and icon activate it, with shortcuts visible on ho
         await page.getByRole('button', { name: 'Close pty-project' }).last().hover()
         await second.hover()
         const tooltip = page.getByRole('tooltip')
-        await expect(tooltip).toContainText(process.platform === 'darwin' ? '⌘⇧[' : 'Ctrl+PageUp')
-        await expect(tooltip).toContainText(process.platform === 'darwin' ? '⌘⇧]' : 'Ctrl+PageDown')
+        await expect(tooltip).toContainText(process.platform === 'darwin' ? '⇧⌘[' : 'Ctrl+PageUp')
+        await expect(tooltip).toContainText(process.platform === 'darwin' ? '⇧⌘]' : 'Ctrl+PageDown')
         await saveScreenshot(page, 'terminal-tab-shortcuts')
 
         await second.locator('svg').click()

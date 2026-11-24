@@ -11,6 +11,8 @@ import {
   AlertDialogTitle
 } from '@/components/ui/alert-dialog'
 import { cn } from '@/lib/class-names'
+import { appCommandForKey, appShortcutLabel } from '@/lib/keymap-match'
+import { useKeymapStore } from '@/state/keymap-store'
 import { type EditorTab, useEditorTabStore } from '@/state/editor-tab-store'
 import { CodeEditor } from './CodeEditor'
 import { loadDocument, saveDocument } from './editor-documents'
@@ -91,6 +93,7 @@ function Tab({
   onDragOver: () => boolean
   onDragEnd: () => void
 }): React.JSX.Element {
+  const keymap = useKeymapStore((state) => state.shell)
   const title = label.folder ? `${label.name} ${label.folder}` : label.name
   const state = [tab.dirty && 'unsaved', tab.deleted && 'deleted on disk'].filter(Boolean)
   return (
@@ -138,6 +141,7 @@ function Tab({
       <button
         type="button"
         aria-label={`Close ${title}`}
+        title={`Close (${appShortcutLabel(keymap, 'close-editor-tab')})`}
         onClick={onClose}
         className={cn(
           'group/close flex shrink-0 items-center pr-2 text-muted-foreground hover:text-foreground focus-visible:opacity-100',
@@ -196,6 +200,32 @@ export function EditorTabs({ hidden }: { hidden: boolean }): React.JSX.Element {
     if (tab.dirty) setClosing(tab.path)
     else close(tab.path)
   }
+
+  // Close Tab and Select Next/Previous Tab, after the editor and other controls had the key.
+  // Terminals share some of these keys; they act only while on screen, and never are with the editor.
+  useEffect(() => {
+    if (hidden) return undefined
+    const onKeyDown = (event: KeyboardEvent): void => {
+      if (event.defaultPrevented) return
+      const command = appCommandForKey(event, useKeymapStore.getState().shell)
+      const state = useEditorTabStore.getState()
+      const index = state.tabs.findIndex((tab) => tab.path === state.activePath)
+      const tab = state.tabs[index]
+      if (!tab) return
+      if (command === 'close-editor-tab') {
+        if (tab.dirty) setClosing(tab.path)
+        else state.close(tab.path)
+      } else if (command === 'next-editor-tab' || command === 'previous-editor-tab') {
+        const step = command === 'next-editor-tab' ? 1 : -1
+        const next = state.tabs.at((index + step) % state.tabs.length)
+        if (next) state.activate(next.path)
+        setFocusRequest((count) => count + 1)
+      } else return
+      event.preventDefault()
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [hidden])
   const closingName = closing ? fileName(closing) : ''
 
   return (

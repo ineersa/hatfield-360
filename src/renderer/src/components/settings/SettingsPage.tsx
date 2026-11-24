@@ -5,6 +5,7 @@ import { useEffect, useId, useState } from 'react'
 import { CatppuccinRootFolderIcon } from '@/components/icons/CatppuccinIcons'
 import { cn } from '@/lib/class-names'
 import { cssFontFamily } from '@/lib/css-font-family'
+import { useKeymapStore } from '@/state/keymap-store'
 import { useSettingsStore } from '@/state/settings-store'
 import { useShellLayoutStore } from '@/state/shell-layout-store'
 import {
@@ -271,6 +272,7 @@ function FlagSetting({
 export function SettingsPage(): React.JSX.Element {
   const editable = useSettingsStore((state) => state.editable)
   const openFile = useSettingsStore((state) => state.openFile)
+  const openKeybindings = useKeymapStore((state) => state.openFile)
   const close = useShellLayoutStore((state) => state.closeSettings)
 
   useEffect(() => {
@@ -297,6 +299,14 @@ export function SettingsPage(): React.JSX.Element {
           >
             <FileJson className="size-4" aria-hidden />
             Open settings.json
+          </button>
+          <button
+            type="button"
+            onClick={() => void openKeybindings()}
+            className="type-button flex h-control shrink-0 items-center gap-2 rounded-button px-2.5 whitespace-nowrap text-link hover:bg-hover focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+          >
+            <FileJson className="size-4" aria-hidden />
+            Open keybindings.json
           </button>
           <button
             type="button"

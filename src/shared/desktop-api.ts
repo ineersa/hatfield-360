@@ -2,6 +2,7 @@ import type { AgentApi } from './agent-api'
 import type { EditorApi } from './editor-api'
 import type { FilesSessionApi } from './files-session-api'
 import type { FileTreeApi } from './file-tree-api'
+import type { KeybindingsApi } from './keybindings-api'
 import type { LanguageServerApi } from './language-server-api'
 import type { SettingsApi } from './settings-api'
 import type { ShellLayoutApi } from './shell-layout-api'
@@ -25,6 +26,7 @@ export const IPC_CHANNELS = {
 export type DesktopApi = WorkspaceApi &
   AgentApi &
   SettingsApi &
+  KeybindingsApi &
   ShellLayoutApi &
   TerminalApi &
   WebLinkApi &

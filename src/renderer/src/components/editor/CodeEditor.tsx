@@ -6,8 +6,14 @@ import { useSettingsStore } from '@/state/settings-store'
 import { editorViewState, setEditorViewState } from '@/state/editor-view-states'
 import { editorDocument, saveDocument } from './editor-documents'
 import { editorColorTheme, type MenuColors } from './editor-color-theme'
+import { installEditorKeymap } from './editor-keymap'
 import { revealJumpTarget } from './editor-navigation'
 import { monaco, setColorTheme } from './monaco-environment'
+
+installEditorKeymap(() => {
+  const active = useEditorTabStore.getState().activePath
+  if (active) void saveDocument(active)
+})
 
 /** The page's app theme (`data-theme`), which changes after the editor's own effects run. */
 function subscribeAppTheme(onChange: () => void): () => void {
@@ -90,10 +96,6 @@ export function CodeEditor({
       glyphMargin: false,
       renderLineHighlight: 'all',
       fixedOverflowWidgets: true
-    })
-    instance.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
-      const active = useEditorTabStore.getState().activePath
-      if (active) void saveDocument(active)
     })
     // Cursor, scroll and folds are kept as they change, so a restart finds them as they were left.
     // Not while hidden, where the editor lays out at no size, nor while the model is being swapped.

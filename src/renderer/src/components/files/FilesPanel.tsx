@@ -37,8 +37,8 @@ import {
   WorkspaceProblemBanner
 } from '@/components/workspace/WorkspaceNotices'
 import { cn } from '@/lib/class-names'
-import { copyPathFormForKey, copyPathShortcutLabel } from '@/lib/copy-path-keys'
-import { rendererPlatform } from '@/lib/terminal-shortcut-label'
+import { appCommandForKey, appShortcutLabel } from '@/lib/keymap-match'
+import { useKeymapStore } from '@/state/keymap-store'
 import { useEditorTabStore } from '@/state/editor-tab-store'
 import { type FileTreeRoot, useFileTreeStore } from '@/state/file-tree-store'
 import { useWorkspaceStore } from '@/state/workspace-store'
@@ -209,21 +209,20 @@ function ReloadItem({ path }: { path: string }): React.JSX.Element {
 function PathItems({ path, relative }: { path: string; relative: boolean }): React.JSX.Element {
   const copyPath = useFileTreeStore((state) => state.copyPath)
   const reveal = useFileTreeStore((state) => state.reveal)
+  const keymap = useKeymapStore((state) => state.shell)
   return (
     <>
       <ContextMenuItem onSelect={() => copyPath(path, 'absolute')}>
         <Copy aria-hidden />
         Copy Path
-        <ContextMenuShortcut>
-          {copyPathShortcutLabel('absolute', rendererPlatform)}
-        </ContextMenuShortcut>
+        <ContextMenuShortcut>{appShortcutLabel(keymap, 'copy-absolute-path')}</ContextMenuShortcut>
       </ContextMenuItem>
       {relative ? (
         <ContextMenuItem onSelect={() => copyPath(path, 'relative')}>
           <CopySlash aria-hidden />
           Copy Relative Path
           <ContextMenuShortcut>
-            {copyPathShortcutLabel('relative', rendererPlatform)}
+            {appShortcutLabel(keymap, 'copy-relative-path')}
           </ContextMenuShortcut>
         </ContextMenuItem>
       ) : null}
@@ -561,7 +560,13 @@ export function FilesPanel(): React.JSX.Element {
     const index = navigable.findIndex((row) => row.key === key)
     const row = navigable[index]
     if (!row) return
-    const form = copyPathFormForKey(event, rendererPlatform)
+    const command = appCommandForKey(event, useKeymapStore.getState().shell)
+    const form =
+      command === 'copy-absolute-path'
+        ? 'absolute'
+        : command === 'copy-relative-path'
+          ? 'relative'
+          : null
     if (form) {
       event.preventDefault()
       const path = pathOf(row)

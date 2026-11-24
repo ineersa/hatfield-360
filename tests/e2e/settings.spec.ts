@@ -80,7 +80,8 @@ test('settings.json sets the app font and icon set at launch and applies every s
 
         expect(await submenuLabels(app, 'preferences')).toEqual([
           'Settings',
-          'Open Settings (JSON)'
+          'Open Settings (JSON)',
+          'Open Keybindings (JSON)'
         ])
       },
       { userDataDir: userData }

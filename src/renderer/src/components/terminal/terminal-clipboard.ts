@@ -1,6 +1,6 @@
 import type { Terminal } from '@xterm/xterm'
 import { terminalClipboardAction } from '@/lib/terminal-clipboard-keys'
-import { rendererPlatform } from '@/lib/terminal-shortcut-label'
+import { rendererPlatform } from '@/lib/shortcut-keys'
 import { useSettingsStore } from '@/state/settings-store'
 
 /** The byte Ctrl+V sends; TUIs (Claude Code, ...) read it as "paste the clipboard image". */

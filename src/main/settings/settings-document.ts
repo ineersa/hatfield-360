@@ -116,13 +116,13 @@ const CHECKS: { [K in SettingKey]: (value: unknown) => Checked<Settings[K]> } = 
 export const isSettingKey = (key: string): key is SettingKey => Object.hasOwn(CHECKS, key)
 
 /** `CloseBraceExpected` → `close brace expected`. */
-function describeParseError(error: ParseError): string {
+export function describeParseError(error: ParseError): string {
   return printParseErrorCode(error.error)
     .replaceAll(/(?<=[a-z])(?=[A-Z])/g, ' ')
     .toLowerCase()
 }
 
-function lineOf(text: string, offset: number): number {
+export function lineOf(text: string, offset: number): number {
   return text.slice(0, offset).split('\n').length
 }
 

@@ -1,7 +1,14 @@
 import { app, BrowserWindow, Menu, type MenuItemConstructorOptions } from 'electron'
 import { sep } from 'node:path'
+import type { KeybindingsView } from '../../shared/keybindings-api'
 import type { TerminalCommand } from '../../shared/terminal-api'
-import { terminalShortcut } from '../../shared/terminal-shortcuts'
+import {
+  appShortcut,
+  shellKeymap,
+  terminalShortcut,
+  type AppCommand,
+  type ShellKeymap
+} from '../../shared/keymap'
 import type { RecentEntry, WorkspaceView } from '../../shared/workspace-api'
 import {
   openRecentOrOfferRemoval,
@@ -10,7 +17,9 @@ import {
   pickAndSaveWorkspaceAs
 } from '../workspace/workspace-dialogs'
 import { sendSaveCommand } from '../ipc/editor-ipc'
+import { showKeybindingsFile } from '../ipc/keybindings-ipc'
 import { showSettingsPage } from '../ipc/settings-ipc'
+import { keybindingsStore } from '../keybindings/keybindings-store'
 import { sendTerminalCommand } from '../ipc/terminal-ipc'
 import { openSettingsFile } from '../settings/open-settings-file'
 import { settingsStore } from '../settings/settings-store'
@@ -74,7 +83,14 @@ function openRecentMenu(view: WorkspaceView | null): MenuItemConstructorOptions[
   ]
 }
 
-function buildAppMenu(view: WorkspaceView | null): void {
+function shownKey(key: string | null): { accelerator?: string } {
+  return key === null ? {} : { accelerator: key }
+}
+
+function buildAppMenu(view: WorkspaceView | null, keymap: ShellKeymap): void {
+  /** A menu item's key from the keys in force, shown on the item. */
+  const accelerator = (command: AppCommand): { accelerator?: string } =>
+    shownKey(appShortcut(keymap, command))
   const isMac = process.platform === 'darwin'
   const inWorkspaceFile = typeof view?.file === 'string'
   const fileMenu: MenuItemConstructorOptions = {
@@ -83,7 +99,7 @@ function buildAppMenu(view: WorkspaceView | null): void {
       {
         id: 'open-folder',
         label: 'Open Folder…',
-        accelerator: 'CommandOrControl+O',
+        ...accelerator('open-folder'),
         click: fromMenu(pickAndAddWorkspaceFolder)
       },
       {
@@ -96,7 +112,7 @@ function buildAppMenu(view: WorkspaceView | null): void {
       {
         id: 'save-file',
         label: 'Save',
-        accelerator: 'CommandOrControl+S',
+        ...accelerator('save'),
         click: fromMenu(sendSaveCommand)
       },
       { type: 'separator' },
@@ -131,25 +147,32 @@ function buildAppMenu(view: WorkspaceView | null): void {
           {
             id: 'open-settings',
             label: 'Settings',
-            accelerator: 'CommandOrControl+,',
+            ...accelerator('settings'),
             click: fromMenu(showSettingsPage, (error) => settingsStore.report(error))
           },
           {
             id: 'open-settings-json',
             label: 'Open Settings (JSON)',
             click: fromMenu(openSettingsFile, (error) => settingsStore.report(error))
+          },
+          {
+            id: 'open-keybindings-json',
+            label: 'Open Keybindings (JSON)',
+            click: fromMenu(showKeybindingsFile, (error) => keybindingsStore.report(error))
           }
         ]
       },
       { type: 'separator' },
-      // Command+W closes the terminal pane, like iTerm; the window closes with Command+Shift+W.
-      isMac ? { role: 'close', accelerator: 'Command+Shift+W' } : { role: 'quit', label: 'Exit' }
+      isMac ? { role: 'close', ...accelerator('close-window') } : { role: 'quit', label: 'Exit' }
     ]
   }
   const terminalItem = (command: TerminalCommand, label: string): MenuItemConstructorOptions => ({
     id: `terminal-${command}`,
     label,
-    accelerator: terminalShortcut(command, process.platform),
+    ...shownKey(terminalShortcut(keymap, command)),
+    // Shown, not registered: the page runs these keys by what has focus (the editor keeps Ctrl+Shift+W).
+    // macOS registers menu keys regardless; the page stops the ones it handles first.
+    registerAccelerator: false,
     click: fromMenu((window) => sendTerminalCommand(window, command))
   })
   const terminalMenu: MenuItemConstructorOptions = {
@@ -178,12 +201,28 @@ function buildAppMenu(view: WorkspaceView | null): void {
   Menu.setApplicationMenu(Menu.buildFromTemplate(template))
 }
 
-/** The native application menu (menu bar on Linux and Windows, top bar on macOS), rebuilt as the workspace changes. */
+/** The native application menu (menu bar on Linux and Windows, top bar on macOS), rebuilt as the workspace or the keys change. */
 export function installAppMenu(): void {
-  buildAppMenu(null)
-  workspaceStore.onChange(buildAppMenu)
+  let view: WorkspaceView | null = null
+  let keymap = shellKeymap(process.platform)
+  const build = (): void => buildAppMenu(view, keymap)
+  const showWorkspace = (next: WorkspaceView): void => {
+    view = next
+    build()
+  }
+  const showKeys = ({ entries }: KeybindingsView): void => {
+    keymap = shellKeymap(process.platform, entries)
+    build()
+  }
+  build()
+  workspaceStore.onChange(showWorkspace)
+  keybindingsStore.onChange(showKeys)
   workspaceStore
     .view()
-    .then(buildAppMenu)
+    .then(showWorkspace)
     .catch((error: unknown) => console.error('Loading the workspace for the menu failed:', error))
+  keybindingsStore
+    .view()
+    .then(showKeys)
+    .catch((error: unknown) => console.error('Loading keybindings for the menu failed:', error))
 }

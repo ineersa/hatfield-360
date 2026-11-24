@@ -1,7 +1,8 @@
 import { Columns2, Plus, Rows2, SquareTerminal, X } from 'lucide-react'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/class-names'
-import { terminalShortcutLabel } from '@/lib/terminal-shortcut-label'
+import { terminalShortcutLabel } from '@/lib/keymap-match'
+import { useKeymapStore } from '@/state/keymap-store'
 import { useTerminalStore } from '@/state/terminal-store'
 import type { TerminalCommand } from '../../../../shared/terminal-api'
 import { TerminalTabBody } from './TerminalTabBody'
@@ -17,6 +18,7 @@ function StripCommand({
   label: string
   icon: typeof Plus
 }): React.JSX.Element {
+  const keymap = useKeymapStore((state) => state.shell)
   return (
     <Tooltip>
       <TooltipTrigger asChild>
@@ -31,7 +33,9 @@ function StripCommand({
       </TooltipTrigger>
       <TooltipContent side="bottom">
         {label}{' '}
-        <span className="ml-1 text-tooltip-muted-foreground">{terminalShortcutLabel(command)}</span>
+        <span className="ml-1 text-tooltip-muted-foreground">
+          {terminalShortcutLabel(keymap, command)}
+        </span>
       </TooltipContent>
     </Tooltip>
   )
@@ -43,6 +47,7 @@ export function TerminalTabs({ hidden }: { hidden: boolean }): React.JSX.Element
   const activeTabId = useTerminalStore((state) => state.activeTabId)
   const activateTab = useTerminalStore((state) => state.activateTab)
   const closeTab = useTerminalStore((state) => state.closeTab)
+  const keymap = useKeymapStore((state) => state.shell)
 
   return (
     <div className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-island" hidden={hidden}>
@@ -81,9 +86,9 @@ export function TerminalTabs({ hidden }: { hidden: boolean }): React.JSX.Element
                   <TooltipContent side="bottom">
                     <div>{tab.cwd ?? tab.title}</div>
                     <div className="text-tooltip-muted-foreground">
-                      Previous tab: {terminalShortcutLabel('previous-tab')}
+                      Previous tab: {terminalShortcutLabel(keymap, 'previous-tab')}
                       {' · '}
-                      Next tab: {terminalShortcutLabel('next-tab')}
+                      Next tab: {terminalShortcutLabel(keymap, 'next-tab')}
                     </div>
                   </TooltipContent>
                 </Tooltip>
