@@ -111,6 +111,20 @@ describe('shellKeymap', () => {
     expect(keymap.filter((binding) => binding.command === 'close-editor-tab')).toHaveLength(2)
   })
 
+  it('moves a key to the command bound last, so menu and key handler agree', () => {
+    const keymap = shellKeymap('linux', [{ key: 'ctrl+o', command: 'hatfield.settings' }])
+    expect(keymap.filter((binding) => binding.key === 'Ctrl+O')).toEqual([
+      { kind: 'app', command: 'settings', key: 'Ctrl+O' }
+    ])
+    expect(appShortcut(keymap, 'open-folder')).toBeNull()
+    // A terminal command on an app key keeps both: they never act on the same view.
+    const shared = shellKeymap('linux', [
+      { key: 'ctrl+o', command: 'hatfield.terminal.splitRight' }
+    ])
+    expect(appShortcut(shared, 'open-folder')).toBe('Ctrl+O')
+    expect(terminalShortcut(shared, 'split-right')).toBe('Ctrl+O')
+  })
+
   it('removes one default key, or all of a command with no key', () => {
     const one = shellKeymap('linux', [
       { key: 'shift+ctrl+d', command: '-hatfield.terminal.splitRight' }

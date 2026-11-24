@@ -1,6 +1,7 @@
 import type { BrowserWindow, WebContents } from 'electron'
 import { realpath } from 'node:fs/promises'
 import { homedir } from 'node:os'
+import { basename, dirname, join } from 'node:path'
 import { EDITOR_CHANNELS, type EditorFile, type EditorWriteResult } from '../../shared/editor-api'
 import { readEditorFile, textVersion } from '../files/editor-file-read'
 import { fileRoots } from '../files/file-roots'
@@ -68,12 +69,24 @@ async function readOutside(path: string, refused: unknown): Promise<EditorFile> 
   return file.kind === 'text' || file.kind === 'large' ? { ...file, outside: true } : file
 }
 
+/**
+ * keybindings.json, the one file outside the workspace the app's editor saves: only as itself in the
+ * data folder, never through a link to some other file.
+ */
+async function keybindingsFile(path: string): Promise<string | null> {
+  const real = await realpath(path).catch(() => null)
+  if (real === null) return null
+  if (real !== join(await realpath(dirname(path)), basename(path))) {
+    throw new Error(`${path} links to another file, which the editor doesn't open`)
+  }
+  return real
+}
+
 async function read(contents: WebContents, path: string): Promise<EditorFile> {
   const page = heldBy(contents)
-  // keybindings.json is the one file outside the workspace the app's editor saves.
   const real =
     path === keybindingsStore.file()
-      ? await realpath(path).catch(() => null)
+      ? await keybindingsFile(path)
       : await locateEditorFile(path, await rootPaths(), page.files.get(path)).catch(
           (error: unknown) => readOutside(path, error)
         )

@@ -1,5 +1,5 @@
 import { acceleratorKeyString } from './key-strings'
-import { EDITOR_KEYMAP, editorShortcut, shellActions } from './keymap'
+import { EDITOR_KEYMAP, editorShortcut, shellActions, shellCommand } from './keymap'
 import { isPlainObject } from './plain-object'
 
 /** One entry on one line, spaced as VS Code writes them: `{ "key": "ctrl+d", ... }`. */
@@ -27,7 +27,8 @@ export function keybindingsTemplate(platform: string): string {
     const entry: Record<string, unknown> = {
       key: acceleratorKeyString(accelerator, platform),
       command: binding.command,
-      when: binding.when
+      // Save is also the app's menu key, and app keys take no "when".
+      ...(shellCommand(binding.command) ? {} : { when: binding.when })
     }
     if (binding.args !== undefined) entry['args'] = binding.args
     return [entryLine(entry, binding.action)]
@@ -44,6 +45,7 @@ export function keybindingsTemplate(platform: string): string {
     '//   { "key": "ctrl+d", "command": "-editor.action.duplicateSelection" }',
     '// Keys are written as VS Code writes them: ctrl, shift, alt, cmd (macOS) or meta, then the key;',
     '// editor keys may be two chords, as in "ctrl+k ctrl+c". Editor commands are VS Code commands.',
+    '// App and terminal commands (hatfield.*) take one chord and no "when".',
     '[',
     '  // Editor',
     ...editor,

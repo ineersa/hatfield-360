@@ -34,6 +34,10 @@ function entryProblem(raw: Record<string, unknown>, platform: string): string | 
     return `runs ${id}, which isn't a Hatfield 360 command`
   }
   if (when !== undefined && typeof when !== 'string') return '"when" must be a string'
+  // The app and terminals don't evaluate VS Code contexts; a condition they'd ignore isn't taken.
+  if (when !== undefined && shellCommand(id)) {
+    return `gives ${id} a "when"; app and terminal keys can't have one`
+  }
   return null
 }
 

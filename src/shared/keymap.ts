@@ -559,7 +559,7 @@ type ShellCommand =
 /** An app or terminal command and one key that runs it. */
 type ShellBinding = ShellCommand & { key: string }
 
-/** The app's and terminals' keys in force; on a key, a later binding wins over an earlier one. */
+/** The app's and terminals' keys in force: each key bound to at most one app and one terminal command. */
 export type ShellKeymap = readonly ShellBinding[]
 
 const SHELL_ACTIONS: { command: ShellCommand; action: ShellAction }[] = [
@@ -617,6 +617,10 @@ export function shellKeymap(
           (key !== undefined && normal(binding.key) !== normal(key))
       )
     } else if (key !== undefined) {
+      // A key runs one app command and one terminal command (never on screen together): the latest.
+      bindings = bindings.filter(
+        (binding) => binding.kind !== target.kind || normal(binding.key) !== normal(key)
+      )
       bindings.push({ ...target, key })
     }
   }

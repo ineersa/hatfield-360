@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test'
 import { parse } from 'jsonc-parser'
-import { mkdir, readFile, realpath, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, realpath, symlink, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { lines, openFile, showView, tab, tabs } from './editor-page'
 import { makeTempDir, saveScreenshot, withApp } from './launch-app'
@@ -228,7 +228,8 @@ test('keybindings.json opens from Settings with every default listed, and rebind
 
         // Each entry typed on the line after `[`; the editor's closing brackets and quotes are typed over.
         await lines(page).click()
-        await goToLine(page, 7)
+        const opening = (await readFile(keybindings, 'utf8')).split('\n').indexOf('[') + 1
+        await goToLine(page, opening)
         await page.keyboard.press('End')
         for (const entry of entries) {
           await page.keyboard.press('Enter')
@@ -267,6 +268,32 @@ test('keybindings.json opens from Settings with every default listed, and rebind
         // The rebound Close Tab key closes the tab.
         await page.keyboard.press(mac ? 'Meta+Alt+KeyW' : 'Control+Alt+KeyW')
         await expect(tabs(page)).toHaveText(['keybindings.json'])
+      },
+      { userDataDir: userData }
+    )
+  } finally {
+    await cleanUserData()
+    await cleanProject()
+  }
+})
+
+test('a keybindings.json that links to another file does not open in the editor', async () => {
+  const [app, cleanProject] = await makeProject()
+  const [userData, cleanUserData] = await seedWorkspace([{ path: app, kind: 'folder' }])
+  // Outside the workspace: the link must not make it editable.
+  const elsewhere = join(app, '..', 'elsewhere.json')
+  await writeFile(elsewhere, '[]\n')
+  await symlink(elsewhere, join(userData, 'keybindings.json'))
+  try {
+    await withApp(
+      async (_electronApp, page) => {
+        await page.getByRole('button', { name: 'Settings', exact: true }).click()
+        await page.getByRole('button', { name: 'Open keybindings.json' }).click()
+        await expect(tab(page, 'keybindings.json')).toHaveAttribute('aria-selected', 'true')
+        await expect(page.getByRole('main', { name: 'Files' }).getByRole('alert')).toContainText(
+          "Couldn't open keybindings.json"
+        )
+        await expect(lines(page)).toBeHidden()
       },
       { userDataDir: userData }
     )
