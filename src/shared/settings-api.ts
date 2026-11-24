@@ -8,6 +8,7 @@ import type { TERMINAL_THEMES } from './themes/terminal-theme-catalog'
 export type Settings = {
   'agents.hatfield': AgentProfile
   'agents.claude': AgentProfile
+  'notifications.agentSounds': boolean
   'app.fontFamily': string
   'app.fontSize': number
   'terminal.fontFamily': string
@@ -53,6 +54,7 @@ const MONOSPACE_FONTS =
 export const DEFAULT_SETTINGS: Settings = {
   'agents.hatfield': { executable: 'hatfield', args: [] },
   'agents.claude': { executable: 'claude', args: [] },
+  'notifications.agentSounds': true,
   'app.fontFamily': "'Inter Variable', system-ui, sans-serif",
   'app.fontSize': 14,
   'terminal.fontFamily': MONOSPACE_FONTS,

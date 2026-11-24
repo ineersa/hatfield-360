@@ -678,7 +678,11 @@ test('agent notifications follow accepted transitions and open only the owning t
         await command(page, hatfield, 'script')
         await command(page, hatfield, 'completed')
         await expect(completed).toHaveCount(0)
-        await command(page, hatfield, 'child-done')
+        await page.getByRole('button', { name: 'Files', exact: true }).click()
+        await send('child-done')
+        await expect(page.getByRole('alert', { name: 'Agent turn completed' })).toBeVisible()
+        await expect(completed).toHaveCount(1)
+        await page.getByRole('button', { name: 'Agents', exact: true }).click()
         const row = page.getByRole('button', { name: /^Hatfield (?:#|·)/ })
         await expect(row).toHaveAttribute(
           'aria-description',

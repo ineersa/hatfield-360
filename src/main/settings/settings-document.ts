@@ -96,6 +96,7 @@ function agentProfile(raw: unknown): Checked<Settings['agents.hatfield']> {
 const CHECKS: { [K in SettingKey]: (value: unknown) => Checked<Settings[K]> } = {
   'agents.hatfield': agentProfile,
   'agents.claude': agentProfile,
+  'notifications.agentSounds': flag,
   'app.fontFamily': fontFamily,
   'app.fontSize': fontSize,
   'terminal.fontFamily': fontFamily,

@@ -42,7 +42,11 @@ export async function withApp(
   const app = await electron.launch({
     ...launchTarget,
     ...(options.recordVideo ? { recordVideo: options.recordVideo } : {}),
-    args: [...(launchTarget.args ?? []), ...(ownDir === null ? [] : [`--user-data-dir=${ownDir}`])],
+    args: [
+      ...(launchTarget.args ?? []),
+      '--mute-audio',
+      ...(ownDir === null ? [] : [`--user-data-dir=${ownDir}`])
+    ],
     env: { ...process.env, ...options.env, APP_BACKGROUND_LAUNCH: '1' }
   })
   try {

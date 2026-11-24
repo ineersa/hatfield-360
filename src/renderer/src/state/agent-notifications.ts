@@ -1,5 +1,7 @@
 import { isTerminalShown, selectTerminal } from '@/components/terminal/terminal-tab-controllers'
 import { AGENT_PROVIDERS, type AgentNotification } from '../../../shared/agent-api'
+import { playAgentNotificationSound } from '@/lib/agent-notification-sound'
+import { useSettingsStore } from './settings-store'
 import { shouldShowAgentToast } from './agent-toast-policy'
 import { notify, type NotificationSeverity } from './notification-store'
 
@@ -8,6 +10,11 @@ const stateNotices = {
   completed: { title: 'Agent turn completed', severity: 'info' },
   failed: { title: 'Agent turn failed', severity: 'error' }
 } satisfies Record<string, { title: string; severity: NotificationSeverity }>
+
+function soundsEnabled(): boolean {
+  const { loaded, values } = useSettingsStore.getState()
+  return loaded && values['notifications.agentSounds']
+}
 
 export function receiveAgentNotification({
   provider,
@@ -21,6 +28,11 @@ export function receiveAgentNotification({
   const content = explicit
     ? { title: message.title || 'Agent message', severity: 'info' as const }
     : stateNotices[message.kind]
+  const showToast = shouldShowAgentToast(
+    message.kind,
+    ownerWindowFocusedAndVisible,
+    isTerminalShown(terminalId)
+  )
   notify(
     {
       ...content,
@@ -35,11 +47,10 @@ export function receiveAgentNotification({
       }
     },
     {
-      showToast: shouldShowAgentToast(
-        message.kind,
-        ownerWindowFocusedAndVisible,
-        isTerminalShown(terminalId)
-      )
+      showToast
     }
   )
+  if (!explicit && showToast && soundsEnabled()) {
+    void playAgentNotificationSound(message.kind, soundsEnabled)
+  }
 }

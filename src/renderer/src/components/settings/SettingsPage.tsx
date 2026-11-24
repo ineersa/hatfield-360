@@ -1,3 +1,4 @@
+import { AgentSoundPreviews } from './AgentSoundPreviews'
 import { AgentLaunchSettings } from './AgentLaunchSettings'
 import { FileJson, FolderRoot, RotateCcw, X } from 'lucide-react'
 import { useEffect, useId, useState } from 'react'
@@ -228,12 +229,15 @@ function ResetAllButton(): React.JSX.Element | null {
 const HEADER_BUTTON_CLASS =
   'type-button flex h-control shrink-0 items-center gap-2 rounded-button px-2.5 whitespace-nowrap text-muted-foreground hover:bg-hover hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none disabled:opacity-50'
 
-function TerminalFlagSetting({
+function FlagSetting({
   settingKey,
   label,
   description
 }: {
-  settingKey: 'terminal.gpuAcceleration' | 'terminal.trimLeadingWhitespaceOnCopy'
+  settingKey:
+    | 'terminal.gpuAcceleration'
+    | 'terminal.trimLeadingWhitespaceOnCopy'
+    | 'notifications.agentSounds'
   label: string
   description: string
 }): React.JSX.Element {
@@ -318,16 +322,24 @@ export function SettingsPage(): React.JSX.Element {
           {FONT_SETTINGS.map((setting) => (
             <FontSetting key={setting.familyKey} {...setting} />
           ))}
-          <TerminalFlagSetting
+          <FlagSetting
             settingKey="terminal.gpuAcceleration"
             label="Terminal GPU rendering"
             description="Draws terminals with WebGL. Turn it off if terminal text looks garbled or flickers."
           />
-          <TerminalFlagSetting
+          <FlagSetting
             settingKey="terminal.trimLeadingWhitespaceOnCopy"
             label="Trim leading whitespace on copy"
             description="Remove spaces and tabs at the start of each copied line. Terminal output stays unchanged."
           />
+          <div>
+            <FlagSetting
+              settingKey="notifications.agentSounds"
+              label="Agent notification sounds"
+              description="Play a cue for agent completion, input requests, and failures when the app shows a toast."
+            />
+            <AgentSoundPreviews />
+          </div>
           <AgentLaunchSettings />
         </div>
       </div>

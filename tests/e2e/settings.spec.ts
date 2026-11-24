@@ -331,3 +331,39 @@ test('the largest app font in the smallest window keeps the status bar and Setti
     await cleanUserData()
   }
 })
+
+test('agent sound previews play through Web Audio and the mute preference survives restart', async () => {
+  const [userDataDir, cleanup] = await makeTempDir('agent-sounds')
+  try {
+    await withApp(
+      async (_app, page) => {
+        await page.getByRole('button', { name: 'Settings', exact: true }).click()
+        const settings = settingsMain(page)
+        const mute = settings.getByRole('checkbox', { name: 'Agent notification sounds' })
+        await expect(mute).toBeChecked()
+        await mute.uncheck()
+        for (const cue of ['Completed', 'Needs input', 'Failed']) {
+          await settings.getByRole('button', { name: `Preview ${cue}`, exact: true }).click()
+          await expect(
+            settings.getByText(`${cue} preview finished.`, { exact: true })
+          ).toBeVisible()
+        }
+        expect(parse(await readFile(join(userDataDir, 'settings.json'), 'utf8'))).toMatchObject({
+          'notifications.agentSounds': false
+        })
+      },
+      { userDataDir }
+    )
+    await withApp(
+      async (_app, page) => {
+        await page.getByRole('button', { name: 'Settings', exact: true }).click()
+        await expect(
+          settingsMain(page).getByRole('checkbox', { name: 'Agent notification sounds' })
+        ).not.toBeChecked()
+      },
+      { userDataDir }
+    )
+  } finally {
+    await cleanup()
+  }
+})
