@@ -5,6 +5,7 @@ import { EDITOR_CHANNELS } from '../shared/editor-api'
 import { FILES_SESSION_CHANNELS } from '../shared/files-session-api'
 import { FILE_TREE_CHANNELS } from '../shared/file-tree-api'
 import { KEYBINDINGS_CHANNELS, type KeybindingsView } from '../shared/keybindings-api'
+import { SEARCH_CHANNELS, type SearchEvent } from '../shared/search-api'
 import { SETTINGS_CHANNELS, type SettingsView } from '../shared/settings-api'
 import { SHELL_LAYOUT_CHANNELS } from '../shared/shell-layout-api'
 import { LANGUAGE_SERVER_CHANNELS, type LanguageServerStatus } from '../shared/language-server-api'
@@ -58,6 +59,13 @@ const desktopApi: DesktopApi = {
     const listener = (_event: unknown, paths: string[]): void => callback(paths)
     ipcRenderer.on(FILE_TREE_CHANNELS.changed, listener)
     return () => ipcRenderer.removeListener(FILE_TREE_CHANNELS.changed, listener)
+  },
+  startSearch: (id, query) => ipcRenderer.invoke(SEARCH_CHANNELS.start, id, query),
+  cancelSearch: () => ipcRenderer.invoke(SEARCH_CHANNELS.cancel),
+  subscribeSearch: (callback) => {
+    const listener = (_event: unknown, event: SearchEvent): void => callback(event)
+    ipcRenderer.on(SEARCH_CHANNELS.event, listener)
+    return () => ipcRenderer.removeListener(SEARCH_CHANNELS.event, listener)
   },
   readTextFile: (path) => ipcRenderer.invoke(EDITOR_CHANNELS.read, path),
   writeTextFile: (path, contents, base) =>

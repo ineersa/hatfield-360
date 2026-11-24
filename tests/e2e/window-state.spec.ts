@@ -61,6 +61,7 @@ test('the window size, position and layout come back after a restart', async () 
         panels: {
           agents: { width: 300, collapsed: true },
           files: { width: 332, collapsed: false },
+          search: { width: 300, collapsed: false },
           git: { width: 300, collapsed: false }
         },
         notificationsWidth: 380

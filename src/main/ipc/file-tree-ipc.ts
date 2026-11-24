@@ -4,7 +4,7 @@ import { listDirectory } from '../files/directory-listing'
 import { DirectoryWatchers } from '../files/directory-watchers'
 import { fileRoots } from '../files/file-roots'
 import { resolveInsideRoots, rootRelativePath } from '../files/path-containment'
-import { renameEntry, resolveChangeableEntry } from '../files/tree-file-operations'
+import { outermostPaths, renameEntry, resolveChangeableEntry } from '../files/tree-file-operations'
 import { handleTrusted } from './trusted-ipc'
 
 /** More expanded folders than any tree shows; a longer list is a bug or abuse. */
@@ -78,7 +78,8 @@ export function registerFileTreeIpc(): void {
     const roots = await rootPaths()
     // Every path is checked before anything moves, so a refused one leaves the rest in place.
     const entries = await Promise.all(paths.map((path) => resolveChangeableEntry(path, roots)))
-    for (const entry of entries) await shell.trashItem(entry)
+    // A folder selected with what is in it: once the folder is gone, its contents can't be trashed.
+    for (const entry of outermostPaths(entries)) await shell.trashItem(entry)
   })
 
   handleTrusted(FILE_TREE_CHANNELS.rename, async (_event, path, name) => {

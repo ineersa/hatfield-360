@@ -72,6 +72,7 @@ describe('parseShellLayout', () => {
       panels: {
         agents: { width: 250.6, collapsed: true },
         files: { width: 420, collapsed: false },
+        search: { width: 360, collapsed: true },
         git: { width: 180, collapsed: false }
       },
       notificationsWidth: 400.4
@@ -88,6 +89,20 @@ describe('parseShellLayout', () => {
     expect(parseShellLayout(withPanel({ width: 300, collapsed: 'yes' }))).toBe(null)
     expect(parseShellLayout(withPanel(undefined))).toBe(null)
     expect(parseShellLayout(DEFAULT_SHELL_LAYOUT)).toEqual(DEFAULT_SHELL_LAYOUT)
+    const withSearch = (panel: unknown) => ({
+      ...layout,
+      panels: { ...layout.panels, search: panel }
+    })
+    expect(parseShellLayout(withSearch({ width: 300, collapsed: 'yes' }))).toBe(null)
+  })
+
+  it('gives a layout saved before Find in Files existed a new search panel, keeping the rest', () => {
+    const { search: _unused, ...older } = DEFAULT_SHELL_LAYOUT.panels
+    const files = { width: 420, collapsed: true }
+    expect(parseShellLayout({ ...DEFAULT_SHELL_LAYOUT, panels: { ...older, files } })).toEqual({
+      ...DEFAULT_SHELL_LAYOUT,
+      panels: { ...DEFAULT_SHELL_LAYOUT.panels, files }
+    })
   })
 
   it('keeps the side panels of a layout without a valid notifications width, using the default', () => {
