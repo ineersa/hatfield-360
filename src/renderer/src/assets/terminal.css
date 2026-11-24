@@ -130,3 +130,39 @@
 .has-multiple-panes .pane-exit-badge {
   right: 40px;
 }
+
+/* Rearrange mode (Rearrange Panes in the terminal menu): each pane is a drag handle above its terminal. */
+.pane-rearrange-handle {
+  position: absolute;
+  inset: 0;
+  z-index: 25;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--terminal-background) 55%, transparent);
+  border: 1px dashed var(--separator);
+  color: var(--muted-foreground);
+  font-family: var(--font-sans);
+  font-size: var(--type-hint-size);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.pane-rearrange-handle:active {
+  cursor: grabbing;
+}
+
+.pane.is-drag-source .pane-rearrange-handle {
+  border-color: var(--primary);
+  color: var(--foreground);
+}
+
+.pane-drop-highlight {
+  position: absolute;
+  z-index: 30;
+  background: color-mix(in srgb, var(--primary) 20%, transparent);
+  border: 2px solid var(--primary);
+  border-radius: var(--component-radius);
+  pointer-events: none;
+}
