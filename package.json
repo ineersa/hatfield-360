@@ -25,6 +25,7 @@
   },
   "dependencies": {
     "@codingame/monaco-vscode-quickaccess-service-override": "37.6.1",
+    "@fontsource-variable/jetbrains-mono": "^5.3.0",
     "basedpyright": "1.40.2",
     "chokidar": "6.0.0",
     "intelephense": "1.18.5",

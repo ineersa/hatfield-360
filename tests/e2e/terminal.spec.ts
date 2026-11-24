@@ -83,6 +83,12 @@ test('a terminal opens in the project, runs commands and closes when its shell e
         await expect(screenText(pane)).toContainText('Hatfield360')
         await saveScreenshot(page, 'terminal-single')
 
+        // The default font is the bundled JetBrains Mono, loaded before xterm measured its cells.
+        await expect(screenText(pane)).toHaveCSS('font-family', /^"JetBrains Mono Variable"/)
+        const bundledFontLoaded = `[...document.fonts].some((face) =>
+          face.family.includes('JetBrains Mono Variable') && face.status === 'loaded')`
+        expect(await page.evaluate(bundledFontLoaded)).toBe(true)
+
         // terminal.lineHeight spaces out the rows of an open terminal as soon as it is saved.
         const rowHeight = async (): Promise<number> =>
           (await screenText(pane).locator(':scope > div').first().boundingBox())?.height ?? 0

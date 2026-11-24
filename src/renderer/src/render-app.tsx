@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import { receiveAgentNotification } from './state/agent-notifications'
 import { App } from './App'
 import { applyAppTheme } from './lib/app-theme'
+import { loadBundledFonts } from './lib/bundled-fonts'
 import './assets/main.css'
 
 // Main names the chosen theme in the page URL, so the first paint is already in it.
@@ -15,8 +16,10 @@ if (!root) {
 const stopAgentNotifications = window.desktop.subscribeAgentNotifications(receiveAgentNotification)
 if (import.meta.hot) import.meta.hot.dispose(stopAgentNotifications)
 
-createRoot(root).render(
-  <StrictMode>
-    <App />
-  </StrictMode>
+void loadBundledFonts().then(() =>
+  createRoot(root).render(
+    <StrictMode>
+      <App />
+    </StrictMode>
+  )
 )
