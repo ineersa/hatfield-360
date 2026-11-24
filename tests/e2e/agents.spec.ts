@@ -218,12 +218,17 @@ test('agent launches report through the real socket and sidebar rows select exac
         await expect(claude).toHaveCount(0)
         const working = filter.getByRole('button', { name: 'Working', exact: true })
         await working.click()
-        await working.click()
         await expect(attentionStrip).toBeVisible()
         await expect(working).toHaveAttribute('aria-pressed', 'true')
         await expect(filter.getByRole('button', { name: 'Needs input' })).toHaveAttribute(
           'aria-pressed',
           'false'
+        )
+        await working.click()
+        await expect(working).toHaveAttribute('aria-pressed', 'false')
+        await expect(filter.getByRole('button', { name: 'All', exact: true })).toHaveAttribute(
+          'aria-pressed',
+          'true'
         )
         await expect(claude).toContainText('Working')
         await expect(hatfield).toHaveAttribute('aria-description', /Needs input: permission/)

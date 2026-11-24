@@ -335,7 +335,7 @@ export function WorkspacePanel(): React.JSX.Element {
                         type="button"
                         aria-label={label}
                         aria-pressed={pressed}
-                        onClick={() => setFilter(key)}
+                        onClick={() => setFilter((current) => (current === key ? null : key))}
                         className={cn(filterClass, color, pressed && 'border-ring bg-hover')}
                       >
                         <Icon aria-hidden className="size-3" />
