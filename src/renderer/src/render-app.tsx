@@ -4,6 +4,7 @@ import { createRoot } from 'react-dom/client'
 import { receiveAgentNotification } from './state/agent-notifications'
 import { App } from './App'
 import { applyAppTheme } from './lib/app-theme'
+import { loadBundledFonts } from './lib/bundled-fonts'
 import './assets/main.css'
 
 // Main names the chosen theme in the page URL, so the first paint is already in it.
@@ -17,12 +18,15 @@ const stopAgentNotifications = window.desktop.subscribeAgentNotifications(receiv
 if (import.meta.hot) import.meta.hot.dispose(stopAgentNotifications)
 
 const appRoot = createRoot(root)
-void initializeTerminalWorkspace()
-  .catch((error: unknown) => console.error('Loading terminal workspace failed:', error))
-  .then(() =>
-    appRoot.render(
-      <StrictMode>
-        <App />
-      </StrictMode>
-    )
+void Promise.all([
+  loadBundledFonts(),
+  initializeTerminalWorkspace().catch((error: unknown) =>
+    console.error('Loading terminal workspace failed:', error)
   )
+]).then(() =>
+  appRoot.render(
+    <StrictMode>
+      <App />
+    </StrictMode>
+  )
+)

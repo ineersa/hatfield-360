@@ -1,7 +1,7 @@
 import { AgentProviderIcon } from '@/components/icons/AgentProviderIcon'
 import type { AgentProvider } from '../../../../shared/agent-api'
 import type { Terminal } from '@xterm/xterm'
-import { Clipboard, Columns2, Copy, Eraser, Rows2, X } from 'lucide-react'
+import { Clipboard, Columns2, Copy, Eraser, Move, Rows2, X } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
 import {
   ContextMenu,
@@ -28,16 +28,21 @@ export function TerminalContextMenu({
   runCommand,
   launchSplit,
   canLaunch,
+  rearrangePanes,
+  canRearrange,
   children
 }: {
   activeTerminal: () => Terminal | null
   runCommand: (command: 'split-right' | 'split-down' | 'close-pane') => void
   launchSplit: (provider: AgentProvider) => void
   canLaunch: () => boolean
+  rearrangePanes: () => void
+  canRearrange: () => boolean
   children: ReactNode
 }): React.JSX.Element {
   const keymap = useKeymapStore((state) => state.shell)
   const [launchable, setLaunchable] = useState(false)
+  const [rearrangeable, setRearrangeable] = useState(false)
   const [hasSelection, setHasSelection] = useState(false)
   const withTerminal = (action: (terminal: Terminal) => void) => () => {
     const terminal = activeTerminal()
@@ -50,6 +55,7 @@ export function TerminalContextMenu({
         if (open) {
           setHasSelection(activeTerminal()?.hasSelection() ?? false)
           setLaunchable(canLaunch())
+          setRearrangeable(canRearrange())
         }
         // Back to typing in the terminal once the closing menu has let go of focus.
         else setTimeout(() => activeTerminal()?.focus(), 0)
@@ -77,6 +83,10 @@ export function TerminalContextMenu({
           <Rows2 aria-hidden />
           Split Down
           <ContextMenuShortcut>{terminalShortcutLabel(keymap, 'split-down')}</ContextMenuShortcut>
+        </ContextMenuItem>
+        <ContextMenuItem disabled={!rearrangeable} onSelect={rearrangePanes}>
+          <Move aria-hidden />
+          Rearrange Panes
         </ContextMenuItem>
         <ContextMenuSeparator />
         <ContextMenuItem disabled={!launchable} onSelect={() => launchSplit('hatfield')}>

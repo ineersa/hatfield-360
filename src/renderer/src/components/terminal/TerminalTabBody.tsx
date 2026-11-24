@@ -304,6 +304,8 @@ export function TerminalTabBody({
           return Boolean(pane?.container.dataset.terminalId && !pane.container.dataset.exited)
         }}
         runCommand={(command) => terminalTabControllers.get(tab.id)?.run(command)}
+        rearrangePanes={() => manager.current?.startRearrange()}
+        canRearrange={() => (manager.current?.getPanes().length ?? 0) > 1}
       >
         <div
           ref={root}

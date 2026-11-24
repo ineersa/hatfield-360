@@ -52,8 +52,9 @@ export const FONT_SIZE_RANGE: NumberRange = { min: 8, max: 32, step: 1 }
 
 export const LINE_HEIGHT_RANGE: NumberRange = { min: 1, max: 2, step: 0.1 }
 
+// The app bundles JetBrains Mono Variable, so the default looks the same whatever fonts are installed.
 const MONOSPACE_FONTS =
-  "'JetBrains Mono', 'Cascadia Code', 'SF Mono', Menlo, Consolas, 'DejaVu Sans Mono', monospace"
+  "'JetBrains Mono Variable', 'JetBrains Mono', 'Cascadia Code', 'SF Mono', Menlo, Consolas, 'DejaVu Sans Mono', monospace"
 
 export const DEFAULT_SETTINGS: Settings = {
   'agents.hatfield': { executable: 'hatfield', args: [] },

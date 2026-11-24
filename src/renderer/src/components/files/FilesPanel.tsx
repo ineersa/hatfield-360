@@ -1,3 +1,4 @@
+import { HidePanelButton } from '@/components/shell/HidePanelButton'
 import {
   ChevronRight,
   ChevronsDownUp,
@@ -769,6 +770,7 @@ export function FilesPanel(): React.JSX.Element {
         <HeaderButton label="Add Folder to Workspace" onClick={() => void addFolder()}>
           <FolderPlus className="size-4.5" strokeWidth={1.75} aria-hidden />
         </HeaderButton>
+        <HidePanelButton view="files" />
       </div>
       {problem ? <WorkspaceProblemBanner problem={problem} /> : null}
       {workspace && roots.length === 0 && !problem ? (

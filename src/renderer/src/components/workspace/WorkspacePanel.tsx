@@ -1,3 +1,4 @@
+import { HidePanelButton } from '@/components/shell/HidePanelButton'
 import { AgentAttention } from './AgentAttention'
 import { ProjectPicker } from './ProjectPicker'
 import {
@@ -307,6 +308,7 @@ export function WorkspacePanel(): React.JSX.Element {
           </TooltipTrigger>
           <TooltipContent side="bottom">Add Folder to Workspace</TooltipContent>
         </Tooltip>
+        <HidePanelButton view="agents" />
       </div>
       {error ? (
         <p role="alert" className="type-hint px-4 text-error">

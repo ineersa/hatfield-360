@@ -49,12 +49,13 @@ export function restoreSplit(
   return split
 }
 
-/** Replaces `existing` with a flex split holding [existing] [divider] [added]. */
+/** Replaces `existing` with a flex split holding [existing] [divider] [added], or the reverse. */
 export function wrapInSplit(
   existing: HTMLElement,
   added: HTMLElement,
   isVertical: boolean,
-  divider: HTMLElement
+  divider: HTMLElement,
+  addedFirst = false
 ): void {
   const parent = existing.parentElement
   if (!parent) return
@@ -71,7 +72,8 @@ export function wrapInSplit(
   applyPaneFlexStyle(existing)
   applyPaneFlexStyle(added)
   parent.replaceChild(split, existing)
-  split.append(existing, divider, added)
+  if (addedFirst) split.append(added, divider, existing)
+  else split.append(existing, divider, added)
 }
 
 /** After a pane leaves a split, its sibling takes the split's place and size. */

@@ -57,6 +57,20 @@ test('clicking the active view button collapses and expands its side panel', asy
   })
 })
 
+test('the side panel header hides the panel and the view button brings it back', async () => {
+  await withApp(async (_app, page) => {
+    for (const view of ['Agents', 'Files']) {
+      // Agents is the view the app starts in; clicking its button would collapse it.
+      if (view === 'Files') await viewButton(page, view).click()
+      await sidePanel(page, view).getByRole('button', { name: 'Hide Side Panel' }).click()
+      await expect(sidePanel(page, view)).toHaveCount(0)
+      await expect(viewButton(page, view)).toHaveAttribute('aria-expanded', 'false')
+      await viewButton(page, view).click()
+      await expect(sidePanel(page, view)).toBeVisible()
+    }
+  })
+})
+
 test('the Settings rail button toggles Settings without losing the previous view', async () => {
   await withApp(async (_app, page) => {
     const files = viewButton(page, 'Files')

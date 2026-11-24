@@ -12,6 +12,7 @@ import {
   safeFit
 } from './managed-pane'
 import type {
+  DropZone,
   ManagedPane,
   ManagedPaneInternal,
   PaneManagerOptions,
@@ -25,6 +26,7 @@ import {
   restoreSplit,
   wrapInSplit
 } from './pane-tree'
+import { isPaneDropNoOp, startPaneRearrange, type PaneRearrange } from './pane-rearrange'
 
 const toPublic = ({ id, terminal, container }: ManagedPaneInternal): ManagedPane => ({
   id,
@@ -41,6 +43,7 @@ export class PaneManager {
   private activePaneId: number | null = null
   private nextPaneId = 1
   private destroyed = false
+  private rearrange: PaneRearrange | null = null
 
   constructor(
     private readonly root: HTMLElement,
@@ -129,6 +132,7 @@ export class PaneManager {
   splitPane(paneId: number, direction: SplitDirection): ManagedPane | null {
     const existing = this.panes.get(paneId)
     if (!existing?.container.parentElement) return null
+    this.stopRearrange()
     const pane = this.createPane()
     const isVertical = direction === 'vertical'
     const divider = this.divider(isVertical)
@@ -152,19 +156,12 @@ export class PaneManager {
   closePane(paneId: number): void {
     const pane = this.panes.get(paneId)
     if (!pane) return
+    this.stopRearrange()
     const successor =
       this.activePaneId === paneId ? findClosedPaneSuccessor(pane.container, this.panes) : null
-    const parent = pane.container.parentElement
     disposePane(pane)
     this.panes.delete(paneId)
-    if (parent?.classList.contains('pane-split')) {
-      const sibling = findPaneChildren(parent).find((child) => child !== pane.container) ?? null
-      pane.container.remove()
-      removeDividers(parent)
-      promoteSibling(sibling, parent, this.root)
-    } else {
-      pane.container.remove()
-    }
+    this.detachFromTree(pane.container)
     if (this.activePaneId === paneId) {
       this.activePaneId = null
       const next = successor ?? this.panes.values().next().value
@@ -172,6 +169,49 @@ export class PaneManager {
     }
     this.updateMultiPaneState()
     this.options.onPaneClosed(paneId)
+  }
+
+  /** Docks a pane to an edge of another one; its shell keeps running. */
+  movePane(sourceId: number, targetId: number, zone: DropZone): void {
+    const source = this.panes.get(sourceId)
+    const target = this.panes.get(targetId)
+    if (!source || !target || isPaneDropNoOp(source.container, target.container, zone)) return
+    // Reparenting can silently invalidate a WebGL canvas; it is rebuilt once the layout settles.
+    const hadWebgl = [source, target].filter((pane) => pane.webglAddon)
+    for (const pane of hadWebgl) disposeWebgl(pane)
+    this.detachFromTree(source.container)
+    const isVertical = zone === 'left' || zone === 'right'
+    wrapInSplit(
+      target.container,
+      source.container,
+      isVertical,
+      this.divider(isVertical),
+      zone === 'left' || zone === 'top'
+    )
+    requestAnimationFrame(() => {
+      if (this.destroyed) return
+      for (const pane of hadWebgl) if (this.panes.has(pane.id)) attachWebgl(pane)
+      for (const pane of this.panes.values()) safeFit(pane)
+    })
+    this.activate(source, true)
+    this.onLayoutChange()
+  }
+
+  /** Lays a drag handle over every pane until one is dropped onto another, or Esc. */
+  startRearrange(): void {
+    if (this.rearrange || this.panes.size < 2) return
+    this.rearrange = startPaneRearrange({
+      root: this.root,
+      paneElements: () => Array.from(this.panes.values(), (pane) => pane.container),
+      onDrop: (sourceId, target) => this.movePane(sourceId, target.paneId, target.zone),
+      onEnd: () => {
+        this.rearrange = null
+      }
+    })
+  }
+
+  stopRearrange(): void {
+    this.rearrange?.stop()
   }
 
   getPanes(): ManagedPane[] {
@@ -219,6 +259,7 @@ export class PaneManager {
 
   destroy(): void {
     this.destroyed = true
+    this.stopRearrange()
     for (const pane of this.panes.values()) disposePane(pane)
     this.panes.clear()
     disposeDividersIn(this.root)
@@ -236,6 +277,19 @@ export class PaneManager {
     this.panes.set(pane.id, pane)
     this.updateMultiPaneState()
     return pane
+  }
+
+  /** Takes a pane's element out of the tree, without disposing it; its sibling takes the split's place. */
+  private detachFromTree(container: HTMLElement): void {
+    const parent = container.parentElement
+    if (parent?.classList.contains('pane-split')) {
+      const sibling = findPaneChildren(parent).find((child) => child !== container) ?? null
+      container.remove()
+      removeDividers(parent)
+      promoteSibling(sibling, parent, this.root)
+    } else {
+      container.remove()
+    }
   }
 
   private activate(pane: ManagedPaneInternal, focus: boolean): void {

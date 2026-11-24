@@ -83,6 +83,12 @@ test('a terminal opens in the project, runs commands and closes when its shell e
         await expect(screenText(pane)).toContainText('Hatfield360')
         await saveScreenshot(page, 'terminal-single')
 
+        // The default font is the bundled JetBrains Mono, loaded before xterm measured its cells.
+        await expect(screenText(pane)).toHaveCSS('font-family', /^"JetBrains Mono Variable"/)
+        const bundledFontLoaded = `[...document.fonts].some((face) =>
+          face.family.includes('JetBrains Mono Variable') && face.status === 'loaded')`
+        expect(await page.evaluate(bundledFontLoaded)).toBe(true)
+
         // terminal.lineHeight spaces out the rows of an open terminal as soon as it is saved.
         const rowHeight = async (): Promise<number> =>
           (await screenText(pane).locator(':scope > div').first().boundingBox())?.height ?? 0
@@ -145,6 +151,76 @@ test('splits and tabs each get their own shell; closing them ends it, and so doe
     )
     // withApp quits the app; no shell outlives it.
     expect(pids.filter(isRunning)).toEqual([])
+  } finally {
+    await cleanup()
+  }
+})
+
+/** Drags `source` with the mouse to a point of `target`, given as fractions of its box. */
+async function dragPane(
+  page: Page,
+  source: Locator,
+  target: Locator,
+  at: { x: number; y: number }
+) {
+  const from = await source.boundingBox()
+  const to = await target.boundingBox()
+  if (!from || !to) throw new Error('a pane is not on screen')
+  await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(to.x + to.width * at.x, to.y + to.height * at.y, { steps: 5 })
+}
+
+async function rearrangePanes(page: Page): Promise<void> {
+  await panes(page).first().click({ button: 'right' })
+  await page.getByRole('menuitem', { name: 'Rearrange Panes' }).click()
+  await expect(page.getByTestId('pane-rearrange-handle')).toHaveCount(2)
+}
+
+test("Rearrange Panes drags a pane to another pane's edge and keeps its shell", async () => {
+  const { userData, cleanup } = await seedProject()
+  try {
+    await withApp(
+      async (_app, page) => {
+        await openProjectTerminal(page)
+        const leftPid = await panePid(panes(page).first())
+        await page.getByRole('button', { name: 'Split Right' }).click()
+        const rightPid = await panePid(panes(page).last())
+        // A prompt too short to wrap: bash redraws a wrapped one over the last output when it learns the new size.
+        await run(page, panes(page).last(), "PS1='$ '")
+
+        // The right pane onto the top half of the left one: a column, the moved pane on top.
+        await rearrangePanes(page)
+        await dragPane(page, panes(page).last(), panes(page).first(), { x: 0.5, y: 0.1 })
+        await expect(page.locator('.pane-drop-highlight')).toHaveAttribute('data-zone', 'top')
+        await saveScreenshot(page, 'terminal-rearrange-drag')
+        await page.mouse.up()
+        await expect(page.getByTestId('pane-rearrange-handle')).toHaveCount(0)
+        await expect(panes(page).first()).toHaveAttribute('data-pid', String(rightPid))
+        await expect(panes(page).last()).toHaveAttribute('data-pid', String(leftPid))
+        const top = await panes(page).first().boundingBox()
+        const bottom = await panes(page).last().boundingBox()
+        if (!top || !bottom) throw new Error('a pane is not on screen')
+        expect(top.y + top.height).toBeLessThanOrEqual(bottom.y + 1)
+        expect(top.x).toBe(bottom.x)
+        expect([leftPid, rightPid].every(isRunning)).toBe(true)
+        await run(page, panes(page).first(), 'echo still-$((40 + 2))')
+        await expect(screenText(panes(page).first())).toContainText('still-42')
+
+        // The bottom pane onto the bottom half of the top one changes nothing, and ends the mode.
+        await rearrangePanes(page)
+        await dragPane(page, panes(page).last(), panes(page).first(), { x: 0.5, y: 0.9 })
+        await expect(page.locator('.pane-drop-highlight')).toBeHidden()
+        await page.mouse.up()
+        await expect(page.getByTestId('pane-rearrange-handle')).toHaveCount(0)
+        await expect(panes(page).first()).toHaveAttribute('data-pid', String(rightPid))
+
+        await rearrangePanes(page)
+        await page.keyboard.press('Escape')
+        await expect(page.getByTestId('pane-rearrange-handle')).toHaveCount(0)
+      },
+      { userDataDir: userData }
+    )
   } finally {
     await cleanup()
   }
