@@ -10,6 +10,7 @@ export type AgentSession = {
   terminalId: string
   provider: AgentProvider
   providerSessionId: string | null
+  title: string | null
   project: string | null
   worktree: string | null
   cwd: string

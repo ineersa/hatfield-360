@@ -1,3 +1,4 @@
+import { AgentProviderIcon } from '@/components/icons/AgentProviderIcon'
 import type { AgentProvider } from '../../../../shared/agent-api'
 import type { Terminal } from '@xterm/xterm'
 import { Clipboard, Columns2, Copy, Eraser, Rows2, X } from 'lucide-react'
@@ -76,9 +77,11 @@ export function TerminalContextMenu({
         </ContextMenuItem>
         <ContextMenuSeparator />
         <ContextMenuItem disabled={!launchable} onSelect={() => launchSplit('hatfield')}>
+          <AgentProviderIcon provider="hatfield" />
           Launch Hatfield in New Split
         </ContextMenuItem>
         <ContextMenuItem disabled={!launchable} onSelect={() => launchSplit('claude')}>
+          <AgentProviderIcon provider="claude" />
           Launch Claude in New Split
         </ContextMenuItem>
         <ContextMenuSeparator />

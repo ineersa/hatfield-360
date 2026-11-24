@@ -1,3 +1,5 @@
+import { mainErrorMessage } from '@/lib/main-error-message'
+import { notify } from './notification-store'
 import { create } from 'zustand'
 import type { ProjectWorktrees } from '../../../shared/worktree-api'
 
@@ -8,6 +10,7 @@ type WorktreeState = {
   collapsed: Record<string, boolean>
   toggleCollapsed: (folder: string) => void
   /** Loads the worktrees and follows git changes main sees; returns the unsubscribe. */
+  pruneMissing: (project: string, path: string) => Promise<void>
   connect: () => () => void
 }
 
@@ -19,6 +22,17 @@ export const useWorktreeStore = create<WorktreeState>((set) => ({
   collapsed: {},
   toggleCollapsed: (folder) =>
     set((state) => ({ collapsed: { ...state.collapsed, [folder]: !state.collapsed[folder] } })),
+  pruneMissing: async (project, path) => {
+    try {
+      await window.desktop.pruneMissingWorktrees(project, path)
+    } catch (error: unknown) {
+      notify({
+        severity: 'error',
+        title: 'Could not prune missing worktrees',
+        body: mainErrorMessage(error)
+      })
+    }
+  },
   connect: () => {
     const unsubscribe = window.desktop.subscribeWorktrees((projects) =>
       set({ projects: byFolder(projects) })

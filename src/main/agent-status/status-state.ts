@@ -2,6 +2,7 @@ import type { SessionTelemetry, StatusEvent, StatusReply } from './status-protoc
 
 type Session = {
   id: string
+  title: string | null
   epoch: number
   provider: SessionTelemetry['provider']
   telemetry: Omit<SessionTelemetry, 'provider'> | null
@@ -52,6 +53,7 @@ export class StatusState {
       const { provider, turn, attention, activeSubagents, backgroundScripts, tool } = event
       this.#session = {
         id: event.sessionId,
+        title: event.title ?? null,
         epoch: event.sessionEpoch,
         provider,
         telemetry: { turn, attention, activeSubagents, backgroundScripts, tool }

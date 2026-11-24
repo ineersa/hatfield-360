@@ -22,11 +22,13 @@ export type ProjectWorktrees =
 
 export const WORKTREE_CHANNELS = {
   get: 'worktrees:get',
+  pruneMissing: 'worktrees:prune-missing',
   changed: 'worktrees:changed'
 } as const
 
 export type WorktreeApi = {
   /** Every project folder of the open workspace that main has looked at, in workspace order. */
+  pruneMissingWorktrees: (project: string, missingPath: string) => Promise<void>
   getWorktrees: () => Promise<ProjectWorktrees[]>
   subscribeWorktrees: (callback: (projects: ProjectWorktrees[]) => void) => () => void
 }

@@ -7,6 +7,7 @@ import type { TerminalCommand } from '../../../../shared/terminal-api'
 export type TerminalTabController = {
   run: (command: Exclude<TerminalCommand, 'new-terminal' | 'next-tab' | 'previous-tab'>) => void
   hasTerminal: (id: string) => boolean
+  closeTerminal: (id: string) => boolean
   selectTerminal: (id: string) => boolean
   launchSplit: (provider: AgentProvider) => void
   focus: () => void
@@ -32,4 +33,11 @@ export function isTerminalShown(id: string): boolean {
   if (!activeTabId || activeView !== 'agents' || settingsOpen) return false
   const controller = terminalTabControllers.get(activeTabId)
   return controller?.isShown() === true && controller.hasTerminal(id)
+}
+
+export function closeTerminal(id: string): boolean {
+  for (const controller of terminalTabControllers.values()) {
+    if (controller.closeTerminal(id)) return true
+  }
+  return false
 }

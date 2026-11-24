@@ -1,3 +1,4 @@
+import { AgentProviderIcon } from '@/components/icons/AgentProviderIcon'
 import { AGENT_PROVIDERS } from '../../../../shared/agent-api'
 import { SquareTerminal } from 'lucide-react'
 import { type ReactNode, useRef } from 'react'
@@ -50,6 +51,7 @@ export function OpenTerminalMenuContent({
                 openTerminal(cwd, { provider, target: { project, cwd } })
               }}
             >
+              <AgentProviderIcon provider={provider} />
               Launch {AGENT_PROVIDERS[provider]}
             </ContextMenuItem>
           ))}

@@ -132,6 +132,47 @@ describe.skipIf(process.platform === 'win32')('agent status socket', () => {
     ).toEqual([accepted])
   })
 
+  it('validates and replaces conversation titles without changing ordering or event identity', async () => {
+    await server.start()
+    const { event, start, send } = session(server)
+    const title = '🐕'.repeat(1024)
+    const current = () => server.snapshot()[0]?.session
+    expect(
+      await send(event(1, { ...start, title: title + 'x' }), event(1, { ...start, title: 42 }))
+    ).toEqual([
+      { ok: false, error: 'invalid' },
+      { ok: false, error: 'invalid' }
+    ])
+    expect(await send(event(1, { ...start, title }))).toEqual([accepted])
+    expect(current()?.title).toBe(title)
+    expect(await send(event(2, { ...start, title: 'Renamed' }))).toEqual([accepted])
+    expect(current()?.title).toBe('Renamed')
+    expect(await send(event(3, { ...start, title: null }))).toEqual([accepted])
+    expect(current()?.title).toBeNull()
+    expect(await send(event(3, { ...start, title: null }), event(3, start))).toEqual([
+      { ok: true, status: 'duplicate' },
+      { ok: false, error: 'conflict' }
+    ])
+    expect(await send(event(4, { ...start, title: 'Old conversation' }))).toEqual([accepted])
+    expect(
+      await send(
+        event(5, { ...start, sessionId: 'new', sessionEpoch: 5 }),
+        event(6, { ...start, title: 'Stale title' })
+      )
+    ).toEqual([accepted, { ok: true, status: 'stale' }])
+    expect(current()).toMatchObject({ id: 'new', title: null })
+    expect(
+      await send(
+        event(6, { ...start, sessionId: 'new', sessionEpoch: 5, title: 'New conversation' })
+      )
+    ).toEqual([accepted])
+    expect(current()?.title).toBe('New conversation')
+    expect(await send(event(7, { ...start, sessionId: 'new', sessionEpoch: 5 }))).toEqual([
+      accepted
+    ])
+    expect(current()?.title).toBeNull()
+  })
+
   it('recovers from missing snapshots and rejects stale, conflicting and ended selections', async () => {
     await server.start()
     const { event, start, send, launchId } = session(server)

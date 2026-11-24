@@ -1,14 +1,21 @@
-import claudeCodeIcon from '@/assets/claudecode-color.svg'
-import hatfieldIcon from '@/assets/hatfield-plushie.svg'
+import { AgentProviderIcon } from '@/components/icons/AgentProviderIcon'
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger
+} from '@/components/ui/context-menu'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { notify } from '@/state/notification-store'
 import { cn } from '@/lib/class-names'
-import { Activity, Check, MessageCircle, TerminalSquare, X } from 'lucide-react'
+import { Activity, Check, Copy, MessageCircle, SquareTerminal, Users, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import {
   AGENT_PROVIDERS,
   type AgentSession,
   type AgentSnapshot
 } from '../../../../shared/agent-api'
-import { selectTerminal } from '@/components/terminal/terminal-tab-controllers'
+import { closeTerminal, selectTerminal } from '@/components/terminal/terminal-tab-controllers'
 import { useTerminalStore } from '@/state/terminal-store'
 import { mainErrorMessage } from '@/lib/main-error-message'
 
@@ -84,70 +91,31 @@ export function matchesStatus(session: AgentSession, filter: SessionFilter): boo
   }
 }
 
-function relativeTime(now: number, at: number): string {
-  const minutes = Math.floor(Math.max(0, now - at) / 60_000)
-  if (!minutes) return 'Now'
-  if (minutes < 60) return `${minutes}m`
-  if (minutes < 1440) return `${Math.floor(minutes / 60)}h`
-  return `${Math.floor(minutes / 1440)}d`
-}
-
 function activeTerminalId(state: ReturnType<typeof useTerminalStore.getState>): string | null {
   return state.activeTabId ? (state.paneByTab[state.activeTabId] ?? null) : null
 }
 
-export function AgentAttention({
-  sessions,
-  projectName
-}: {
-  sessions: AgentSession[]
-  projectName: (project: string | null) => string
-}): React.JSX.Element {
-  return (
-    <section aria-label="Attention" className="border-b border-separator px-2 pb-1">
-      <h3 className="type-section-title flex h-tree-row items-center gap-2 px-2 text-warning">
-        <MessageCircle className="size-3" aria-hidden /> Needs input ({sessions.length})
-      </h3>
-      <ul
-        aria-label="Sessions needing input"
-        className="h-control overflow-y-auto"
-        tabIndex={sessions.length > 1 ? 0 : undefined}
-      >
-        {sessions.length === 0 && (
-          <li className="type-hint flex h-tree-row items-center px-2">No sessions need input</li>
-        )}
-        {sessions.map((session) => (
-          <li key={session.id}>
-            <button
-              type="button"
-              aria-label={`${AGENT_PROVIDERS[session.provider]} session · Needs input: ${waitLabel(session)}`}
-              onClick={() => selectTerminal(session.terminalId)}
-              className="type-hint flex h-tree-row w-full items-center gap-2 rounded-component px-2 text-left hover:bg-row-hover focus-visible:bg-selection-inactive focus-visible:outline-none"
-            >
-              <MessageCircle className="size-3.5 shrink-0 text-warning" aria-hidden />
-              <span className="min-w-0 flex-1 truncate">Needs input: {waitLabel(session)}</span>
-              <span className="max-w-24 truncate">{projectName(session.project)}</span>
-            </button>
-          </li>
-        ))}
-      </ul>
-    </section>
-  )
-}
-
-export function AgentSessionRows({
-  sessions,
-  now
-}: {
-  sessions: AgentSession[]
-  now: number
-}): React.JSX.Element {
+export function AgentSessionRows({ sessions }: { sessions: AgentSession[] }): React.JSX.Element {
   const selected = useTerminalStore(activeTerminalId)
   return (
     <>
       {sessions.map((session) => {
         const provider = AGENT_PROVIDERS[session.provider]
-        const title = `${provider} session${session.providerSessionId ? ` · ${session.providerSessionId}` : ''}`
+        const id = session.providerSessionId
+        const identity = id
+          ? session.provider === 'hatfield'
+            ? `#${id}`
+            : id.slice(0, 8)
+          : 'ID not reported'
+        const title = session.title?.trim()
+        const displayName = title
+          ? session.provider === 'hatfield' && id
+            ? `${identity} — ${title}`
+            : title
+          : identity
+        const accessibleName = id
+          ? `${provider} ${session.provider === 'hatfield' ? '#' : ''}${id}`
+          : `${provider} · ID not reported`
         const state = isStopped(session)
           ? 'stopped'
           : session.wait
@@ -156,85 +124,106 @@ export function AgentSessionRows({
               ? null
               : session.activity
         const status = state ? statuses[state] : null
-        const counts = [
-          session.runningChildren
-            ? `${session.runningChildren} ${session.runningChildren === 1 ? 'agent' : 'agents'} running`
-            : null,
-          session.runningScripts
-            ? `${session.runningScripts} ${session.runningScripts === 1 ? 'script' : 'scripts'} running`
-            : null
-        ]
-          .filter(Boolean)
-          .join(' · ')
+        const label = status?.label ?? sessionDescription(session)
         const detail = [
-          provider,
+          accessibleName,
+          title,
           state === 'stopped' ? 'Stopped' : sessionDescription(session),
-          session.outcome && `Last turn: ${outcomes[session.outcome].toLowerCase()}`
+          session.outcome && `Last foreground response: ${outcomes[session.outcome].toLowerCase()}`,
+          session.runningChildren !== null && `Active agents: ${session.runningChildren}`,
+          session.runningScripts !== null && `Background scripts: ${session.runningScripts}`,
+          session.cwd
         ]
           .filter(Boolean)
           .join(' · ')
         const current = selected === session.terminalId
-        const time = relativeTime(now, session.updatedAt)
+        const go = () => {
+          if (!selectTerminal(session.terminalId))
+            notify({ severity: 'warning', title: 'Terminal is no longer available' })
+        }
         return (
           <li key={session.id} className="pl-tree-indent">
-            <button
-              type="button"
-              aria-current={current || undefined}
-              onClick={() => selectTerminal(session.terminalId)}
-              className={cn(
-                'flex w-full min-w-0 items-center gap-2 rounded-component px-2 py-1.5 text-left hover:bg-row-hover focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none',
-                current && 'bg-selection text-selection-foreground hover:bg-selection'
-              )}
-            >
-              <img
-                src={session.provider === 'hatfield' ? hatfieldIcon : claudeCodeIcon}
-                alt=""
-                className="size-4 shrink-0 object-contain"
-                aria-hidden
-              />
-              <span className="min-w-0 flex-1">
-                <span className="type-tree-row block truncate" title={title}>
-                  {title}
-                </span>
-                <span
-                  className={cn('type-hint block truncate', current && 'text-selection-foreground')}
-                  title={detail}
+            <ContextMenu>
+              <Tooltip>
+                <ContextMenuTrigger asChild>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      aria-label={accessibleName}
+                      aria-description={detail}
+                      aria-current={current || undefined}
+                      onClick={go}
+                      className={cn(
+                        'type-tree-row flex h-tree-row w-full min-w-0 items-center gap-1.5 rounded-component px-2 text-left hover:bg-row-hover focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none',
+                        current && 'ring-1 ring-inset ring-ring'
+                      )}
+                    >
+                      <AgentProviderIcon provider={session.provider} />
+                      <span className="min-w-0 flex-1 truncate">{displayName}</span>
+                      {session.runningChildren ? (
+                        <span className="type-hint flex shrink-0 items-center gap-0.5" aria-hidden>
+                          <Users className="size-3.5" />
+                          {session.runningChildren}
+                        </span>
+                      ) : null}
+                      {session.runningScripts ? (
+                        <span className="type-hint flex shrink-0 items-center gap-0.5">
+                          <SquareTerminal
+                            role="img"
+                            aria-label="Background scripts"
+                            className="size-3.5"
+                          />
+                          {session.runningScripts}
+                        </span>
+                      ) : null}
+                      <span
+                        className={cn(
+                          'flex min-w-24 shrink-0 items-center justify-end gap-1',
+                          status?.color ?? 'text-muted-foreground'
+                        )}
+                      >
+                        {status ? <status.icon className="size-4 shrink-0" aria-hidden /> : null}
+                        <span className="truncate">
+                          {session.process === 'unknown' && !status ? 'Unknown' : label}
+                        </span>
+                      </span>
+                    </button>
+                  </TooltipTrigger>
+                </ContextMenuTrigger>
+                <TooltipContent className="max-w-72 break-words">{detail}</TooltipContent>
+              </Tooltip>
+              <ContextMenuContent>
+                <ContextMenuItem onSelect={go}>
+                  <SquareTerminal aria-hidden />
+                  Go to terminal
+                </ContextMenuItem>
+                {id ? (
+                  <ContextMenuItem
+                    onSelect={() =>
+                      void window.desktop.writeTerminalClipboard(id).catch((error: unknown) =>
+                        notify({
+                          severity: 'error',
+                          title: 'Could not copy session ID',
+                          body: mainErrorMessage(error)
+                        })
+                      )
+                    }
+                  >
+                    <Copy aria-hidden />
+                    Copy session ID
+                  </ContextMenuItem>
+                ) : null}
+                <ContextMenuItem
+                  onSelect={() => {
+                    if (!closeTerminal(session.terminalId))
+                      notify({ severity: 'warning', title: 'Terminal is no longer available' })
+                  }}
                 >
-                  {detail}
-                </span>
-                <span
-                  className={cn(
-                    'type-hint block truncate',
-                    current ? 'text-selection-foreground' : 'text-info'
-                  )}
-                  title={counts || undefined}
-                >
-                  {session.runningScripts ? (
-                    <TerminalSquare
-                      role="img"
-                      aria-label="Background scripts"
-                      className="mr-1 inline size-3"
-                    />
-                  ) : null}
-                  {counts || '\u00a0'}
-                </span>
-              </span>
-              {status ? (
-                <status.icon className={cn('size-3.5 shrink-0', status.color)} aria-hidden />
-              ) : (
-                <span className="size-3.5 shrink-0" aria-hidden />
-              )}
-              <time
-                className={cn(
-                  'type-hint shrink-0 tabular-nums',
-                  current && 'text-selection-foreground'
-                )}
-                dateTime={new Date(session.updatedAt).toISOString()}
-                title={new Date(session.updatedAt).toLocaleString()}
-              >
-                {time}
-              </time>
-            </button>
+                  <X aria-hidden />
+                  Close terminal
+                </ContextMenuItem>
+              </ContextMenuContent>
+            </ContextMenu>
           </li>
         )
       })}

@@ -58,7 +58,8 @@ const envelope = {
 type Kind = keyof typeof events
 type Envelope = Validated<typeof envelope> & { version: 1; at?: string }
 type Request = {
-  [K in Kind]: Envelope & { kind: K } & Validated<(typeof events)[K]>
+  [K in Kind]: Envelope & { kind: K } & Validated<(typeof events)[K]> &
+    (K extends 'session.snapshot' ? { title?: string | null } : unknown)
 }[Kind]
 export type StatusEvent = { [K in Kind]: Omit<Extract<Request, { kind: K }>, 'token'> }[Kind]
 const bootstrapToken = (value: unknown): value is string =>
@@ -119,7 +120,8 @@ function validRequest(value: Record<string, unknown>): value is Request {
   if (value.version !== 1 || !kind(value.kind)) return false
   const required: Record<string, Validator> = { ...envelope, ...events[value.kind] }
   const optional: Record<string, Validator> = {
-    at: text(64)
+    at: text(64),
+    ...(value.kind === 'session.snapshot' ? { title: nullable(text(1024)) } : {})
   }
   if (
     !Object.entries(required).every(

@@ -101,6 +101,10 @@ for await (const command of input) {
         reply = await report()
         if (command === 'start') initial = last
         break
+      case 'title':
+        snapshot.title = provider === 'hatfield' ? 'Review <draft>' : 'Triage <draft>'
+        reply = await report()
+        break
       case 'end-reporting':
         reply = await emit('session.ended')
         break

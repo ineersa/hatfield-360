@@ -122,6 +122,25 @@ export class WorktreeStore {
     this.emit()
   }
 
+  async pruneMissing(folder: string, path: string): Promise<void> {
+    const project = this.projects.get(folder)
+    if (!project) throw new Error('Project is not in the workspace')
+    const { state } = await readProject(folder)
+    const entry = state.status === 'git' && state.worktrees.find((tree) => tree.path === path)
+    if (!entry || entry.project || entry.locked || !entry.prunable) {
+      throw new Error('That worktree entry is no longer eligible for pruning')
+    }
+    const absent = await lstat(entry.path).then(
+      () => false,
+      (error: NodeJS.ErrnoException) => error.code === 'ENOENT'
+    )
+    if (!absent || this.projects.get(folder) !== project) {
+      throw new Error('That worktree is no longer missing from this workspace project')
+    }
+    await runGit(folder, ['worktree', 'prune', '--expire', 'now'])
+    if (await this.refresh(folder)) this.emit()
+  }
+
   private async refresh(folder: string): Promise<boolean> {
     const project = this.projects.get(folder)
     if (!project) return false

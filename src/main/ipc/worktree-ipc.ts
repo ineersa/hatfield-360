@@ -24,6 +24,18 @@ export function registerWorktreeIpc(): void {
     return worktreeStore.view()
   })
 
+  handleTrusted(WORKTREE_CHANNELS.pruneMissing, async (_event, project: unknown, path: unknown) => {
+    if (typeof project !== 'string' || typeof path !== 'string') {
+      throw new Error('Invalid worktree request')
+    }
+    await loaded
+    const workspace = await workspaceStore.view()
+    if (workspace.problem || !presentFolders(workspace.folders).includes(project)) {
+      throw new Error('Project is not in the writable workspace')
+    }
+    await worktreeStore.pruneMissing(project, path)
+  })
+
   worktreeStore.onChange((projects) => {
     for (const window of BrowserWindow.getAllWindows()) {
       window.webContents.send(WORKTREE_CHANNELS.changed, projects)

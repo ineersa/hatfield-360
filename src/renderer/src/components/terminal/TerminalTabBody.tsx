@@ -92,6 +92,12 @@ export function TerminalTabBody({
         else if (command === 'split-down') panes.splitPane(activePane.id, 'horizontal')
         else panes.closePane(activePane.id)
       },
+      closeTerminal: (id) => {
+        const pane = findTerminal(id)
+        if (!pane) return false
+        panes.closePane(pane.id)
+        return true
+      },
       selectTerminal: (id) => {
         const pane = findTerminal(id)
         if (!pane) return false

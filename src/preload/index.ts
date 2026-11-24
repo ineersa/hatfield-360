@@ -39,6 +39,8 @@ const desktopApi: DesktopApi = {
     ipcRenderer.on(WORKSPACE_CHANNELS.changed, listener)
     return () => ipcRenderer.removeListener(WORKSPACE_CHANNELS.changed, listener)
   },
+  pruneMissingWorktrees: (project, path) =>
+    ipcRenderer.invoke(WORKTREE_CHANNELS.pruneMissing, project, path),
   getWorktrees: () => ipcRenderer.invoke(WORKTREE_CHANNELS.get),
   subscribeWorktrees: (callback) => {
     const listener = (_event: unknown, projects: ProjectWorktrees[]): void => callback(projects)

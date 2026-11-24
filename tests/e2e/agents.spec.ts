@@ -1,7 +1,7 @@
 import type { AgentSnapshot } from '../../src/shared/agent-api'
 import type { DesktopApi } from '../../src/shared/desktop-api'
 import { expect, test, type Locator, type Page, type Video } from '@playwright/test'
-import { mkdir, readFile, rename, rmdir, symlink, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, rename, rm, rmdir, symlink, writeFile } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 import { git, makeRepo } from './git-repository'
@@ -43,7 +43,7 @@ async function seed(repo?: string) {
       },
       'agents.claude': {
         executable: process.execPath,
-        args: [fixture, 'claude', 'claude-e2e', 'split']
+        args: [fixture, 'claude', 'a3f91c2d-3691-4c2f-b54f-e4db8704bbc1', 'split']
       }
     })
   )
@@ -90,12 +90,11 @@ test('agent launches report through the real socket and sidebar rows select exac
         const first = panes.first()
         const second = panes.nth(1)
         const projectList = page.getByRole('list', { name: 'Workspace folders' })
-        const hatfield = projectList.getByRole('button', { name: /^Hatfield session/ })
-        const claude = projectList.getByRole('button', { name: /^Claude session/ })
-        const attention = page.getByRole('list', { name: 'Sessions needing input' })
+        const hatfield = projectList.getByRole('button', { name: /^Hatfield (?:#|·)/ })
+        const claude = projectList.getByRole('button', { name: /^Claude / })
         await expect(output(first)).toContainText('Scenario ready: literal $HOME; *')
         await expect(output(first)).toContainText(`Directory: ${project}`)
-        await expect(hatfield).toContainText('Hatfield · Running')
+        await expect(hatfield).toContainText('Running')
         await expect(hatfield).not.toContainText(/unknown|unavailable|working|idle/i)
         const filter = page.getByRole('group', { name: 'Filter sessions by status' })
         await expect(
@@ -107,34 +106,50 @@ test('agent launches report through the real socket and sidebar rows select exac
 
         await startFocusedScenario(page, first)
         await expect(hatfield).toContainText('hatfield-e2e')
-        await expect(hatfield).toContainText('Hatfield · Working')
+        await expect(hatfield).toContainText('Working')
         await command(page, first, 'tool')
-        await expect(hatfield).toContainText('Working · Read')
+        await expect(hatfield).toHaveAttribute('aria-description', /Working · Read/)
 
         await first.click({ button: 'right' })
         await page.getByRole('menuitem', { name: 'Launch Claude in New Split' }).click()
         await expect(output(second)).toContainText('Scenario ready: split')
         await expect(output(second)).toContainText(`Directory: ${project}`)
-        await expect(claude).toContainText('Claude · Running')
-        await expect(hatfield).toContainText('Working · Read')
+        await expect(claude).toContainText('Running')
+        await expect(hatfield).toHaveAttribute('aria-description', /Working · Read/)
         await filter.getByRole('button', { name: 'Working', exact: true }).click()
         await expect(claude).toHaveCount(0)
         await filter.getByRole('button', { name: 'All', exact: true }).click()
-        await expect(claude).toContainText('Claude · Running')
+        await expect(claude).toContainText('Running')
         await command(page, second, 'start')
-        await expect(claude).toContainText('Claude · Working')
+        await expect(claude).toHaveText('a3f91c2dWorking')
+        await command(page, first, 'title')
+        await expect(hatfield).toHaveText('#hatfield-e2e — Review <draft>Working')
+        await expect(hatfield).toHaveAttribute(
+          'aria-description',
+          /Hatfield #hatfield-e2e · Review <draft>/
+        )
+        await command(page, second, 'title')
+        await expect(claude).toHaveText('Triage <draft>Working')
+        await expect(claude).toHaveAttribute(
+          'aria-description',
+          /Claude a3f91c2d-3691-4c2f-b54f-e4db8704bbc1 · Triage <draft>/
+        )
         await claude.click()
         await expect(second).toHaveClass(/is-active/)
         await expect(
-          projectList.getByRole('button', { name: /^(Hatfield|Claude) session/ }).first()
-        ).toHaveText(/Claude session/)
+          projectList.getByRole('button', { name: /^(?:Hatfield (?:#|·)|Claude )/ }).first()
+        ).toHaveAccessibleName('Claude a3f91c2d-3691-4c2f-b54f-e4db8704bbc1')
         const firstId = await first.getAttribute('data-terminal-id')
         if (!firstId) throw new Error('Hatfield terminal missing')
         const originalRow = await hatfield.elementHandle()
         const originalPane = await first.elementHandle()
         await page.evaluate((id) => globalThis.desktop.writeTerminal(id, 'wait\r'), firstId)
-        await expect(hatfield).toContainText('Needs input: permission')
-        await expect(attention.getByRole('button')).toHaveCount(1)
+        await expect(hatfield).toHaveAttribute('aria-description', /Needs input: permission/)
+        await expect(
+          projectList
+            .getByRole('button', { name: /^(?:Hatfield #|Claude [a-f0-9])/ })
+            .filter({ hasText: 'Needs input' })
+        ).toHaveCount(1)
         expect(await treeTop()).toBe(originalTop)
         expect(await hatfield.evaluate((node, original) => node === original, originalRow)).toBe(
           true
@@ -144,56 +159,89 @@ test('agent launches report through the real socket and sidebar rows select exac
         await originalRow.dispose()
         await originalPane.dispose()
         await expect(
-          projectList.getByRole('button', { name: /^(Hatfield|Claude) session/ }).first()
-        ).toHaveText(/Hatfield session/)
+          projectList.getByRole('button', { name: /^(?:Hatfield (?:#|·)|Claude )/ }).first()
+        ).toHaveAccessibleName('Hatfield #hatfield-e2e')
         await expect(second).toHaveClass(/is-active/)
         await command(page, second, 'wait')
-        await expect(attention.getByRole('button')).toHaveCount(2)
-        const attentionBounds = await attention.boundingBox()
-        const lastWaitBounds = await attention.getByRole('button').last().boundingBox()
-        if (!attentionBounds || !lastWaitBounds) throw new Error('Missing attention geometry')
-        expect(lastWaitBounds.y + lastWaitBounds.height).toBeGreaterThan(
-          attentionBounds.y + attentionBounds.height
-        )
+        await expect(
+          projectList
+            .getByRole('button', { name: /^(?:Hatfield #|Claude [a-f0-9])/ })
+            .filter({ hasText: 'Needs input' })
+        ).toHaveCount(2)
         expect(await treeTop()).toBe(originalTop)
         await command(page, second, 'resolve')
-        await expect(attention.getByRole('button')).toHaveCount(1)
-        await attention.getByRole('button', { name: /^Hatfield session/ }).click()
+        await expect(
+          projectList
+            .getByRole('button', { name: /^(?:Hatfield #|Claude [a-f0-9])/ })
+            .filter({ hasText: 'Needs input' })
+        ).toHaveCount(1)
+        await hatfield.click()
         await expect(first).toHaveClass(/is-active/)
         await expect(panes).toHaveCount(2)
         await filter.getByRole('button', { name: 'Needs input' }).click()
         await expect(claude).toHaveCount(0)
-        await filter.getByRole('button', { name: 'Working', exact: true }).click()
+        const working = filter.getByRole('button', { name: 'Working', exact: true })
+        await working.click()
+        await working.click()
+        await expect(working).toHaveAttribute('aria-pressed', 'true')
+        await expect(filter.getByRole('button', { name: 'Needs input' })).toHaveAttribute(
+          'aria-pressed',
+          'false'
+        )
         await expect(claude).toContainText('Working')
-        await expect(hatfield).toContainText('Needs input: permission')
+        await expect(hatfield).toHaveAttribute('aria-description', /Needs input: permission/)
         await filter.getByRole('button', { name: 'All', exact: true }).click()
         await command(page, first, 'resolve')
-        await expect(attention.getByRole('button')).toHaveCount(0)
+        await expect(
+          projectList
+            .getByRole('button', { name: /^(?:Hatfield #|Claude [a-f0-9])/ })
+            .filter({ hasText: 'Needs input' })
+        ).toHaveCount(0)
         expect(await treeTop()).toBe(originalTop)
         await command(page, first, 'child')
         await command(page, first, 'completed')
-        await expect(hatfield).toContainText('Needs input: question · Last turn: completed')
+        await expect(hatfield).toHaveAttribute(
+          'aria-description',
+          /Needs input: question · Last foreground response: completed/
+        )
         await command(page, first, 'duplicate', 'duplicate')
         await command(page, first, 'stale', 'stale')
-        await expect(attention.getByRole('button')).toHaveCount(1)
-        await expect(hatfield).toContainText('Needs input: question · Last turn: completed')
+        await expect(
+          projectList
+            .getByRole('button', { name: /^(?:Hatfield #|Claude [a-f0-9])/ })
+            .filter({ hasText: 'Needs input' })
+        ).toHaveCount(1)
+        await expect(hatfield).toHaveAttribute(
+          'aria-description',
+          /Needs input: question · Last foreground response: completed/
+        )
         await command(page, first, 'child-done')
-        await expect(hatfield).toContainText('Idle · Last turn: completed')
+        await expect(hatfield).toHaveAttribute(
+          'aria-description',
+          /Idle · Last foreground response: completed/
+        )
         await command(page, first, 'again')
         const rowHeight = (await hatfield.boundingBox())?.height
         expect(rowHeight).toBeDefined()
         await command(page, first, 'child-working')
         await command(page, first, 'script')
         await command(page, first, 'wait')
-        await expect(hatfield).toContainText('1 agent running · 1 script running')
+        await expect(hatfield).toHaveAttribute(
+          'aria-description',
+          /Active agents: 1 · Background scripts: 1/
+        )
         expect((await hatfield.boundingBox())?.height).toBe(rowHeight)
         await filter.getByRole('button', { name: 'Working', exact: true }).click()
-        await expect(hatfield).toContainText('Needs input: permission')
+        await expect(hatfield).toHaveAttribute('aria-description', /Needs input: permission/)
         await filter.getByRole('button', { name: 'Needs input' }).click()
-        await expect(claude).toContainText('Working')
+        await expect(claude).toHaveCount(0)
+        await filter.getByRole('button', { name: 'All', exact: true }).click()
         await command(page, first, 'resolve')
         await command(page, first, 'completed')
-        await expect(hatfield).toContainText('Working · Last turn: completed')
+        await expect(hatfield).toHaveAttribute(
+          'aria-description',
+          /Working · Last foreground response: completed/
+        )
         await expect(hatfield).toHaveAttribute('aria-current', 'true')
         await filter.getByRole('button', { name: 'All', exact: true }).click()
         const idle = filter.getByRole('button', { name: 'Idle', exact: true })
@@ -201,39 +249,72 @@ test('agent launches report through the real socket and sidebar rows select exac
         await expect(hatfield).toHaveCount(0)
         await filter.getByRole('button', { name: 'All', exact: true }).click()
         await command(page, first, 'child-done')
-        await expect(hatfield).not.toContainText('agent running')
-        await expect(hatfield).toContainText('1 script running')
+        await expect(hatfield).toHaveAttribute('aria-description', /Active agents: 0/)
+        await expect(hatfield).toHaveAttribute('aria-description', /Background scripts: 1/)
         await idle.click()
-        await expect(hatfield).toContainText('Idle · Last turn: completed')
+        await expect(hatfield).toHaveAttribute(
+          'aria-description',
+          /Idle · Last foreground response: completed/
+        )
         await expect(hatfield.getByRole('img', { name: 'Background scripts' })).toBeVisible()
         await command(page, first, 'script-done')
-        await expect(hatfield).toContainText('Idle · Last turn: completed')
+        await expect(hatfield).toHaveAttribute(
+          'aria-description',
+          /Idle · Last foreground response: completed/
+        )
         expect((await hatfield.boundingBox())?.height).toBe(rowHeight)
         await filter.getByRole('button', { name: 'All', exact: true }).click()
         await command(page, first, 'again')
         await command(page, first, 'failed')
-        await expect(hatfield).toContainText('Stopped · Last turn: failed')
+        await expect(hatfield).toHaveAttribute(
+          'aria-description',
+          /Stopped · Last foreground response: failed/
+        )
         await command(page, second, 'cancelled')
-        await expect(claude).toContainText('Stopped · Last turn: cancelled')
-        await expect(hatfield).toContainText('Stopped · Last turn: failed')
+        await expect(claude).toHaveAttribute(
+          'aria-description',
+          /Stopped · Last foreground response: cancelled/
+        )
+        await expect(hatfield).toHaveAttribute(
+          'aria-description',
+          /Stopped · Last foreground response: failed/
+        )
         const stopped = filter.getByRole('button', { name: 'Stopped', exact: true })
         const all = filter.getByRole('button', { name: 'All', exact: true })
         await stopped.click()
-        await expect(hatfield).toContainText('Stopped · Last turn: failed')
-        await expect(claude).toContainText('Stopped · Last turn: cancelled')
+        await expect(hatfield).toHaveAttribute(
+          'aria-description',
+          /Stopped · Last foreground response: failed/
+        )
+        await expect(claude).toHaveAttribute(
+          'aria-description',
+          /Stopped · Last foreground response: cancelled/
+        )
         await all.click()
         await command(page, first, 'child-working')
-        await expect(hatfield).toContainText('Working · Last turn: failed')
+        await expect(hatfield).toHaveAttribute(
+          'aria-description',
+          /Working · Last foreground response: failed/
+        )
         await command(page, second, 'child')
-        await expect(claude).toContainText('Needs input: question · Last turn: cancelled')
+        await expect(claude).toHaveAttribute(
+          'aria-description',
+          /Needs input: question · Last foreground response: cancelled/
+        )
         await stopped.click()
         await expect(hatfield).toHaveCount(0)
         await expect(claude).toHaveCount(0)
         await all.click()
         await command(page, first, 'child-done')
-        await expect(hatfield).toContainText('Stopped · Last turn: failed')
+        await expect(hatfield).toHaveAttribute(
+          'aria-description',
+          /Stopped · Last foreground response: failed/
+        )
         await command(page, second, 'end-reporting')
-        await expect(claude).toContainText('Running · Last turn: cancelled')
+        await expect(claude).toHaveAttribute(
+          'aria-description',
+          /Running · Last foreground response: cancelled/
+        )
         await stopped.click()
         await expect(claude).toHaveCount(0)
         await all.click()
@@ -250,8 +331,23 @@ test('agent launches report through the real socket and sidebar rows select exac
         await idle.click()
         await expect(hatfield).toHaveCount(0)
         await all.click()
-        await expect(attention.getByRole('button')).toHaveCount(0)
-        await expect(claude).toContainText('Running · Last turn: cancelled')
+        await expect(
+          projectList
+            .getByRole('button', { name: /^(?:Hatfield #|Claude [a-f0-9])/ })
+            .filter({ hasText: 'Needs input' })
+        ).toHaveCount(0)
+        await expect(claude).toHaveAttribute(
+          'aria-description',
+          /Running · Last foreground response: cancelled/
+        )
+        await claude.click({ button: 'right' })
+        await page.getByRole('menuitem', { name: 'Copy session ID' }).click()
+        expect(await page.evaluate(() => globalThis.desktop.readTerminalClipboard())).toBe(
+          'a3f91c2d-3691-4c2f-b54f-e4db8704bbc1'
+        )
+        await claude.click({ button: 'right' })
+        await page.getByRole('menuitem', { name: 'Close terminal' }).click()
+        await expect(claude).toHaveCount(0)
       },
       { userDataDir }
     )
@@ -337,8 +433,8 @@ test('two agents move through working, needs input, background work and outcomes
           const secondId = await second.getAttribute('data-terminal-id')
           if (!firstId || !secondId) throw new Error('Demo terminals missing')
           const tree = page.getByRole('list', { name: 'Workspace folders' })
-          const hatfield = tree.getByRole('button', { name: /^Hatfield session/ })
-          const claude = tree.getByRole('button', { name: /^Claude session/ })
+          const hatfield = tree.getByRole('button', { name: /^Hatfield (?:#|·)/ })
+          const claude = tree.getByRole('button', { name: /^Claude / })
           async function step(pane: Locator, id: string, text: string) {
             await page.evaluate(
               ({ terminalId, input }) => globalThis.desktop.writeTerminal(terminalId, input),
@@ -352,28 +448,43 @@ test('two agents move through working, needs input, background work and outcomes
           await expect(claude).toContainText('Working')
           await capture(page, '01-working')
           await step(first, firstId, 'wait')
-          await expect(hatfield).toContainText('Needs input: permission')
+          await expect(hatfield).toHaveAttribute('aria-description', /Needs input: permission/)
           await capture(page, '02-permission')
           await step(first, firstId, 'resolve')
           await step(second, secondId, 'child')
-          await expect(claude).toContainText('Needs input: question')
+          await expect(claude).toHaveAttribute('aria-description', /Needs input: question/)
           await capture(page, '03-question')
           await step(second, secondId, 'child-done')
           await step(first, firstId, 'child-working')
           await step(first, firstId, 'script')
           await step(first, firstId, 'completed')
-          await expect(hatfield).toContainText('Working · Last turn: completed')
-          await expect(hatfield).toContainText('1 agent running · 1 script running')
+          await expect(hatfield).toHaveAttribute(
+            'aria-description',
+            /Working · Last foreground response: completed/
+          )
+          await expect(hatfield).toHaveAttribute(
+            'aria-description',
+            /Active agents: 1 · Background scripts: 1/
+          )
           await capture(page, '04-background')
           await step(first, firstId, 'child-done')
           await step(first, firstId, 'script-done')
-          await expect(hatfield).toContainText('Idle · Last turn: completed')
+          await expect(hatfield).toHaveAttribute(
+            'aria-description',
+            /Idle · Last foreground response: completed/
+          )
           await capture(page, '05-idle')
           await step(first, firstId, 'again')
           await step(first, firstId, 'failed')
           await step(second, secondId, 'cancelled')
-          await expect(hatfield).toContainText('Stopped · Last turn: failed')
-          await expect(claude).toContainText('Stopped · Last turn: cancelled')
+          await expect(hatfield).toHaveAttribute(
+            'aria-description',
+            /Stopped · Last foreground response: failed/
+          )
+          await expect(claude).toHaveAttribute(
+            'aria-description',
+            /Stopped · Last foreground response: cancelled/
+          )
           await expect(second).toHaveClass(/is-active/)
           await capture(page, '06-outcomes')
         } finally {
@@ -432,12 +543,12 @@ test('an explicit launch inherits Bash startup exports and passes literal argume
         await expect(output(pane)).toContainText(`Directory: ${project}`)
         await startFocusedScenario(page, pane)
         await expect(
-          page.getByRole('button', { name: /Hatfield session.*shell-startup/ })
+          page.getByRole('button', { name: /Hatfield (?:#|·).*shell-startup/ })
         ).toContainText('Working')
         await page.keyboard.press('Control+d')
         await expect(pane).toHaveCount(0)
         await expect(
-          page.getByRole('button', { name: /Hatfield session.*shell-startup/ })
+          page.getByRole('button', { name: /Hatfield (?:#|·).*shell-startup/ })
         ).toHaveCount(0)
       },
       {
@@ -491,7 +602,7 @@ test('agent launch settings are validated and a missing executable keeps diagnos
         const pane = page.getByTestId('terminal-pane')
         await expect(pane.getByRole('status')).toHaveText('Process exited with code 127')
         await expect(output(pane)).toContainText('missing-agent-command')
-        const row = page.getByRole('button', { name: /^Hatfield session/ })
+        const row = page.getByRole('button', { name: /^Hatfield (?:#|·)/ })
         await expect(row).toContainText('Stopped')
         await page.getByRole('button', { name: 'Close Hatfield', exact: true }).click()
         await expect(row).toHaveCount(0)
@@ -519,6 +630,7 @@ function expectPublicSnapshot(snapshot: AgentSnapshot): void {
       'runningChildren',
       'runningScripts',
       'terminalId',
+      'title',
       'tool',
       'updatedAt',
       'wait',
@@ -565,8 +677,11 @@ test('agent notifications follow accepted transitions and open only the owning t
         await command(page, hatfield, 'completed')
         await expect(completed).toHaveCount(0)
         await command(page, hatfield, 'child-done')
-        const row = page.getByRole('button', { name: /^Hatfield session/ })
-        await expect(row).toContainText('Idle · Last turn: completed')
+        const row = page.getByRole('button', { name: /^Hatfield (?:#|·)/ })
+        await expect(row).toHaveAttribute(
+          'aria-description',
+          /Idle · Last foreground response: completed/
+        )
         await expect(row.getByRole('img', { name: 'Background scripts' })).toBeVisible()
         await expect(completed).toHaveCount(1)
         await command(page, hatfield, 'script-done')
@@ -637,8 +752,9 @@ test('an active subagent blocks completion until the count settles', async () =>
         const completion = panel.getByRole('listitem', { name: 'Agent turn completed' })
         await command(page, pane, 'child-working')
         await command(page, pane, 'completed')
-        await expect(page.getByRole('button', { name: /^Hatfield session/ })).toContainText(
-          'Last turn: completed'
+        await expect(page.getByRole('button', { name: /^Hatfield (?:#|·)/ })).toHaveAttribute(
+          'aria-description',
+          /Last foreground response: completed/
         )
         await expect(completion).toHaveCount(0)
         await command(page, pane, 'child-done')
@@ -665,13 +781,19 @@ test('an unavailable subagent count does not prove completion', async () => {
         await page.getByRole('button', { name: 'Notifications', exact: true }).click()
         const panel = page.getByRole('complementary', { name: 'Notifications panel' })
         const completion = panel.getByRole('listitem', { name: 'Agent turn completed' })
-        const session = page.getByRole('button', { name: /^Hatfield session/ })
+        const session = page.getByRole('button', { name: /^Hatfield (?:#|·)/ })
         await command(page, pane, 'child-working')
         await command(page, pane, 'completed')
-        await expect(session).toContainText('Working · Last turn: completed')
+        await expect(session).toHaveAttribute(
+          'aria-description',
+          /Working · Last foreground response: completed/
+        )
         await expect(completion).toHaveCount(0)
         await command(page, pane, 'children-unknown')
-        await expect(session).toContainText('Running · Last turn: completed')
+        await expect(session).toHaveAttribute(
+          'aria-description',
+          /Running · Last foreground response: completed/
+        )
         await expect(completion).toHaveCount(0)
         await command(page, pane, 'child-done')
         await expect(completion).toHaveCount(1)
@@ -701,7 +823,7 @@ test('closing an agent terminal suppresses a real hangup failure report', async 
         if (!terminalId) throw new Error('Agent pane has no terminal ID')
         await page.evaluate((id) => globalThis.desktop.killTerminal(id), terminalId)
         expect(await readFile(join(project, 'hangup-report'), 'utf8')).toBe('accepted')
-        await expect(page.getByRole('button', { name: /^Hatfield session/ })).toHaveCount(0)
+        await expect(page.getByRole('button', { name: /^Hatfield (?:#|·)/ })).toHaveCount(0)
         await expect(panel.getByText('No notifications.', { exact: true })).toBeVisible()
       },
       { userDataDir }
@@ -753,7 +875,7 @@ test('a project with broken Git metadata still displays its launched session', a
         await launch(page, 'Hatfield')
         const pane = page.getByRole('tabpanel', { name: 'Hatfield' }).getByTestId('terminal-pane')
         await startFocusedScenario(page, pane)
-        const session = folders.getByRole('button', { name: /^Hatfield session/ })
+        const session = folders.getByRole('button', { name: /^Hatfield (?:#|·)/ })
         await expect(session).toHaveCount(1)
         await expect(session).toContainText('hatfield-e2e')
         await expect(gitError).toBeVisible()
@@ -765,6 +887,72 @@ test('a project with broken Git metadata still displays its launched session', a
     )
   } finally {
     await cleanup()
+  }
+})
+
+test('pruning missing worktree entries preserves live worktrees and branches', async () => {
+  const { repo, projects, cleanup: cleanRepo } = await makeRepo()
+  try {
+    const missing = join(projects, 'missing-feature')
+    const otherMissing = join(projects, 'other-missing')
+    const live = join(projects, 'live-feature')
+    git(repo, 'worktree', 'add', '-q', '-b', 'missing-feature', missing)
+    git(repo, 'worktree', 'add', '-q', '-b', 'other-missing', otherMissing)
+    git(repo, 'worktree', 'add', '-q', '-b', 'live-feature', live)
+    await rm(missing, { recursive: true })
+    await rm(otherMissing, { recursive: true })
+    const data = join(live, 'local.txt')
+    await writeFile(data, 'keep this local file')
+    const { userDataDir, cleanup } = await seed(repo)
+    try {
+      await withApp(
+        async (_app, page) => {
+          const missingRow = page.getByRole('listitem', {
+            name: 'missing-feature worktree (missing)',
+            exact: true
+          })
+          const otherRow = page.getByRole('listitem', {
+            name: 'other-missing worktree (missing)',
+            exact: true
+          })
+          const liveRow = page.getByRole('listitem', { name: 'live-feature worktree', exact: true })
+          await expect(otherRow).toBeVisible()
+          await expect(liveRow).toBeVisible()
+          expect(
+            await page.evaluate(
+              async ({ project, path }) => {
+                try {
+                  await globalThis.desktop.pruneMissingWorktrees(project, path)
+                  return 'accepted'
+                } catch (error) {
+                  return String(error)
+                }
+              },
+              { project: repo, path: live }
+            )
+          ).toContain('no longer eligible for pruning')
+          await expect(missingRow).toBeVisible()
+          await missingRow.click({ button: 'right' })
+          await page
+            .getByRole('menuitem', {
+              name: 'Prune all missing worktree entries in repository',
+              exact: true
+            })
+            .click()
+          await expect(missingRow).toHaveCount(0)
+          await expect(otherRow).toHaveCount(0)
+          await expect(liveRow).toBeVisible()
+          expect(await readFile(data, 'utf8')).toBe('keep this local file')
+          git(repo, 'show-ref', '--verify', 'refs/heads/missing-feature')
+          git(repo, 'show-ref', '--verify', 'refs/heads/other-missing')
+        },
+        { userDataDir }
+      )
+    } finally {
+      await cleanup()
+    }
+  } finally {
+    await cleanRepo()
   }
 })
 
@@ -812,29 +1000,38 @@ test('a linked worktree launches into its own tab and publishes only public sess
             const agentsView = page.getByRole('button', { name: 'Agents', exact: true })
             await openSettings.click()
             await expect(settings).toBeVisible()
-            await page.getByRole('button', { name: /^Hatfield session/ }).click()
+            await page.getByRole('button', { name: /^Hatfield (?:#|·)/ }).click()
             await expect(settings).toHaveCount(0)
             await expect(agentsView).toHaveAttribute('aria-pressed', 'true')
             await expect(rootPane).toBeVisible()
             await expect(rootPane.locator('textarea')).toBeFocused()
             await expect(page.getByRole('tab', { name: 'Hatfield', selected: true })).toBeVisible()
             await page.evaluate((id) => globalThis.desktop.writeTerminal(id, 'wait\r'), worktreeId)
-            const attention = page
-              .getByRole('list', { name: 'Sessions needing input' })
-              .getByRole('button', { name: /^Claude session/ })
-            await expect(attention).toContainText('Needs input: permission')
-            const scope = page.getByRole('combobox', { name: 'Filter by project' })
-            await scope.selectOption({ label: 'side-project' })
+            const attention = page.getByRole('button', {
+              name: 'Claude a3f91c2d-3691-4c2f-b54f-e4db8704bbc1'
+            })
+            await expect(attention).toHaveAttribute('aria-description', /Needs input: permission/)
+            const scope = page.getByRole('button', { name: 'Filter by project' })
+            const search = page.getByRole('combobox', { name: 'Search projects' })
+            await scope.click()
+            await search.fill('side-pro')
+            await expect(page.getByRole('option')).toHaveText(['side-project'])
+            await search.press('Enter')
+            await expect(scope).toHaveText('side-project')
             await expect(attention).toHaveCount(0)
             await expect(page.getByText('No sessions match this filter.')).toBeVisible()
             await expect(page.getByRole('tab', { name: 'Hatfield', selected: true })).toBeVisible()
-            await scope.selectOption({ label: 'All projects' })
+            await scope.click()
+            await search.fill('all proj')
+            await expect(page.getByRole('option')).toHaveText(['All projects'])
+            await search.press('Enter')
             await expect(attention).toBeVisible()
             await expect(page.getByRole('tab', { name: 'Hatfield', selected: true })).toBeVisible()
             await expect(rootPane).toHaveClass(/is-active/)
             await openSettings.click()
             await expect(settings).toBeVisible()
-            await attention.click()
+            await attention.click({ button: 'right' })
+            await page.getByRole('menuitem', { name: 'Go to terminal' }).click()
             await expect(settings).toHaveCount(0)
             await expect(agentsView).toHaveAttribute('aria-pressed', 'true')
             await expect(worktreePane).toBeVisible()
@@ -845,7 +1042,7 @@ test('a linked worktree launches into its own tab and publishes only public sess
 
             const expected = {
               provider: 'claude',
-              providerSessionId: 'claude-e2e',
+              providerSessionId: 'a3f91c2d-3691-4c2f-b54f-e4db8704bbc1',
               project: repo,
               cwd: worktree,
               worktree,
@@ -865,9 +1062,11 @@ test('a linked worktree launches into its own tab and publishes only public sess
             const folders = page.getByRole('list', { name: 'Workspace folders' })
             await expect(folders.getByRole('alert').filter({ hasText: 'Git:' })).toBeVisible()
             await expect(folders.getByRole('listitem', { name: 'feature worktree' })).toHaveCount(0)
-            const linkedSession = folders.getByRole('button', { name: /^Claude session/ })
+            const linkedSession = folders.getByRole('button', { name: /^Claude / })
             await expect(linkedSession).toHaveCount(1)
-            await expect(linkedSession).toContainText('claude-e2e')
+            await expect(linkedSession).toHaveAccessibleName(
+              'Claude a3f91c2d-3691-4c2f-b54f-e4db8704bbc1'
+            )
           } finally {
             await reports.evaluate(({ stop }) => stop())
             await reports.dispose()
@@ -902,7 +1101,7 @@ test('manually launched agents follow the managed shell pane and observed direct
             process.execPath,
             fixture,
             'claude',
-            'claude-e2e',
+            'a3f91c2d-3691-4c2f-b54f-e4db8704bbc1',
             'split'
           ]
         }
@@ -924,7 +1123,7 @@ test('manually launched agents follow the managed shell pane and observed direct
         }
         await run('manual-first')
         const folders = page.getByRole('list', { name: 'Workspace folders' })
-        const first = folders.getByRole('button', { name: /Hatfield session.*manual-first/ })
+        const first = folders.getByRole('button', { name: /Hatfield (?:#|·).*manual-first/ })
         await expect(first).toContainText('Working')
         await expect
           .poll(async () => {
@@ -955,7 +1154,7 @@ test('manually launched agents follow the managed shell pane and observed direct
         await expect(panel.getByRole('listitem')).toHaveCount(2)
         await run('manual-second')
         await expect(
-          folders.getByRole('button', { name: /Hatfield session.*manual-second/ })
+          folders.getByRole('button', { name: /Hatfield (?:#|·).*manual-second/ })
         ).toContainText('Working')
         await expect(first).toContainText('Stopped')
         await expect(pane).toHaveCount(1)
@@ -965,12 +1164,12 @@ test('manually launched agents follow the managed shell pane and observed direct
           .getByTestId('terminal-pane')
         await expect(output(explicitPane)).toContainText('Scenario ready: split')
         await startFocusedScenario(page, explicitPane)
-        await expect(page.getByRole('button', { name: /^Claude session.*claude-e2e/ })).toHaveCount(
-          1
-        )
+        await expect(
+          page.getByRole('button', { name: /^Claude .*a3f91c2d-3691-4c2f-b54f-e4db8704bbc1/ })
+        ).toHaveCount(1)
         await page.getByRole('button', { name: 'Close agent-project', exact: true }).click()
         await expect(
-          folders.getByRole('button', { name: /Hatfield session.*manual-/ })
+          folders.getByRole('button', { name: /Hatfield (?:#|·).*manual-/ })
         ).toHaveCount(0)
         await expect(explicitPane).toBeVisible()
       },
@@ -1018,7 +1217,7 @@ async function launchManualPlacement(
   await page.keyboard.press('Enter')
   await expect(output(pane)).toContainText(`Scenario ready: ${session}`)
   await command(page, pane, 'start')
-  return folders.getByRole('button', { name: `Hatfield session · ${session}` })
+  return folders.getByRole('button', { name: `Hatfield #${session}` })
 }
 
 async function readManualPlacement(page: Page, sessionId: string) {

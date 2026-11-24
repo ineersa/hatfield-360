@@ -1,5 +1,5 @@
+import { ProjectPicker } from './ProjectPicker'
 import {
-  AgentAttention,
   AgentSessionRows,
   matchesStatus,
   statuses,
@@ -14,7 +14,8 @@ import {
   FolderPlus,
   FolderX,
   GitBranch,
-  Lock
+  Lock,
+  Trash2
 } from 'lucide-react'
 import { RootFolderIcon } from '@/components/icons/RootFolderIcon'
 import { ContextMenu, ContextMenuItem, ContextMenuTrigger } from '@/components/ui/context-menu'
@@ -26,7 +27,7 @@ import {
   usePointerTooltip
 } from '@/components/ui/tooltip'
 import { cn } from '@/lib/class-names'
-import { Fragment, useEffect, useState } from 'react'
+import { Fragment, useState } from 'react'
 import { OpenTerminalMenuContent } from '@/components/terminal/OpenTerminalMenuContent'
 import {
   OpenFolderEmptyState,
@@ -49,6 +50,7 @@ function WorktreeRow({
 }): React.JSX.Element {
   const label = worktreeLabel(worktree)
   const pathTip = usePointerTooltip()
+  const pruneMissing = useWorktreeStore((state) => state.pruneMissing)
   return (
     <ContextMenu>
       <Tooltip delayDuration={PATH_TOOLTIP_DELAY_MS} onOpenChange={pathTip.onOpenChange}>
@@ -80,7 +82,13 @@ function WorktreeRow({
         </ContextMenuTrigger>
         <TooltipContent {...pathTip.placement}>{worktree.path}</TooltipContent>
       </Tooltip>
-      <OpenTerminalMenuContent cwd={worktree.path} project={project} disabled={worktree.prunable} />
+      <OpenTerminalMenuContent cwd={worktree.path} project={project} disabled={worktree.prunable}>
+        {worktree.prunable && !worktree.locked ? (
+          <ContextMenuItem onSelect={() => void pruneMissing(project, worktree.path)}>
+            <Trash2 aria-hidden /> Prune all missing worktree entries in repository
+          </ContextMenuItem>
+        ) : null}
+      </OpenTerminalMenuContent>
     </ContextMenu>
   )
 }
@@ -93,10 +101,8 @@ function hasChildRows(project: ProjectWorktrees | undefined): boolean {
 
 function ProjectWorktreeRows({
   folder,
-  sessions,
-  now
+  sessions
 }: {
-  now: number
   folder: string
   sessions: AgentSession[]
 }): React.JSX.Element | null {
@@ -112,7 +118,6 @@ function ProjectWorktreeRows({
         </li>
       )}
       <AgentSessionRows
-        now={now}
         sessions={sessions.filter(
           (session) =>
             project?.status !== 'git' ||
@@ -126,7 +131,6 @@ function ProjectWorktreeRows({
             <Fragment key={worktree.path}>
               <WorktreeRow worktree={worktree} project={folder} />
               <AgentSessionRows
-                now={now}
                 sessions={sessions.filter((session) => session.worktree === worktree.path)}
               />
             </Fragment>
@@ -235,19 +239,12 @@ export function WorkspacePanel(): React.JSX.Element {
   const folders = allFolders.filter((folder) => folder.kind === 'project')
   const { sessions, error } = useAgentSessions()
   const [project, setProject] = useState('')
-  const [filters, setFilters] = useState<SessionFilter[]>([])
-  const [now, setNow] = useState(Date.now)
-  useEffect(() => {
-    const timer = setInterval(() => setNow(Date.now()), 15_000)
-    return () => clearInterval(timer)
-  }, [])
+  const [filter, setFilter] = useState<SessionFilter | null>(null)
   const scope = folders.some((folder) => folder.path === project) ? project : ''
   const visible = sessions.filter(
     (session) =>
-      (!scope || session.project === scope) &&
-      (!filters.length || filters.some((filter) => matchesStatus(session, filter)))
+      (!scope || session.project === scope) && (!filter || matchesStatus(session, filter))
   )
-  const attention = visible.filter((session) => session.wait)
   const ungrouped = visible.filter(
     (session) => !folders.some((folder) => !folder.missing && folder.path === session.project)
   )
@@ -289,19 +286,7 @@ export function WorkspacePanel(): React.JSX.Element {
       ) : (
         <div className="min-h-0 overflow-y-auto">
           <div className="px-2 pb-2">
-            <select
-              aria-label="Filter by project"
-              value={scope}
-              onChange={(event) => setProject(event.target.value)}
-              className="type-body h-control w-full rounded-component border border-input-border bg-input px-2 text-input-foreground"
-            >
-              <option value="">All projects</option>
-              {folders.map((folder) => (
-                <option key={folder.path} value={folder.path}>
-                  {folder.name}
-                </option>
-              ))}
-            </select>
+            <ProjectPicker folders={folders} value={scope} onChange={setProject} />
             <div
               role="group"
               aria-label="Filter sessions by status"
@@ -309,25 +294,21 @@ export function WorkspacePanel(): React.JSX.Element {
             >
               <button
                 type="button"
-                aria-pressed={!filters.length}
-                onClick={() => setFilters([])}
-                className={cn(filterClass, !filters.length && 'border-ring bg-hover')}
+                aria-pressed={filter === null}
+                onClick={() => setFilter(null)}
+                className={cn(filterClass, filter === null && 'border-ring bg-hover')}
               >
                 All
               </button>
               {(['working', 'attention', 'idle', 'stopped'] as const).map((key) => {
                 const { icon: Icon, label, color } = statuses[key]
-                const pressed = filters.includes(key)
+                const pressed = filter === key
                 return (
                   <button
                     type="button"
                     key={key}
                     aria-pressed={pressed}
-                    onClick={() =>
-                      setFilters((current) =>
-                        pressed ? current.filter((value) => value !== key) : [...current, key]
-                      )
-                    }
+                    onClick={() => setFilter(key)}
                     className={cn(filterClass, color, pressed && 'border-ring bg-hover')}
                   >
                     <Icon aria-hidden className="size-3" />
@@ -336,12 +317,6 @@ export function WorkspacePanel(): React.JSX.Element {
                 )
               })}
             </div>
-            <AgentAttention
-              sessions={attention}
-              projectName={(path) =>
-                folders.find((folder) => folder.path === path)?.name ?? 'Other terminals'
-              }
-            />
           </div>
           <ul aria-label="Workspace folders" className="flex min-h-0 flex-col gap-0.5 px-2">
             {folders
@@ -354,7 +329,6 @@ export function WorkspacePanel(): React.JSX.Element {
                   />
                   {folder.missing ? null : (
                     <ProjectWorktreeRows
-                      now={now}
                       folder={folder.path}
                       sessions={visible.filter((session) => session.project === folder.path)}
                     />
@@ -369,7 +343,7 @@ export function WorkspacePanel(): React.JSX.Element {
             <div className="px-2 py-2">
               <h3 className="type-section-title px-2">Other terminals</h3>
               <ul>
-                <AgentSessionRows now={now} sessions={ungrouped} />
+                <AgentSessionRows sessions={ungrouped} />
               </ul>
             </div>
           )}

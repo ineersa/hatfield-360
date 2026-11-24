@@ -62,6 +62,7 @@ function newSession(
     terminalId,
     provider,
     providerSessionId: null,
+    title: null,
     project,
     worktree: project !== null && project !== cwd ? cwd : null,
     cwd,
@@ -229,7 +230,10 @@ export function trackAgentSessions(
       }
       if (change.event.kind === 'notification') return
     }
-    if (trusted) session.providerSessionId = trusted.id
+    if (trusted) {
+      session.providerSessionId = trusted.id
+      session.title = trusted.title
+    }
     const live = trusted?.telemetry
     const status = live?.turn?.status
     session.runningChildren = live?.activeSubagents ?? null
