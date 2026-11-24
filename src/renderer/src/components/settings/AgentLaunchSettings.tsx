@@ -87,8 +87,8 @@ export function AgentLaunchSettings(): React.JSX.Element {
       <h2 className="type-section-title">Agent launch profiles</h2>
       <p className="type-description">
         Use an executable name or absolute path. Relative paths with a separator start from the
-        launch folder. Arguments are passed as written, without a shell. On Windows, use a native
-        .exe, not a command or PowerShell shim.
+        launch folder. Arguments are passed literally, not interpreted as shell source. On Windows,
+        use a native .exe, not a command or PowerShell shim.
       </p>
       <ProfileFields provider="hatfield" />
       <ProfileFields provider="claude" />
