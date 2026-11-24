@@ -23,8 +23,10 @@ it.skipIf(process.platform !== 'linux')(
   'binds registrations to live PTY owners and retires them without shell exit',
   async () => {
     const server = new AgentStatusServer()
-    const shell = spawn('/bin/bash', ['--noprofile', '--norc'], { cwd: '/tmp' })
-    const other = spawn('/bin/bash', ['--noprofile', '--norc'], { cwd: '/tmp' })
+    // Interactive bash saves history on exit; without a HISTFILE it would rewrite the user's.
+    const options = { cwd: '/tmp', env: { ...process.env, HISTFILE: '/dev/null' } }
+    const shell = spawn('/bin/bash', ['--noprofile', '--norc'], options)
+    const other = spawn('/bin/bash', ['--noprofile', '--norc'], options)
     const children = new Set<number>()
     try {
       const bootstrap = await server.prepareBootstrap({ terminalId: 'owned-pane', cwd: '/' })
