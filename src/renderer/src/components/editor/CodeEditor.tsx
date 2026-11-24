@@ -3,7 +3,7 @@ import { cssFontFamily } from '@/lib/css-font-family'
 import { useEditorScheme } from '@/lib/editor-scheme'
 import { useEditorTabStore } from '@/state/editor-tab-store'
 import { useSettingsStore } from '@/state/settings-store'
-import { setEditorSelectionSource } from '@/state/editor-selection'
+import { setEditorCaret, setEditorSelectionSource } from '@/state/editor-selection'
 import { editorViewState, setEditorViewState } from '@/state/editor-view-states'
 import { editorDocument, saveDocument } from './editor-documents'
 import { editorColorTheme, type MenuColors } from './editor-color-theme'
@@ -36,6 +36,27 @@ function menuColors(): MenuColors {
     selectionForeground: role('popover-selection-foreground'),
     separator: role('separator')
   }
+}
+
+const indentLabel = ({
+  insertSpaces,
+  indentSize
+}: monaco.editor.TextModelResolvedOptions): string =>
+  insertSpaces ? `${indentSize} ${indentSize === 1 ? 'space' : 'spaces'}` : 'Tab'
+
+/** Tells the status bar where the caret is, how much is selected and how the file is laid out. */
+function publishCaret(instance: monaco.editor.IStandaloneCodeEditor): void {
+  const selection = instance.getSelection()
+  const model = instance.getModel()
+  if (!selection || !model) return
+  setEditorCaret({
+    line: selection.positionLineNumber,
+    column: selection.positionColumn,
+    chars: model.getValueLengthInRange(selection),
+    lineBreaks: selection.endLineNumber - selection.startLineNumber,
+    lineSeparator: model.getEOL() === '\r\n' ? 'CRLF' : 'LF',
+    indent: indentLabel(model.getOptions())
+  })
 }
 
 /**
@@ -109,6 +130,9 @@ export function CodeEditor({
     instance.onDidChangeCursorPosition(record)
     instance.onDidScrollChange(record)
     instance.onDidChangeHiddenAreas(record)
+    instance.onDidChangeCursorSelection(() => publishCaret(instance))
+    // Indentation is detected from the text once it loads.
+    instance.onDidChangeModelOptions(() => publishCaret(instance))
     editor.current = instance
     setEditorSelectionSource(() => {
       const selection = instance.getSelection()
@@ -119,6 +143,7 @@ export function CodeEditor({
     })
     return () => {
       setEditorSelectionSource(null)
+      setEditorCaret(null)
       instance.dispose()
       editor.current = null
       shownPath.current = null
@@ -161,6 +186,13 @@ export function CodeEditor({
     if (reveal.focus) instance.focus()
     useEditorTabStore.getState().revealDone()
   }, [path, ready, reveal, hidden, themed])
+
+  // The status bar shows the caret while the editor is on screen.
+  useEffect(() => {
+    const instance = editor.current
+    if (!instance || hidden || !ready || !themed) setEditorCaret(null)
+    else publishCaret(instance)
+  }, [hidden, ready, themed])
 
   useEffect(() => {
     editor.current?.updateOptions({ readOnly })
