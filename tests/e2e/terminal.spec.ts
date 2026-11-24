@@ -370,13 +370,18 @@ test('an OSC 8 link uses the trusted link handler only with a modifier', async (
           name: 'Could not open terminal link',
           exact: true
         })
-        await link.hover({ position: { x: 10, y: 5 } })
-        await link.click({ position: { x: 10, y: 5 } })
+        await expect(link).toBeVisible()
+        const bounds = await link.boundingBox()
+        if (!bounds) throw new Error('The rendered link has no bounds')
+        const x = bounds.x + 10
+        const y = bounds.y + bounds.height / 2
+        await page.mouse.move(x, y)
+        await page.mouse.click(x, y)
         await expect(notice).toHaveCount(0)
-        await link.click({
-          position: { x: 10, y: 5 },
-          modifiers: [process.platform === 'darwin' ? 'Meta' : 'Control']
-        })
+        const modifier = process.platform === 'darwin' ? 'Meta' : 'Control'
+        await page.keyboard.down(modifier)
+        await page.mouse.click(x, y)
+        await page.keyboard.up(modifier)
         await expect(notice).toContainText('Only http and https links can be opened.')
       },
       { userDataDir: userData }
