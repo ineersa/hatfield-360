@@ -2,7 +2,12 @@ import { mkdir, mkdtemp, readdir, realpath, rm, symlink, writeFile } from 'node:
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { invalidEntryName, renameEntry, resolveChangeableEntry } from './tree-file-operations'
+import {
+  invalidEntryName,
+  outermostPaths,
+  renameEntry,
+  resolveChangeableEntry
+} from './tree-file-operations'
 
 describe('invalidEntryName', () => {
   it('accepts ordinary names, dotfiles and spaces', () => {
@@ -73,5 +78,13 @@ describe.skipIf(process.platform === 'win32')('changing tree entries', () => {
     expect((await readdir(join(root, 'src'))).toSorted()).toEqual(['b.ts', 'c.ts'])
     await expect(renameEntry(renamed, 'b.ts', [root])).rejects.toThrow('b.ts already exists')
     await expect(renameEntry(renamed, '../c.ts', [root])).rejects.toThrow('cannot contain')
+  })
+})
+
+describe('outermostPaths', () => {
+  it('drops what is inside another of the paths, and repeats', () => {
+    expect(
+      outermostPaths(['/w/a', '/w/a/b', '/w/a/b/c.ts', '/w/ab', '/w/d.ts', '/w/d.ts'])
+    ).toEqual(['/w/a', '/w/ab', '/w/d.ts'])
   })
 })

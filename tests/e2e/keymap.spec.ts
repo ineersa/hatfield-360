@@ -39,6 +39,9 @@ async function makeProject(): Promise<[string, () => Promise<void>]> {
 }
 
 /** Go to Line: its picker takes the number and closes on Enter. */
+/** The status bar's caret: `line:column`, and how much is selected. */
+const caret = (page: Page) => page.getByRole('status', { name: 'Caret position' })
+
 async function goToLine(page: Page, line: number): Promise<void> {
   await page.keyboard.press(keys.goToLine)
   const picker = page.locator('.quick-input-widget')
@@ -70,6 +73,9 @@ test('the editor runs JetBrains actions on their keys', async () => {
         await openFile(page, 'app', 'keys.ts')
         await expect(lines(page)).toContainText('const third = 3')
         await lines(page).click()
+        // The status bar describes the file as JetBrains does.
+        await expect(page.getByLabel('Line separator')).toHaveText('LF')
+        await expect(page.getByLabel('File encoding')).toHaveText('UTF-8')
 
         await goToLine(page, 2)
         await page.keyboard.press(keys.duplicate)
@@ -106,10 +112,15 @@ test('the editor runs JetBrains actions on their keys', async () => {
         await page.keyboard.press('End')
         await page.keyboard.press('ArrowLeft')
         await page.keyboard.press('ArrowLeft')
+        // Each step asks the language server; the status bar shows when it is in.
         await page.keyboard.press(keys.extendSelection)
+        await expect(caret(page)).toHaveText('1:31 (4 chars)')
         await page.keyboard.press(keys.extendSelection)
+        await expect(caret(page)).toHaveText('1:31 (10 chars)')
         await page.keyboard.press(keys.extendSelection)
+        await expect(caret(page)).toHaveText('1:32 (16 chars)')
         await page.keyboard.press(keys.shrinkSelection)
+        await expect(caret(page)).toHaveText('1:31 (10 chars)')
         await page.keyboard.type('replaced')
         expect(await saved(page)).toEqual([
           'const second = call(replaced)',
@@ -173,8 +184,11 @@ test('a key the terminal shares acts where the keys are; editor tabs close and s
           await page.keyboard.press(keys.splitRight)
         } else {
           await page.keyboard.press(keys.extendSelection)
+          await expect(caret(page)).toHaveText('1:16 (1 char)')
           await page.keyboard.press(keys.extendSelection)
+          await expect(caret(page)).toHaveText('1:16 (15 chars)')
           await page.keyboard.press(keys.closePane)
+          await expect(caret(page)).toHaveText('1:16 (1 char)')
           await page.keyboard.type('one')
         }
         await expect(tab(page, 'keys.ts, unsaved')).toBeVisible()

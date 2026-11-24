@@ -1,5 +1,6 @@
 import { isPlainObject } from '../../shared/plain-object'
 import {
+  DEFAULT_PANEL,
   DEFAULT_SHELL_LAYOUT,
   SHELL_VIEW_IDS,
   type ShellLayout,
@@ -42,11 +43,16 @@ export function parseShellLayout(value: unknown): ShellLayout | null {
   if (!isPlainObject(value) || !isShellViewId(value.activeView)) return null
   const { panels } = value
   if (!isPlainObject(panels)) return null
-  const [agents, files, git] = SHELL_VIEW_IDS.map((id) => sidePanel(panels[id]))
+  const [agents, files, git] = (['agents', 'files', 'git'] as const).map((id) =>
+    sidePanel(panels[id])
+  )
   if (!agents || !files || !git) return null
+  // Layouts saved before Find in Files lack its panel; it starts as a new one would.
+  const search = panels.search === undefined ? DEFAULT_PANEL : sidePanel(panels.search)
+  if (!search) return null
   return {
     activeView: value.activeView,
-    panels: { agents, files, git },
+    panels: { agents, files, search, git },
     // Layouts saved before the panel existed lack it, and shouldn't lose their side panels for it.
     notificationsWidth:
       panelWidth(value.notificationsWidth) ?? DEFAULT_SHELL_LAYOUT.notificationsWidth

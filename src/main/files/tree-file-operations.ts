@@ -51,3 +51,11 @@ export async function renameEntry(path: string, name: string, roots: string[]): 
   await rename(entry, target)
   return join(dirname(path), name)
 }
+
+/** `paths` without those inside another of them: trashing a folder takes what is in it along. */
+export function outermostPaths(paths: string[]): string[] {
+  const unique = [...new Set(paths)]
+  return unique.filter(
+    (path) => !unique.some((other) => other !== path && isPathInside(path, other))
+  )
+}

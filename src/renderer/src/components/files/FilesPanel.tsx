@@ -26,6 +26,7 @@ import {
   GitBranch,
   PencilLine,
   RefreshCw,
+  Search,
   Trash2
 } from 'lucide-react'
 import { type KeyboardEvent, type ReactNode, useEffect, useMemo, useRef, useState } from 'react'
@@ -59,10 +60,12 @@ import {
   OpenFolderEmptyState,
   WorkspaceProblemBanner
 } from '@/components/workspace/WorkspaceNotices'
+import { separatorOf } from '@/components/editor/editor-tab-labels'
 import { cn } from '@/lib/class-names'
 import { appCommandForKey, appShortcutLabel } from '@/lib/keymap-match'
 import { rendererPlatform } from '@/lib/shortcut-keys'
 import { useKeymapStore } from '@/state/keymap-store'
+import { useSearchStore } from '@/state/search-store'
 import { useEditorTabStore } from '@/state/editor-tab-store'
 import { type FileTreeRoot, useFileTreeStore } from '@/state/file-tree-store'
 import { useWorkspaceStore } from '@/state/workspace-store'
@@ -146,10 +149,29 @@ function moveFocus(tree: Tree, step: number): void {
 /** Entries a menu or key acts on: the selection when `item` is part of it, else `item` alone. */
 function targetEntries(tree: Tree, item: Item): DirectoryEntry[] {
   const items = item.isSelected() ? tree.getSelectedItems() : [item]
-  return items.flatMap((each) => {
+  const entries = items.flatMap((each) => {
     const row = each.getItemData()
     return row.type === 'entry' ? [row.entry] : []
   })
+  // What is inside a selected folder goes with it.
+  return entries.filter(
+    (entry) =>
+      !entries.some(
+        (folder) =>
+          folder.kind === 'directory' &&
+          entry.path.startsWith(folder.path + separatorOf(folder.path))
+      )
+  )
+}
+
+/** Folders Find in Folder… searches: the selected folders when `item` is selected, else `item`'s; a file stands for its folder. */
+function searchScope(tree: Tree, item: Item): string[] {
+  const items = item.isSelected() ? tree.getSelectedItems() : [item]
+  const folders = items.flatMap((each) => {
+    const row = each.getItemData()
+    return folderOf(row) ?? (row.type === 'entry' ? row.folder : [])
+  })
+  return [...new Set(folders)]
 }
 
 type RowState = {
@@ -157,6 +179,8 @@ type RowState = {
   props: Record<string, unknown>
   selected: boolean
   onContextMenu: () => void
+  /** Runs Find in Folder… on this row, or on the selection it is part of. */
+  onFindInFolder: () => void
 }
 
 function TreeRow({
@@ -307,6 +331,40 @@ function PathItems({ path, relative }: { path: string; relative: boolean }): Rea
   )
 }
 
+/**
+ * A menu action that runs once the menu has closed, keeping focus from returning to the row:
+ * the search box or name field it moves focus to keeps it.
+ */
+function useAfterMenu(): {
+  choose: (action: () => void) => void
+  onCloseAutoFocus: (event: Event) => void
+} {
+  const chosen = useRef<(() => void) | null>(null)
+  return {
+    choose: (action) => {
+      chosen.current = action
+    },
+    onCloseAutoFocus: (event) => {
+      const action = chosen.current
+      if (!action) return
+      event.preventDefault()
+      chosen.current = null
+      action()
+    }
+  }
+}
+
+function FindInFolderItem({ onSelect }: { onSelect: () => void }): React.JSX.Element {
+  const keymap = useKeymapStore((state) => state.shell)
+  return (
+    <ContextMenuItem onSelect={onSelect}>
+      <Search aria-hidden />
+      Find in Folder…
+      <ContextMenuShortcut>{appShortcutLabel(keymap, 'find-in-files')}</ContextMenuShortcut>
+    </ContextMenuItem>
+  )
+}
+
 function RootRow({
   row,
   root,
@@ -315,6 +373,7 @@ function RootRow({
 }: RowState & { row: Row; root: TreeRoot; expanded: boolean }): React.JSX.Element {
   const setFolderKind = useWorkspaceStore((store) => store.setFolderKind)
   const removeFolder = useWorkspaceStore((store) => store.removeFolder)
+  const afterMenu = useAfterMenu()
   const { folder } = root
   const missing = folder.missing
   return (
@@ -351,9 +410,15 @@ function RootRow({
       }
       tip={{ text: folder.path, always: true }}
       menu={
-        <OpenTerminalMenuContent cwd={root.path} disabled={missing}>
+        <OpenTerminalMenuContent
+          cwd={root.path}
+          disabled={missing}
+          onCloseAutoFocus={afterMenu.onCloseAutoFocus}
+        >
           {missing ? null : (
             <>
+              <FindInFolderItem onSelect={() => afterMenu.choose(state.onFindInFolder)} />
+              <ContextMenuSeparator />
               <PathItems path={root.path} relative={false} />
               <ContextMenuSeparator />
               <ReloadItem path={root.path} />
@@ -390,6 +455,7 @@ function WorktreeRow({
   expanded,
   ...state
 }: RowState & { row: Row; worktree: TreeWorktree; expanded: boolean }): React.JSX.Element {
+  const afterMenu = useAfterMenu()
   return (
     <TreeRow
       row={row}
@@ -400,7 +466,13 @@ function WorktreeRow({
       hint={<span className="type-hint min-w-0 flex-1 truncate">{worktree.name}</span>}
       tip={{ text: worktree.path, always: true }}
       menu={
-        <OpenTerminalMenuContent cwd={worktree.path} disabled={false}>
+        <OpenTerminalMenuContent
+          cwd={worktree.path}
+          disabled={false}
+          onCloseAutoFocus={afterMenu.onCloseAutoFocus}
+        >
+          <FindInFolderItem onSelect={() => afterMenu.choose(state.onFindInFolder)} />
+          <ContextMenuSeparator />
           <PathItems path={worktree.path} relative={false} />
           <ContextMenuSeparator />
           <ReloadItem path={worktree.path} />
@@ -468,7 +540,7 @@ function EntryRow({
   onDelete: () => void
 }): React.JSX.Element {
   const openFile = useEditorTabStore((store) => store.open)
-  const renameChosen = useRef(false)
+  const afterMenu = useAfterMenu()
   const directory = entry.kind === 'directory'
   return (
     <TreeRow
@@ -491,14 +563,14 @@ function EntryRow({
         <OpenTerminalMenuContent
           cwd={directory ? entry.path : folder}
           disabled={false}
-          onCloseAutoFocus={(event) => {
-            if (!renameChosen.current) return
-            // The name field takes focus; the row the menu would return it to would end the rename.
-            event.preventDefault()
-            renameChosen.current = false
-            onStartRename()
-          }}
+          onCloseAutoFocus={afterMenu.onCloseAutoFocus}
         >
+          {directory ? (
+            <>
+              <FindInFolderItem onSelect={() => afterMenu.choose(state.onFindInFolder)} />
+              <ContextMenuSeparator />
+            </>
+          ) : null}
           <PathItems path={entry.path} relative />
           {directory ? (
             <>
@@ -507,7 +579,7 @@ function EntryRow({
             </>
           ) : null}
           <ContextMenuSeparator />
-          <ContextMenuItem onSelect={() => (renameChosen.current = true)}>
+          <ContextMenuItem onSelect={() => afterMenu.choose(onStartRename)}>
             <PencilLine aria-hidden />
             Rename…
             <ContextMenuShortcut>F2</ContextMenuShortcut>
@@ -879,6 +951,12 @@ export function FilesPanel(): React.JSX.Element {
     const row = item.getItemData()
     if (!isNavigable(row)) return
     const command = appCommandForKey(event, useKeymapStore.getState().shell)
+    if (command === 'find-in-files') {
+      // Before the window's own Find in Files, which searches the whole workspace.
+      event.preventDefault()
+      useSearchStore.getState().findInFiles(searchScope(tree, item))
+      return
+    }
     const form =
       command === 'copy-absolute-path'
         ? 'absolute'
@@ -949,7 +1027,8 @@ export function FilesPanel(): React.JSX.Element {
       // Right-clicking outside the selection selects that row, as in IDE trees.
       onContextMenu: () => {
         if (!item.isSelected()) selectOnly(tree, item)
-      }
+      },
+      onFindInFolder: () => useSearchStore.getState().findInFiles(searchScope(tree, item))
     }
     switch (row.type) {
       case 'root':

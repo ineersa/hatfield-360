@@ -3,6 +3,7 @@ import { cssFontFamily } from '@/lib/css-font-family'
 import { useEditorScheme } from '@/lib/editor-scheme'
 import { useEditorTabStore } from '@/state/editor-tab-store'
 import { useSettingsStore } from '@/state/settings-store'
+import { setEditorCaret, setEditorSelectionSource } from '@/state/editor-selection'
 import { editorViewState, setEditorViewState } from '@/state/editor-view-states'
 import { editorDocument, saveDocument } from './editor-documents'
 import { editorColorTheme, type MenuColors } from './editor-color-theme'
@@ -37,6 +38,27 @@ function menuColors(): MenuColors {
   }
 }
 
+const indentLabel = ({
+  insertSpaces,
+  indentSize
+}: monaco.editor.TextModelResolvedOptions): string =>
+  insertSpaces ? `${indentSize} ${indentSize === 1 ? 'space' : 'spaces'}` : 'Tab'
+
+/** Tells the status bar where the caret is, how much is selected and how the file is laid out. */
+function publishCaret(instance: monaco.editor.IStandaloneCodeEditor): void {
+  const selection = instance.getSelection()
+  const model = instance.getModel()
+  if (!selection || !model) return
+  setEditorCaret({
+    line: selection.positionLineNumber,
+    column: selection.positionColumn,
+    chars: model.getValueLengthInRange(selection),
+    lineBreaks: selection.endLineNumber - selection.startLineNumber,
+    lineSeparator: model.getEOL() === '\r\n' ? 'CRLF' : 'LF',
+    indent: indentLabel(model.getOptions())
+  })
+}
+
 /**
  * The Monaco editor of the editor tabs: one instance that shows the active tab's model, keeping
  * each tab's scroll position and cursor while another tab is shown.
@@ -64,6 +86,7 @@ export function CodeEditor({
   const fontFamily = useSettingsStore((state) => state.values['editor.fontFamily'])
   const fontSize = useSettingsStore((state) => state.values['editor.fontSize'])
   const lineHeight = useSettingsStore((state) => state.values['editor.lineHeight'])
+  const reveal = useEditorTabStore((state) => state.reveal)
   const scheme = useEditorScheme(themeId)
   const appTheme = useSyncExternalStore(subscribeAppTheme, appThemeId)
 
@@ -107,8 +130,20 @@ export function CodeEditor({
     instance.onDidChangeCursorPosition(record)
     instance.onDidScrollChange(record)
     instance.onDidChangeHiddenAreas(record)
+    instance.onDidChangeCursorSelection(() => publishCaret(instance))
+    // Indentation is detected from the text once it loads.
+    instance.onDidChangeModelOptions(() => publishCaret(instance))
     editor.current = instance
+    setEditorSelectionSource(() => {
+      const selection = instance.getSelection()
+      const model = instance.getModel()
+      if (!instance.hasTextFocus() || !selection || !model || selection.isEmpty()) return null
+      if (selection.startLineNumber !== selection.endLineNumber) return null
+      return model.getValueInRange(selection)
+    })
     return () => {
+      setEditorSelectionSource(null)
+      setEditorCaret(null)
       instance.dispose()
       editor.current = null
       shownPath.current = null
@@ -123,24 +158,41 @@ export function CodeEditor({
   useEffect(() => {
     const instance = editor.current
     const model = ready ? editorDocument(path) : undefined
-    if (!instance || !model || instance.getModel() === model) return
-    const previous = shownPath.current
-    const state = instance.saveViewState()
-    if (previous && state) setEditorViewState(previous, state)
-    shownPath.current = null
-    instance.setModel(model)
-    // Saved by an older session, it may no longer fit; the file then opens at its top.
-    const saved = editorViewState(path)
-    if (saved) {
-      try {
-        instance.restoreViewState(saved)
-      } catch (error) {
-        console.error('Restoring the editor position failed:', error)
+    if (!instance || !model) return
+    if (instance.getModel() !== model) {
+      const previous = shownPath.current
+      const state = instance.saveViewState()
+      if (previous && state) setEditorViewState(previous, state)
+      shownPath.current = null
+      instance.setModel(model)
+      // Saved by an older session, it may no longer fit; the file then opens at its top.
+      const saved = editorViewState(path)
+      if (saved) {
+        try {
+          instance.restoreViewState(saved)
+        } catch (error) {
+          console.error('Restoring the editor position failed:', error)
+        }
       }
+      revealJumpTarget(instance, path)
+      shownPath.current = path
     }
-    revealJumpTarget(instance, path)
-    shownPath.current = path
-  }, [path, ready])
+    // A file opened at a position (a search result) shows it once its model is in and on screen:
+    // a hidden editor can't take the keys.
+    if (reveal?.path !== path || hidden || !themed) return
+    const range = new monaco.Range(reveal.line, reveal.start + 1, reveal.line, reveal.end + 1)
+    instance.setSelection(range)
+    instance.revealRangeInCenter(range)
+    if (reveal.focus) instance.focus()
+    useEditorTabStore.getState().revealDone()
+  }, [path, ready, reveal, hidden, themed])
+
+  // The status bar shows the caret while the editor is on screen.
+  useEffect(() => {
+    const instance = editor.current
+    if (!instance || hidden || !ready || !themed) setEditorCaret(null)
+    else publishCaret(instance)
+  }, [hidden, ready, themed])
 
   useEffect(() => {
     editor.current?.updateOptions({ readOnly })

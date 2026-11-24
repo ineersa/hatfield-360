@@ -1,6 +1,13 @@
-import { FolderTree, GitCommitHorizontal, TerminalSquare, type LucideIcon } from 'lucide-react'
+import {
+  FolderTree,
+  GitCommitHorizontal,
+  Search,
+  TerminalSquare,
+  type LucideIcon
+} from 'lucide-react'
 import type { ComponentType } from 'react'
 import { FilesPanel } from '@/components/files/FilesPanel'
+import { SearchPanel } from '@/components/search/SearchPanel'
 import { TerminalEmptyState } from '@/components/terminal/TerminalEmptyState'
 import { WorkspacePanel } from '@/components/workspace/WorkspacePanel'
 import type { ShellViewId } from '../../../../shared/shell-layout-api'
@@ -35,6 +42,14 @@ export const SHELL_VIEWS: readonly ShellView[] = [
     Icon: FolderTree,
     Panel: FilesPanel,
     mainPlaceholder: 'Opened files will appear here in editor tabs.'
+  },
+  {
+    id: 'search',
+    label: 'Find in Files',
+    description: 'Search text across the workspace',
+    Icon: Search,
+    Panel: SearchPanel,
+    mainPlaceholder: 'Search results open here in editor tabs.'
   },
   {
     id: 'git',

@@ -26,6 +26,8 @@ type ShellLayoutState = {
   showFiles: () => void
   /** Activating the current view toggles its side panel, like JetBrains tool window buttons. */
   activateView: (view: ShellViewId) => void
+  /** Shows the view with its side panel open, whatever was shown before. */
+  showPanel: (view: ShellViewId) => void
   hidePanel: (view: ShellViewId) => void
   setPanelWidth: (view: ShellViewId, width: number) => void
   setNotificationsWidth: (width: number) => void
@@ -93,6 +95,12 @@ export const useShellLayoutStore = create<ShellLayoutState>((set, get) => ({
       return { panels: { ...state.panels, [view]: { ...panel, collapsed: !panel.collapsed } } }
     })
   },
+  showPanel: (view) =>
+    set((state) => ({
+      settingsOpen: false,
+      activeView: view,
+      panels: { ...state.panels, [view]: { ...state.panels[view], collapsed: false } }
+    })),
   hidePanel: (view) =>
     set((state) => ({
       panels: { ...state.panels, [view]: { ...state.panels[view], collapsed: true } }
