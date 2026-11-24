@@ -35,14 +35,17 @@ export type SavedTerminalTab = {
 export type TerminalLayout = { tabs: SavedTerminalTab[]; activeTabId: string | null }
 export type TerminalWorkspace = { layout: TerminalLayout; conversations: SavedConversation[] }
 export type ResumeFailure = { reason: string; detail: string; settings: boolean }
-export type ResumeResult = { terminal: TerminalSession } | { failure: ResumeFailure }
+export type ResumeResult =
+  | { terminal: TerminalSession }
+  | { failure: ResumeFailure; discardedTerminalId?: string }
 
 export const TERMINAL_WORKSPACE_CHANNELS = {
   load: 'terminal-workspace:load',
   checkpoint: 'terminal-workspace:checkpoint',
   history: 'terminal-workspace:history',
   forget: 'terminal-workspace:forget',
-  resume: 'terminal-workspace:resume'
+  resume: 'terminal-workspace:resume',
+  cancelResume: 'terminal-workspace:cancel-resume'
 } as const
 
 export type TerminalWorkspaceApi = {
@@ -50,5 +53,25 @@ export type TerminalWorkspaceApi = {
   checkpointTerminalLayout: (layout: TerminalLayout) => Promise<void>
   subscribeTerminalHistory: (callback: (history: SavedConversation[]) => void) => () => void
   forgetTerminalConversation: (id: string) => Promise<void>
-  resumeTerminalConversation: (id: string, cols: number, rows: number) => Promise<ResumeResult>
+  cancelTerminalResume: (attempt: string) => Promise<void>
+  resumeTerminalConversation: (
+    id: string,
+    attempt: string,
+    cols: number,
+    rows: number
+  ) => Promise<ResumeResult>
+}
+
+export const TERMINAL_WORKSPACE_RECENT_MS = 14 * 24 * 60 * 60 * 1000
+
+export function sameConversation(
+  a: SavedConversation | AgentSession,
+  b: SavedConversation | AgentSession
+): boolean {
+  return (
+    a.provider === b.provider &&
+    a.providerSessionId !== null &&
+    a.providerSessionId === b.providerSessionId &&
+    (a.provider === 'claude' || a.cwd === b.cwd)
+  )
 }

@@ -1,9 +1,10 @@
 import { create } from 'zustand'
 import { AGENT_PROVIDERS, type AgentSession } from '../../../shared/agent-api'
-import type {
-  ResumeFailure,
-  SavedConversation,
-  SavedTerminalTab
+import {
+  sameConversation,
+  type ResumeFailure,
+  type SavedConversation,
+  type SavedTerminalTab
 } from '../../../shared/terminal-workspace-api'
 import {
   selectTerminal,
@@ -11,7 +12,7 @@ import {
 } from '@/components/terminal/terminal-tab-controllers'
 import { mainErrorMessage } from '@/lib/main-error-message'
 import { notify } from './notification-store'
-import { useTerminalStore } from './terminal-store'
+import { folderName, useTerminalStore } from './terminal-store'
 
 type Restore = { session: SavedConversation; failure: ResumeFailure | null }
 export const useTerminalWorkspace = create<{
@@ -111,8 +112,15 @@ export function restoredSessionRow(pane: string, saved: SavedConversation): Agen
   }
 }
 
+function selectRestoringConversation(id: string): boolean {
+  const pending = Object.entries(useTerminalWorkspace.getState().restore).find(
+    ([, { session }]) => session.id === id
+  )
+  return pending ? selectTerminal(pending[0]) : false
+}
+
 export async function resumeRecent(saved: SavedConversation, split: boolean): Promise<void> {
-  if (selectTerminal(saved.id) || openingRecent.has(saved.id)) return
+  if (selectRestoringConversation(saved.id) || openingRecent.has(saved.id)) return
   const opening = useTerminalStore
     .getState()
     .tabs.find(
@@ -128,14 +136,8 @@ export async function resumeRecent(saved: SavedConversation, split: boolean): Pr
   openingRecent.add(saved.id)
   try {
     const { sessions } = await window.desktop.getAgentSessions()
-    if (selectTerminal(saved.id)) return
-    const live = sessions.find(
-      (item) =>
-        item.id === saved.id ||
-        (item.provider === saved.provider &&
-          item.providerSessionId === saved.providerSessionId &&
-          (item.provider === 'claude' || item.cwd === saved.cwd))
-    )
+    if (selectRestoringConversation(saved.id)) return
+    const live = sessions.find((item) => sameConversation(item, saved))
     if (live && selectTerminal(live.terminalId)) return
     const store = useTerminalStore.getState()
     if (
@@ -146,7 +148,7 @@ export async function resumeRecent(saved: SavedConversation, split: boolean): Pr
       return
     const id = crypto.randomUUID()
     const pane = crypto.randomUUID()
-    const label = saved.cwd.split('/').findLast(Boolean) ?? saved.cwd
+    const label = folderName(saved.cwd)
     store.openTerminal(
       saved.cwd,
       { provider: saved.provider, target: { cwd: saved.cwd, project: saved.project ?? saved.cwd } },

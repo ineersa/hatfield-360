@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test'
 import { mkdir, writeFile } from 'node:fs/promises'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 import { makeTempDir, withApp } from './launch-app'
 import { seedWorkspace } from './workspace-seed'
 
@@ -146,6 +146,113 @@ test('unavailable saved conversations offer recovery independently of a neighbor
         await activePanes(page).first().getByText('Close pane', { exact: true }).click()
         await expect(activePanes(page)).toHaveCount(2)
         await expect(page.getByText(`The folder ${missingCwd} no longer exists.`)).toBeVisible()
+      },
+      { userDataDir }
+    )
+  } finally {
+    await cleanup()
+    await cleanProject()
+  }
+})
+
+const id = (suffix: number) => `00000000-0000-0000-0000-${String(suffix).padStart(12, '0')}`
+
+test('restored agents must confirm their identity with fresh credentials and Recent can be removed', async () => {
+  const [project, cleanProject] = await makeTempDir('resume-proof')
+  const [userDataDir, cleanup] = await seedWorkspace([{ path: project, kind: 'project' }])
+  const conversation = (
+    record: number,
+    providerSessionId: string,
+    title: string,
+    closedAt: number | null
+  ) => ({
+    id: id(record),
+    provider: 'hatfield',
+    providerSessionId,
+    title,
+    project,
+    cwd: project,
+    worktree: null,
+    branch: null,
+    process: 'running',
+    activity: 'unknown',
+    updatedAt: 1,
+    closedAt
+  })
+  try {
+    await writeFile(
+      join(userDataDir, 'settings.json'),
+      JSON.stringify({
+        'terminal.gpuAcceleration': false,
+        'agents.hatfield': {
+          executable: process.execPath,
+          args: [resolve(__dirname, 'fixtures/agent-scenario.mjs'), 'hatfield', '7', 'resume-proof']
+        }
+      })
+    )
+    await writeFile(
+      join(userDataDir, 'terminal-workspace.json'),
+      JSON.stringify({
+        version: 1,
+        layout: {
+          activeTabId: id(1),
+          tabs: [
+            {
+              id: id(1),
+              cwd: project,
+              label: 'Restored agents',
+              activePane: id(2),
+              layout: {
+                kind: 'split',
+                direction: 'horizontal',
+                ratio: 0.5,
+                first: { kind: 'pane', id: id(2), conversation: id(4) },
+                second: { kind: 'pane', id: id(3), conversation: id(5) }
+              }
+            }
+          ]
+        },
+        conversations: [
+          conversation(4, '7', 'Successful restore', null),
+          conversation(5, '8', 'Mismatched restore', null),
+          conversation(6, '9', 'Forget this conversation', Date.now())
+        ]
+      })
+    )
+    let previousTitle = ''
+    await withApp(
+      async (_app, page) => {
+        const session = page.getByRole('button', {
+          name: /^Hatfield #7 · Resume proof [a-f0-9]{16} · Needs input$/
+        })
+        await expect(session).toBeVisible()
+        previousTitle = (await session.getAttribute('aria-label')) ?? ''
+        await expect(
+          page.getByText('The configured provider did not reopen the requested conversation.')
+        ).toBeVisible()
+        const duplicate = await page.evaluate(
+          ({ record, attempt }) =>
+            globalThis.desktop.resumeTerminalConversation(record, attempt, 80, 24),
+          { record: id(4), attempt: id(7) }
+        )
+        expect(duplicate).toMatchObject({ failure: { reason: 'already open' } })
+        await page.getByRole('button', { name: 'Recent 1', exact: true }).click()
+        await page
+          .getByRole('button', { name: 'Resume Forget this conversation' })
+          .click({ button: 'right' })
+        await page.getByRole('menuitem', { name: 'Remove from Recent' }).click()
+        await expect(page.getByRole('button', { name: 'Recent 1', exact: true })).toHaveCount(0)
+      },
+      { userDataDir }
+    )
+    await withApp(
+      async (_app, page) => {
+        const session = page.getByRole('button', {
+          name: /^Hatfield #7 · Resume proof [a-f0-9]{16} · Needs input$/
+        })
+        await expect(session).toBeVisible()
+        expect(await session.getAttribute('aria-label')).not.toBe(previousTitle)
+        await expect(page.getByRole('button', { name: 'Recent 1', exact: true })).toHaveCount(0)
       },
       { userDataDir }
     )

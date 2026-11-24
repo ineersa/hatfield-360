@@ -36,6 +36,8 @@ input are required. Search results show memory provenance and distinguish openin
 a running terminal from resuming a historical session. Unmapped sources must not
 pretend to be resumable.
 
+Each project also has a collapsible Recent list for the last 14 days. Closed conversations are resumed explicitly, and removing an entry does not delete provider data.
+
 ## Explicit launches and identity
 
 For v1, track only launches requested through the app. Project/worktree and

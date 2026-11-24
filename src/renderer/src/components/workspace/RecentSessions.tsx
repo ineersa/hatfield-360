@@ -1,5 +1,5 @@
 import { ChevronRight, Columns2, Copy, GitBranch, Play, Search, Trash2 } from 'lucide-react'
-import { useId, useState } from 'react'
+import { useEffect, useId, useState } from 'react'
 import { AgentProviderIcon } from '@/components/icons/AgentProviderIcon'
 import {
   ContextMenu,
@@ -14,15 +14,27 @@ import { notify } from '@/state/notification-store'
 import { AGENT_PROVIDERS } from '../../../../shared/agent-api'
 import type { WorkspaceFolder } from '../../../../shared/workspace-api'
 import { resumeRecent, useTerminalWorkspace } from '@/state/terminal-workspace'
-import type { SavedConversation } from '../../../../shared/terminal-workspace-api'
+import {
+  TERMINAL_WORKSPACE_RECENT_MS,
+  type SavedConversation
+} from '../../../../shared/terminal-workspace-api'
 
 type RecentSession = SavedConversation & { providerSessionId: string; closedAt: number }
 const RECENT_FIRST_PAGE = 5
 const RECENT_PAGE = 20
-const RECENT_WINDOW_DAYS = 14
 const MINUTE = 60_000
 const HOUR = 60 * MINUTE
 const DAY = 24 * HOUR
+const RECENT_WINDOW_DAYS = TERMINAL_WORKSPACE_RECENT_MS / DAY
+
+function useRecentClock(): number {
+  const [now, setNow] = useState(Date.now)
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), MINUTE)
+    return () => clearInterval(timer)
+  }, [])
+  return now
+}
 
 function closedAgo(closedAt: number, now: number): string {
   const elapsed = now - closedAt
@@ -37,14 +49,14 @@ const rowClass =
 
 export function useRecentSessions(folder: WorkspaceFolder): RecentSession[] {
   const history = useTerminalWorkspace((state) => state.history)
-  const [now] = useState(Date.now)
+  const now = useRecentClock()
   return history
     .filter(
       (item): item is RecentSession =>
         item.project === folder.path &&
         item.providerSessionId !== null &&
         item.closedAt !== null &&
-        item.closedAt >= now - RECENT_WINDOW_DAYS * DAY
+        item.closedAt >= now - TERMINAL_WORKSPACE_RECENT_MS
     )
     .toSorted((a, b) => b.closedAt - a.closedAt)
 }
@@ -100,7 +112,11 @@ function RecentRow({ session, now }: { session: RecentSession; now: number }): R
             Resume in Split
           </ContextMenuItem>
           <ContextMenuItem
-            onSelect={() => void window.desktop.writeTerminalClipboard(session.providerSessionId)}
+            onSelect={() => {
+              void window.desktop
+                .writeTerminalClipboard(session.providerSessionId)
+                .catch(() => notify({ severity: 'error', title: 'Could not copy session ID' }))
+            }}
           >
             <Copy aria-hidden />
             Copy session ID
@@ -133,7 +149,7 @@ export function RecentSessions({
 }): React.JSX.Element | null {
   const [expanded, setExpanded] = useState(false)
   const listId = useId()
-  const [now] = useState(Date.now)
+  const now = useRecentClock()
   const [shown, setShown] = useState(RECENT_FIRST_PAGE)
   if (sessions.length === 0) return null
   const visible = sessions.slice(0, shown)

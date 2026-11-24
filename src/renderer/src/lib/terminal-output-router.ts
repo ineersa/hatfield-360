@@ -50,3 +50,7 @@ export function listenToSession(id: string, listener: SessionListener): () => vo
 export function connectTerminalOutput(): void {
   connect()
 }
+
+export function discardTerminalOutput(id: string): void {
+  early.delete(id)
+}

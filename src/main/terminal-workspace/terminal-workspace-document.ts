@@ -12,7 +12,6 @@ export const EMPTY_TERMINAL_WORKSPACE: TerminalWorkspace = {
   layout: { tabs: [], activeTabId: null },
   conversations: []
 }
-export const RECENT_MS = 14 * 24 * 60 * 60 * 1000
 export const TERMINAL_WORKSPACE_VERSION = 1
 
 function string(value: unknown, limit: number): value is string {
@@ -27,7 +26,11 @@ function nullableString(value: unknown, limit: number): value is string | null {
   return value === null || string(value, limit)
 }
 
-export function parseTerminalLayout(value: unknown, runtime = false): TerminalLayout | null {
+export function parseTerminalLayout(
+  value: unknown,
+  runtime = false,
+  salvage = false
+): TerminalLayout | null {
   if (!isPlainObject(value) || !Array.isArray(value.tabs) || value.tabs.length > 256) return null
   const panes = new Set<string>()
   const conversations = new Set<string>()
@@ -62,7 +65,9 @@ export function parseTerminalLayout(value: unknown, runtime = false): TerminalLa
     const second = tree(node.second, depth + 1)
     return first && second
       ? { kind: 'split', direction: node.direction, ratio: node.ratio, first, second }
-      : null
+      : salvage
+        ? (first ?? second)
+        : null
   }
   const tabs: TerminalLayout['tabs'] = []
   const ids = new Set<string>()
@@ -73,11 +78,16 @@ export function parseTerminalLayout(value: unknown, runtime = false): TerminalLa
       ids.has(tab.id) ||
       !path(tab.cwd) ||
       !string(tab.label, 4096)
-    )
+    ) {
+      if (salvage) continue
       return null
+    }
     const previousPanes = new Set(panes)
     const layout = tree(tab.layout, 0)
-    if (!layout) return null
+    if (!layout) {
+      if (salvage) continue
+      return null
+    }
     ids.add(tab.id)
     tabs.push({
       id: tab.id,
@@ -153,14 +163,22 @@ function parseConversation(value: unknown): SavedConversation | null {
   }
 }
 
-export function parseTerminalWorkspace(value: unknown): TerminalWorkspace {
-  if (!isPlainObject(value) || value.version !== TERMINAL_WORKSPACE_VERSION)
-    return EMPTY_TERMINAL_WORKSPACE
+export function parseTerminalWorkspace(value: unknown): TerminalWorkspace | null {
+  if (!isPlainObject(value) || value.version !== TERMINAL_WORKSPACE_VERSION) return null
   const conversations = Array.isArray(value.conversations)
     ? value.conversations.slice(0, 10_000).flatMap((item: unknown) => parseConversation(item) ?? [])
     : []
   return {
-    layout: parseTerminalLayout(value.layout) ?? EMPTY_TERMINAL_WORKSPACE.layout,
+    layout: parseTerminalLayout(value.layout, false, true) ?? EMPTY_TERMINAL_WORKSPACE.layout,
     conversations
   }
+}
+
+export function isWritableTerminalWorkspace(value: unknown, parsed: TerminalWorkspace): boolean {
+  return (
+    isPlainObject(value) &&
+    Array.isArray(value.conversations) &&
+    value.conversations.length === parsed.conversations.length &&
+    parseTerminalLayout(value.layout) !== null
+  )
 }

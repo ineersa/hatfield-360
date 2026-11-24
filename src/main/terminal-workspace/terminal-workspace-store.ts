@@ -5,8 +5,9 @@ import { join } from 'node:path'
 import type { AgentSession } from '../../shared/agent-api'
 import {
   TERMINAL_WORKSPACE_CHANNELS,
+  TERMINAL_WORKSPACE_RECENT_MS,
+  sameConversation,
   type PaneLayout,
-  type SavedConversation,
   type TerminalLayout,
   type TerminalWorkspace
 } from '../../shared/terminal-workspace-api'
@@ -16,27 +17,17 @@ import { worktreeStore } from '../git/worktree-store'
 import {
   EMPTY_TERMINAL_WORKSPACE,
   parseTerminalWorkspace,
-  RECENT_MS,
+  isWritableTerminalWorkspace,
   TERMINAL_WORKSPACE_VERSION
 } from './terminal-workspace-document'
-
-export function sameConversation(
-  a: SavedConversation | AgentSession,
-  b: SavedConversation | AgentSession
-): boolean {
-  return (
-    a.id === b.id ||
-    (a.provider === b.provider &&
-      a.providerSessionId !== null &&
-      a.providerSessionId === b.providerSessionId &&
-      (a.provider === 'claude' || a.cwd === b.cwd))
-  )
-}
 
 class TerminalWorkspaceStore {
   private state = EMPTY_TERMINAL_WORKSPACE
   private loaded: Promise<void> | undefined
-  private writing = Promise.resolve()
+  private writing: Promise<void> | undefined
+  private pending: string | undefined
+  private writable = true
+  private previousHistory = ''
   private previous = ''
   private layout: TerminalLayout | undefined
   private live: AgentSession[] = []
@@ -52,9 +43,15 @@ class TerminalWorkspaceStore {
   async view(): Promise<TerminalWorkspace> {
     this.loaded ??= readFile(this.file(), 'utf8')
       .then((text) => {
-        this.state = parseTerminalWorkspace(JSON.parse(text))
+        const document: unknown = JSON.parse(text)
+        const parsed = parseTerminalWorkspace(document)
+        if (parsed) this.state = parsed
+        this.writable = parsed !== null && isWritableTerminalWorkspace(document, parsed)
       })
-      .catch(() => undefined)
+      .catch((error: unknown) => {
+        this.writable =
+          typeof error === 'object' && error !== null && 'code' in error && error.code === 'ENOENT'
+      })
     await this.loaded
     return this.state
   }
@@ -62,7 +59,7 @@ class TerminalWorkspaceStore {
   freeze(): Promise<void> {
     this.frozen = true
     this.generation++
-    return this.writing
+    return this.writing ?? Promise.resolve()
   }
 
   thaw(): void {
@@ -115,17 +112,11 @@ class TerminalWorkspaceStore {
     const remembered = new Map<string, string>()
     for (const live of this.live) {
       const bound = history.get(this.bound.get(live.id) ?? live.id)
-      const existing =
-        live.providerSessionId === null ||
-        bound?.providerSessionId === null ||
-        bound?.providerSessionId === live.providerSessionId
-          ? bound
-          : undefined
       const matching =
-        existing ??
-        [...history.values()].find(
-          (item) => item.providerSessionId !== null && sameConversation(item, { ...live, id: '' })
-        )
+        [...history.values()].find((item) => sameConversation(item, live)) ??
+        (bound?.providerSessionId === null || live.providerSessionId === null ? bound : undefined)
+      if (bound?.providerSessionId === null && matching && bound.id !== matching.id)
+        history.delete(bound.id)
       const id = matching?.id ?? (bound ? randomUUID() : live.id)
       const project = worktreeStore.view().find((entry) => entry.folder === live.project)
       const branch =
@@ -152,7 +143,6 @@ class TerminalWorkspaceStore {
       })
       remembered.set(live.id, id)
       this.bound.set(live.id, id)
-      open.add(id)
     }
     const placed = new Set<string>()
     const paneTree = (tree: PaneLayout): PaneLayout | null => {
@@ -167,14 +157,28 @@ class TerminalWorkspaceStore {
       )
       const live =
         candidates.findLast((session) => session.process === 'running') ?? candidates.at(-1)
-      const key = (live && remembered.get(live.id)) ?? conversation
+      const key = terminalId ? live && remembered.get(live.id) : conversation
       if (terminalId && this.retired.has(terminalId) && !live) return null
       const valid = key && !placed.has(key) ? key : null
       if (valid) {
         placed.add(valid)
         open.add(valid)
       }
-      return { kind: 'pane', id, conversation: valid }
+      let layout: PaneLayout = { kind: 'pane', id, conversation: valid }
+      for (const candidate of candidates) {
+        const extra = remembered.get(candidate.id)
+        if (!extra || placed.has(extra) || candidate.process !== 'running') continue
+        placed.add(extra)
+        open.add(extra)
+        layout = {
+          kind: 'split',
+          direction: 'horizontal',
+          ratio: 0.5,
+          first: layout,
+          second: { kind: 'pane', id: extra, conversation: extra }
+        }
+      }
+      return layout
     }
     const source = this.layout ?? this.state.layout
     const tabs = source.tabs.flatMap((tab) => {
@@ -195,21 +199,38 @@ class TerminalWorkspaceStore {
       .filter(
         (item) =>
           item.closedAt === null ||
-          (item.providerSessionId !== null && item.closedAt >= now - RECENT_MS)
+          (item.providerSessionId !== null && item.closedAt >= now - TERMINAL_WORKSPACE_RECENT_MS)
       )
     this.state = { layout, conversations }
     const serialized = `${JSON.stringify({ version: TERMINAL_WORKSPACE_VERSION, ...this.state })}\n`
-    if (serialized === this.previous) return this.writing
+    if (serialized === this.previous) return this.writing ?? Promise.resolve()
     this.previous = serialized
-    if (!owner.isDestroyed()) owner.send(TERMINAL_WORKSPACE_CHANNELS.history, conversations)
-    this.writing = this.writing
-      .catch(() => undefined)
-      .then(() => writeFileAtomic(this.file(), serialized))
-      .catch((error: unknown) => {
-        if (this.previous === serialized) this.previous = ''
-        throw error
-      })
+    const historyText = JSON.stringify(conversations)
+    if (historyText !== this.previousHistory && !owner.isDestroyed()) {
+      this.previousHistory = historyText
+      owner.send(TERMINAL_WORKSPACE_CHANNELS.history, conversations)
+    }
+    if (!this.writable) return Promise.resolve()
+    this.pending = serialized
+    this.writing ??= this.flush().finally(() => {
+      this.writing = undefined
+    })
     return this.writing
+  }
+
+  private async flush(): Promise<void> {
+    while (this.pending !== undefined) {
+      const next = this.pending
+      this.pending = undefined
+      try {
+        await writeFileAtomic(this.file(), next)
+      } catch (error) {
+        if (this.pending === undefined) {
+          this.previous = ''
+          throw error
+        }
+      }
+    }
   }
 }
 

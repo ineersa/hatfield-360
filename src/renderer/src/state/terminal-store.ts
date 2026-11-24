@@ -28,7 +28,7 @@ type TerminalState = {
   cycleTab: (step: 1 | -1) => void
 }
 
-function folderName(path: string): string {
+export function folderName(path: string): string {
   return path.split(/[\\/]/).findLast((part) => part.length > 0) ?? path
 }
 

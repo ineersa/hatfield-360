@@ -32,6 +32,7 @@ const launches = new Map<
     policy: AgentNotificationPolicy
     manual?: true
     confirm?: (id: string) => boolean
+    metadataTitle?: string
     titleRead?: { id: string; epoch: number }
   }
 >()
@@ -41,7 +42,11 @@ export function agentSnapshot(owner: WebContents): AgentSnapshot {
   return {
     revision,
     sessions: [...records.values()]
-      .filter((record) => record.owner === owner)
+      .filter(
+        (record) =>
+          record.owner === owner &&
+          terminalSessions.directory(owner, record.session.terminalId) !== null
+      )
       .map((record) => ({ ...record.session }))
   }
 }
@@ -239,21 +244,23 @@ export function trackAgentSessions(
     }
     if (change.kind === 'event') {
       if (trusted && !owner.isDestroyed()) {
-        for (const message of policy.accept(change.event, trusted)) {
-          if (!confirming)
-            notify(owner, {
-              provider: session.provider,
-              terminalId: session.terminalId,
-              providerSessionId: trusted.id,
-              message
-            })
+        for (const message of policy.accept(change.event, trusted, confirming)) {
+          notify(owner, {
+            provider: session.provider,
+            terminalId: session.terminalId,
+            providerSessionId: trusted.id,
+            message
+          })
         }
       }
       if (change.event.kind === 'notification') return
     }
     if (trusted) {
-      if (session.providerSessionId !== trusted.id || trusted.title !== null)
-        session.title = trusted.title
+      if (session.providerSessionId !== trusted.id) {
+        delete launch.metadataTitle
+        delete launch.titleRead
+      }
+      session.title = trusted.title ?? launch.metadataTitle ?? null
       session.providerSessionId = trusted.id
       if (
         session.provider === 'claude' &&
@@ -273,19 +280,19 @@ export function trackAgentSessions(
             delete launch.titleRead
             if (
               !title ||
-              session.title === title ||
               owner.isDestroyed() ||
               launches.get(change.launchId) !== launch ||
               records.get(session.id)?.session !== session
             )
               return
+            launch.metadataTitle = title
             session.title = title
             changed(owner)
           })
         }
       }
     }
-    const live = confirming ? null : trusted?.telemetry
+    const live = trusted?.telemetry
     const status = live?.turn?.status
     session.runningChildren = live?.activeSubagents ?? null
     session.runningScripts = live?.backgroundScripts ?? null
@@ -311,6 +318,7 @@ export function trackAgentSessions(
     request: { cwd: string; cols: number; rows: number },
     resume?: {
       saved: SavedConversation
+      signal: AbortSignal
       confirm: (id: string) => boolean
       exited: (exitCode: number) => void
     }
@@ -360,12 +368,14 @@ export function trackAgentSessions(
               H360_STATUS_LAUNCH_ID: credential.launchId
             }
           : {},
+        ...(resume ? { signal: resume.signal } : {}),
         onClosing: () => policy.beginClosing(),
         onExit: (exitCode) => {
           resume?.exited(exitCode)
           release()
           session.process = 'exited'
-          if (records.delete(session.id)) changed(owner)
+          if (records.get(session.id)?.session === session && records.delete(session.id))
+            changed(owner)
         }
       })
       if (!resume && session.process !== 'exited') {

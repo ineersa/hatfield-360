@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { readFile, stat, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { createConnection } from 'node:net'
@@ -89,6 +89,16 @@ const report = () => emit('session.snapshot', snapshot)
 
 print(`Scenario ready: ${marker}`)
 print(`Directory: ${process.cwd()}`)
+// Resume scenarios acknowledge the real launch credentials without displaying them.
+if (marker === 'resume-proof') {
+  const requested = process.argv.slice(5)
+  if (requested.length !== 1 || !/^--resume=\d+$/.test(requested[0]))
+    throw new Error('Expected one literal Hatfield resume argument')
+  const fingerprint = createHash('sha256').update(token).digest('hex').slice(0, 16)
+  snapshot.title = `Resume proof ${fingerprint}`
+  snapshot.attention = { id: 'resume-input', reason: 'external-input' }
+  await report()
+}
 const input = createInterface({ input: process.stdin, terminal: false })
 for await (const command of input) {
   try {

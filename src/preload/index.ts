@@ -22,8 +22,10 @@ const desktopApi: DesktopApi = {
   checkpointTerminalLayout: (layout) =>
     ipcRenderer.invoke(TERMINAL_WORKSPACE_CHANNELS.checkpoint, layout),
   forgetTerminalConversation: (id) => ipcRenderer.invoke(TERMINAL_WORKSPACE_CHANNELS.forget, id),
-  resumeTerminalConversation: (id, cols, rows) =>
-    ipcRenderer.invoke(TERMINAL_WORKSPACE_CHANNELS.resume, id, cols, rows),
+  cancelTerminalResume: (attempt) =>
+    ipcRenderer.invoke(TERMINAL_WORKSPACE_CHANNELS.cancelResume, attempt),
+  resumeTerminalConversation: (id, attempt, cols, rows) =>
+    ipcRenderer.invoke(TERMINAL_WORKSPACE_CHANNELS.resume, id, attempt, cols, rows),
   subscribeTerminalHistory: (callback) => {
     const listener = (_event: unknown, conversations: SavedConversation[]): void =>
       callback(conversations)

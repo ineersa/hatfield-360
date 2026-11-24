@@ -1,3 +1,4 @@
+import { discardTerminalOutput } from '@/lib/terminal-output-router'
 import { createPortal } from 'react-dom'
 import { RestoreFailurePane } from './RestoreFailurePane'
 import {
@@ -96,6 +97,7 @@ export function TerminalTabBody({
             shells.get(pane.id)?.dispose()
             setRestore(paneKey, saved, null)
             let cancelled = false
+            const attempt = crypto.randomUUID()
             const shell = startPaneShell(
               pane,
               saved.cwd,
@@ -108,8 +110,14 @@ export function TerminalTabBody({
               },
               async (cols, rows) => {
                 try {
-                  const result = await window.desktop.resumeTerminalConversation(id, cols, rows)
+                  const result = await window.desktop.resumeTerminalConversation(
+                    id,
+                    attempt,
+                    cols,
+                    rows
+                  )
                   if ('terminal' in result) return result.terminal
+                  if (result.discardedTerminalId) discardTerminalOutput(result.discardedTerminalId)
                   if (!cancelled) setRestore(paneKey, saved, result.failure)
                 } catch (error) {
                   if (!cancelled)
@@ -125,6 +133,7 @@ export function TerminalTabBody({
             shells.set(pane.id, {
               dispose: () => {
                 cancelled = true
+                void window.desktop.cancelTerminalResume(attempt).catch(() => undefined)
                 shell.dispose()
               }
             })
@@ -155,7 +164,7 @@ export function TerminalTabBody({
       }
       publishActivePane()
     }
-    let nextLaunch = tab.agent
+    let nextLaunch = tab.saved ? undefined : tab.agent
     const panes = new PaneManager(
       element,
       {
@@ -196,7 +205,9 @@ export function TerminalTabBody({
         .getPanes()
         .find(
           ({ container: { dataset } }) =>
-            dataset.terminalId === id || dataset.layoutId === id || dataset.conversation === id
+            dataset.terminalId === id ||
+            dataset.layoutId === id ||
+            (dataset.conversation === id && !dataset.terminalId)
         )
     terminalTabControllers.set(tab.id, {
       hasTerminal: (id) => findTerminal(id) !== undefined,

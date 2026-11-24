@@ -1,6 +1,7 @@
 import { terminalWorkspaceStore } from './terminal-workspace/terminal-workspace-store'
 import { registerLanguageServerIpc } from './ipc/language-server-ipc'
 import { languageServerSessions } from './language-servers/language-server-sessions'
+import { registerTerminalWorkspaceIpc } from './ipc/terminal-workspace-ipc'
 import { registerAgentIpc } from './ipc/agent-ipc'
 import { app, BrowserWindow } from 'electron'
 import { agentStatusServer } from './agent-status/status-server'
@@ -46,11 +47,10 @@ void app.whenReady().then(async () => {
   registerShellLayoutIpc()
   registerTerminalIpc()
   registerWebLinkIpc()
-  registerAgentIpc()
+  registerTerminalWorkspaceIpc(registerAgentIpc())
   registerLanguageServerIpc()
   installAppMenu()
   followAppTheme()
-  // The window opens where it was left and in the chosen theme, so both are read first.
   const [, theme] = await Promise.all([
     windowStateStore.load(),
     chosenAppTheme(),

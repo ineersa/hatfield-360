@@ -1,3 +1,4 @@
+import { acceptsResumeArguments } from './resume-arguments'
 import type { WebContents } from 'electron'
 import { agentSnapshot, type trackAgentSessions } from '../agent-status/agent-sessions'
 import { existingDirectory } from '../ipc/terminal-ipc'
@@ -8,7 +9,7 @@ import type {
   ResumeResult,
   SavedConversation
 } from '../../shared/terminal-workspace-api'
-import { sameConversation } from './terminal-workspace-store'
+import { sameConversation } from '../../shared/terminal-workspace-api'
 
 const CONFIRMATION_LIMIT_MS = 30_000
 
@@ -21,7 +22,8 @@ export function resumeConversations(launch: ReturnType<typeof trackAgentSessions
   return (
     owner: WebContents,
     saved: SavedConversation,
-    size: { cols: number; rows: number }
+    size: { cols: number; rows: number },
+    signal: AbortSignal
   ): Promise<ResumeResult> => {
     const { provider, providerSessionId, cwd } = saved
     const id = providerSessionId ?? ''
@@ -50,6 +52,7 @@ export function resumeConversations(launch: ReturnType<typeof trackAgentSessions
       return Promise.resolve(
         failure('already resuming', 'This conversation is already resuming in another pane.')
       )
+    const cancelled = failure('resume cancelled', 'The resume pane was closed.')
     const resume = async (): Promise<ResumeResult> => {
       const live = agentSnapshot(owner).sessions.find((session) => sameConversation(session, saved))
       if (live) return failure('already open', 'This conversation is already open in another pane.')
@@ -68,26 +71,23 @@ export function resumeConversations(launch: ReturnType<typeof trackAgentSessions
           true
         )
       }
-      if (
-        profile.args.some((arg) =>
-          /^(?:-r|-c|-p|--resume|--continue|--fork-session|--session-id|--prompt|--print|--)$/.test(
-            arg.split('=', 1)[0] ?? ''
-          )
-        )
-      ) {
+      if (!acceptsResumeArguments(provider, profile)) {
         return failure(
           'conflicting resume arguments',
           'Remove options that select, fork or prompt a conversation from the provider command in Settings.',
           true
         )
       }
+      if (signal.aborted) return cancelled
       const args = provider === 'hatfield' ? [`--resume=${id}`] : ['--resume', id]
-      type Confirmation = { ok: true } | { ok: false; response: ResumeResult }
+      type Confirmation = { ok: true } | { ok: false; response: { failure: ResumeFailure } }
       let settle: ((result: Confirmation) => void) | undefined
       const reported = new Promise<Confirmation>((resolve) => {
         settle = resolve
       })
       const report = (result: Confirmation) => settle?.(result)
+      const abort = () => report({ ok: false, response: cancelled })
+      signal.addEventListener('abort', abort, { once: true })
       const timer = setTimeout(
         () =>
           report({
@@ -108,6 +108,7 @@ export function resumeConversations(launch: ReturnType<typeof trackAgentSessions
           { ...size, cwd },
           {
             saved,
+            signal,
             confirm: (reportedId) => {
               const match = reportedId === id
               report(
@@ -147,16 +148,18 @@ export function resumeConversations(launch: ReturnType<typeof trackAgentSessions
           }
         )
         const result = await reported
-        if (result.ok) return { terminal }
+        if (result.ok && !signal.aborted) return { terminal }
         await terminalSessions.kill(owner, terminal.id)
-        return result.response
+        return { ...(result.ok ? cancelled : result.response), discardedTerminalId: terminal.id }
       } catch {
+        if (signal.aborted) return cancelled
         return failure(
           'launch failed',
           'The provider process could not start. Check the configured command in Settings.',
           true
         )
       } finally {
+        signal.removeEventListener('abort', abort)
         clearTimeout(timer)
       }
     }
