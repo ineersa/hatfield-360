@@ -124,6 +124,8 @@ export function AgentSessionRows({ sessions }: { sessions: AgentSession[] }): Re
       {sessions.map((session) => {
         const id = session.providerSessionId
         const { title, displayName, providerIdentity } = agentSessionIdentity(session)
+        // The hatfield number is the row's handle, not its content, so it reads quieter than the title.
+        const prefix = title && displayName !== title ? displayName.slice(0, -title.length) : null
         const state = isStopped(session)
           ? 'stopped'
           : session.wait
@@ -165,39 +167,52 @@ export function AgentSessionRows({ sessions }: { sessions: AgentSession[] }): Re
                       aria-current={current || undefined}
                       onClick={go}
                       className={cn(
-                        'type-tree-row flex h-tree-row w-full min-w-0 items-center gap-1.5 rounded-component px-2 text-left hover:bg-row-hover focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none',
-                        current && 'ring-1 ring-inset ring-ring'
+                        'type-tree-row flex w-full min-w-0 items-center gap-2 rounded-component px-2 py-1 text-left hover:bg-row-hover focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none',
+                        current && 'bg-selection-inactive hover:bg-selection-inactive'
                       )}
                     >
-                      <AgentProviderIcon provider={session.provider} />
-                      <span className="min-w-0 flex-1 truncate">{displayName}</span>
-                      {session.runningChildren ? (
-                        <span className="type-hint flex shrink-0 items-center gap-0.5" aria-hidden>
-                          <Users className="size-3.5" />
-                          {session.runningChildren}
-                        </span>
-                      ) : null}
-                      {session.runningScripts ? (
-                        <span className="type-hint flex shrink-0 items-center gap-0.5">
-                          <SquareTerminal
-                            role="img"
-                            aria-label="Background scripts"
-                            className="size-3.5"
-                          />
-                          {session.runningScripts}
-                        </span>
-                      ) : null}
-                      {status ? (
-                        <span
-                          className={cn(
-                            'flex shrink-0 items-center justify-end gap-1',
-                            status.color
+                      <AgentProviderIcon
+                        provider={session.provider}
+                        className="size-session-icon"
+                      />
+                      <span className="flex min-w-0 flex-1 flex-col">
+                        <span className="truncate">
+                          {prefix ? (
+                            <>
+                              <span className="text-muted-foreground">{prefix}</span>
+                              {title}
+                            </>
+                          ) : (
+                            displayName
                           )}
-                        >
-                          <status.icon className="size-4 shrink-0" aria-hidden />
-                          <span className="truncate">{label}</span>
                         </span>
-                      ) : null}
+                        {status || session.runningChildren || session.runningScripts ? (
+                          <span className="type-hint flex min-w-0 items-center gap-2.5 text-muted-foreground">
+                            {status ? (
+                              <span className={cn('flex min-w-0 items-center gap-1', status.color)}>
+                                <status.icon className="size-3.5 shrink-0" aria-hidden />
+                                <span className="truncate">{label}</span>
+                              </span>
+                            ) : null}
+                            {session.runningChildren ? (
+                              <span className="flex shrink-0 items-center gap-0.5" aria-hidden>
+                                <Users className="size-3.5" />
+                                {session.runningChildren}
+                              </span>
+                            ) : null}
+                            {session.runningScripts ? (
+                              <span className="flex shrink-0 items-center gap-0.5">
+                                <SquareTerminal
+                                  role="img"
+                                  aria-label="Background scripts"
+                                  className="size-3.5"
+                                />
+                                {session.runningScripts}
+                              </span>
+                            ) : null}
+                          </span>
+                        ) : null}
+                      </span>
                     </button>
                   </TooltipTrigger>
                 </ContextMenuTrigger>

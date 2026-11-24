@@ -108,6 +108,7 @@
   --spacing-tree-row: var(--tree-row-height);
   --spacing-list-row: var(--list-row-height);
   --spacing-project-row: var(--project-row-height);
+  --spacing-session-icon: var(--session-icon-size);
   --spacing-control: var(--control-height);
   --spacing-icon-button: var(--icon-button-size);
   --spacing-activity-button: var(--activity-button-size);

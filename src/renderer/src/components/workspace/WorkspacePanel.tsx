@@ -145,8 +145,8 @@ function ProjectContents({
   return (
     <>
       {visible.length > 0 && (
-        <li>
-          <ul aria-label={`${folder.name} sessions`}>
+        <li className="pb-1">
+          <ul aria-label={`${folder.name} sessions`} className="flex flex-col gap-px pl-5.5">
             <AgentSessionRows sessions={visible} />
           </ul>
         </li>

@@ -6,6 +6,8 @@
 :root {
   /* Sizes scale with the app font, from the IDE's layout at its 13px default. */
   --project-row-height: calc(var(--tree-row-height) + var(--app-font-size) * 6 / 13);
+  /* Centred beside an agent session's two lines, a step above the 18px folder icon so it never outranks projects. */
+  --session-icon-size: calc(var(--app-font-size) * 24 / 13);
   --control-height: calc(var(--app-font-size) * 30 / 13);
   --icon-button-size: calc(var(--app-font-size) * 28 / 13);
   --activity-button-size: calc(var(--app-font-size) * 36 / 13);
