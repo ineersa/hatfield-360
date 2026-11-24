@@ -1,6 +1,7 @@
 import type { DirectoryEntry, DirectoryListing } from '../../../../shared/file-tree-api'
 import type { WorkspaceFolder } from '../../../../shared/workspace-api'
 import type { ProjectWorktrees, Worktree } from '../../../../shared/worktree-api'
+import { separatorOf } from '../editor/editor-tab-labels'
 
 export type TreeWorktree = { path: string; name: string; branch: string }
 
@@ -25,6 +26,9 @@ export type Row = Placement &
     | { type: 'loading' | 'empty'; key: string; onlyIgnored: boolean }
     | { type: 'error'; key: string; folder: string; message: string }
   )
+
+const worktreeKey = (parent: string, path: string): string => `${parent}\0\0worktree\0${path}`
+const entryKey = (parent: string, name: string): string => `${parent}\0${name}`
 
 const branchOf = (worktree: Worktree): string =>
   worktree.branch ?? `detached ${worktree.head.slice(0, 7)}`
@@ -89,7 +93,7 @@ export function treeRows(
     let position = 0
     const place = (): Placement => ({ depth, parent, setSize, position: ++position })
     for (const worktree of worktrees) {
-      const key = `${parent}\0\0worktree\0${worktree.path}`
+      const key = worktreeKey(parent, worktree.path)
       rows.push({ type: 'worktree', key, worktree, ...place() })
       addChildren(worktree.path, key, depth + 1, false, [])
     }
@@ -111,7 +115,7 @@ export function treeRows(
     }
     for (const entry of entries) {
       const ignored = parentIgnored || entry.ignored
-      const key = `${parent}\0${entry.name}`
+      const key = entryKey(parent, entry.name)
       rows.push({ type: 'entry', key, entry, ignored, folder, ...place() })
       if (entry.kind === 'directory') addChildren(entry.path, key, depth + 1, ignored, [])
     }
@@ -153,4 +157,51 @@ export function pathOf(row: Row): string | null {
   if (row.type === 'worktree') return row.worktree.path
   if (row.type === 'entry') return row.entry.path
   return null
+}
+
+/** The names from `folder` down to `path`, or null when `path` isn't below `folder`. */
+function namesBelow(folder: string, path: string): string[] | null {
+  const separator = separatorOf(folder)
+  const prefix = folder.endsWith(separator) ? folder : folder + separator
+  return path.startsWith(prefix) ? path.slice(prefix.length).split(separator).filter(Boolean) : null
+}
+
+/**
+ * Where a file shows in the tree: the folders to expand down to it and the key its row will have.
+ * Under the deepest folder that holds it, so a worktree inside its project's folder wins; null when
+ * no folder of the tree holds it.
+ */
+export function locateInTree(
+  roots: readonly { path: string; worktrees: readonly string[] }[],
+  path: string
+): { folders: string[]; key: string } | null {
+  type Place = { folder: string; key: string; expand: string[]; names: string[] }
+  const places = roots.flatMap((root): Place[] => {
+    const inRoot = namesBelow(root.path, path)
+    const own = inRoot
+      ? [{ folder: root.path, key: root.path, expand: [root.path], names: inRoot }]
+      : []
+    return [
+      ...own,
+      ...root.worktrees.flatMap((worktree): Place[] => {
+        const names = namesBelow(worktree, path)
+        if (!names) return []
+        const key = worktreeKey(root.path, worktree)
+        return [{ folder: worktree, key, expand: [root.path, worktree], names }]
+      })
+    ]
+  })
+  const [place] = places.toSorted((a, b) => a.names.length - b.names.length)
+  if (!place) return null
+  const separator = separatorOf(place.folder)
+  const folders = [...place.expand]
+  let folder = place.folder
+  let key = place.key
+  for (const [index, name] of place.names.entries()) {
+    key = entryKey(key, name)
+    if (index === place.names.length - 1) break
+    folder = folder.endsWith(separator) ? folder + name : folder + separator + name
+    folders.push(folder)
+  }
+  return { folders, key }
 }

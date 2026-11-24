@@ -33,10 +33,10 @@ export function keybindingsTemplate(platform: string): string {
     if (binding.args !== undefined) entry['args'] = binding.args
     return [entryLine(entry, binding.action)]
   })
-  const shell = shellActions(platform).flatMap(({ id, label, key }) =>
+  const shell = shellActions(platform).map(({ id, label, key }) =>
     key === null
-      ? []
-      : [entryLine({ key: acceleratorKeyString(key, platform), command: id }, label)]
+      ? `  // ${id} (${label}) has no default key: add an entry to give it one.`
+      : entryLine({ key: acceleratorKeyString(key, platform), command: id }, label)
   )
   return [
     '// Hatfield 360 keybindings. Entries here apply on top of the defaults, later ones winning.',

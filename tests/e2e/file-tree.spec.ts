@@ -13,6 +13,7 @@ import {
 } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { DirectoryListing } from '../../src/shared/file-tree-api'
+import { lines, openFile, tab } from './editor-page'
 import { makeTempDir, requireFolderPermissions, saveScreenshot, withApp } from './launch-app'
 import { CLIPBOARD_TAG, keepUserClipboard } from './user-clipboard'
 import { seedWorkspace } from './workspace-seed'
@@ -511,6 +512,85 @@ test('the renderer can list only inside the workspace folders', async () => {
         await contextMenu(page, item(page, 'root'), 'Remove from Workspace')
         await expect(tree(page)).toHaveCount(0)
         expect(await list(root)).toMatchObject({ status: 'error' })
+      },
+      { userDataDir: userData }
+    )
+  } finally {
+    await cleanUserData()
+    await cleanProjects()
+  }
+})
+
+const select = (page: Page) => page.getByRole('button', { name: 'Select Opened File' })
+/** The file's row is selected, focused and on screen. */
+const revealed = async (page: Page, name: string) => {
+  await expect(item(page, name)).toHaveAttribute('aria-selected', 'true')
+  await expect(item(page, name)).toBeFocused()
+  await expect(item(page, name)).toBeInViewport()
+}
+
+test('Select Opened File reveals the active tab in the tree, from the button or a bound key', async () => {
+  const [projects, cleanProjects] = await makeProjectsDir()
+  const app = makeRepo(projects, 'app')
+  await writeFile(join(app, '.gitignore'), 'dist/\n')
+  await mkdir(join(app, 'src', 'deep'), { recursive: true })
+  await mkdir(join(app, 'dist'))
+  await writeFile(join(app, 'src', 'deep', 'a.ts'), 'export const a = 1\n')
+  await writeFile(join(app, 'dist', 'out.js'), '')
+  // A linked worktree outside the project's folder, shown under the project.
+  const feature = join(projects, 'app-feature')
+  git(app, 'worktree', 'add', '-q', '-b', 'feature', feature)
+  await mkdir(join(feature, 'lib'))
+  await writeFile(join(feature, 'lib', 'b.ts'), '')
+  const [userData, cleanUserData] = await seedWorkspace([{ path: app, kind: 'project' }])
+  const key = process.platform === 'darwin' ? 'cmd+alt+shift+l' : 'ctrl+alt+shift+l'
+  await writeFile(
+    join(userData, 'keybindings.json'),
+    JSON.stringify([{ key, command: 'hatfield.files.selectOpenedFile' }])
+  )
+  try {
+    await withApp(
+      async (_app, page) => {
+        await showView(page, 'Files')
+        await expect(select(page)).toBeDisabled()
+
+        await openFile(page, 'app main', 'src', 'deep', 'a.ts')
+        await expect(tab(page, 'a.ts')).toHaveAttribute('aria-selected', 'true')
+        await page.getByRole('button', { name: 'Collapse All' }).click()
+        await expect(item(page, 'src')).toHaveCount(0)
+        await expect(select(page)).toBeEnabled()
+        await select(page).click()
+        await revealed(page, 'a.ts')
+        await saveScreenshot(page, 'files-select-opened-file')
+
+        // The bound key works from the editor too.
+        await page.getByRole('button', { name: 'Collapse All' }).click()
+        await lines(page).click()
+        await page.keyboard.press(
+          process.platform === 'darwin' ? 'Meta+Alt+Shift+KeyL' : 'Control+Alt+Shift+KeyL'
+        )
+        await revealed(page, 'a.ts')
+
+        await expect(item(page, 'feature worktree app-feature')).toBeVisible()
+        await openFile(page, 'feature worktree app-feature', 'lib', 'b.ts')
+        await expect(tab(page, 'b.ts')).toHaveAttribute('aria-selected', 'true')
+        await page.getByRole('button', { name: 'Collapse All' }).click()
+        await expect(select(page)).toBeEnabled()
+        await select(page).click()
+        await revealed(page, 'b.ts')
+
+        // A file Hide Ignored Files hides is shown again.
+        await openFile(page, 'dist', 'out.js')
+        await expect(tab(page, 'out.js')).toHaveAttribute('aria-selected', 'true')
+        await page.getByRole('button', { name: 'Collapse All' }).click()
+        await page.getByRole('button', { name: 'Hide Ignored Files' }).click()
+        await expect(select(page)).toBeEnabled()
+        await select(page).click()
+        await revealed(page, 'out.js')
+        await expect(page.getByRole('button', { name: 'Hide Ignored Files' })).toHaveAttribute(
+          'aria-pressed',
+          'false'
+        )
       },
       { userDataDir: userData }
     )

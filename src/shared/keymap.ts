@@ -490,7 +490,8 @@ export const APP_COMMANDS = [
   'next-editor-tab',
   'previous-editor-tab',
   'copy-absolute-path',
-  'copy-relative-path'
+  'copy-relative-path',
+  'select-opened-file'
 ] as const
 export type AppCommand = (typeof APP_COMMANDS)[number]
 
@@ -542,6 +543,13 @@ const APP_KEYMAP: Record<AppCommand, ShellAction> = {
     label: 'Copy Relative Path',
     mac: 'Command+Alt+Shift+C',
     other: 'Ctrl+Alt+Shift+C'
+  },
+  // JetBrains' Project view button has no key of its own.
+  'select-opened-file': {
+    id: 'hatfield.files.selectOpenedFile',
+    label: 'Select Opened File',
+    mac: null,
+    other: null
   }
 }
 
