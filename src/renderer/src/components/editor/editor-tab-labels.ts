@@ -1,7 +1,7 @@
 /** Windows paths from main use backslashes, the others slashes. */
 const segments = (path: string): string[] => path.split(/[\\/]/).filter(Boolean)
 
-const separatorOf = (path: string): string => (path.includes('\\') ? '\\' : '/')
+export const separatorOf = (path: string): string => (path.includes('\\') ? '\\' : '/')
 
 export const fileName = (path: string): string => segments(path).at(-1) ?? path
 

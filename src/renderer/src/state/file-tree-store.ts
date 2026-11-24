@@ -1,7 +1,10 @@
 import { create } from 'zustand'
+import { separatorOf } from '@/components/editor/editor-tab-labels'
+import { locateInTree } from '@/components/files/file-tree-rows'
 import { mainErrorMessage } from '@/lib/main-error-message'
+import { useEditorTabStore } from '@/state/editor-tab-store'
 import { notify } from '@/state/notification-store'
-import type { DirectoryListing, PathForm } from '../../../shared/file-tree-api'
+import type { DirectoryEntry, DirectoryListing, PathForm } from '../../../shared/file-tree-api'
 import type { WorkspaceFolderKind } from '../../../shared/workspace-api'
 
 /** A top-level folder of the tree, with the linked worktrees shown under it (projects only). */
@@ -26,6 +29,11 @@ type FileTreeState = {
   restore: (expanded: string[], hideIgnored: boolean) => void
   copyPath: (path: string, form: PathForm) => void
   reveal: (path: string) => void
+  /** The file Select Opened File is revealing, until the tree shows its row (by `key`). */
+  locating: { path: string; key: string } | null
+  /** Expands the tree down to the active editor tab's file, which the Files panel then selects. */
+  selectOpenedFile: () => void
+  locateDone: () => void
   /** Follows changes main reports in watched folders; returns the unsubscribe. */
   connect: () => () => void
 }
@@ -66,6 +74,18 @@ export const useFileTreeStore = create<FileTreeState>((set, get) => {
       get().roots.map((root) => root.path)
     )
 
+  /** Hide Ignored Files stops hiding when it hides the file being located or a folder above it. */
+  const showLocated = (): void => {
+    const { locating, hideIgnored, listings } = get()
+    if (!locating || !hideIgnored) return
+    const above = (entry: DirectoryEntry): boolean =>
+      locating.path === entry.path || locating.path.startsWith(entry.path + separatorOf(entry.path))
+    const hidden = Object.values(listings).some(
+      (listing) => listing.status === 'ok' && listing.entries.some((e) => e.ignored && above(e))
+    )
+    if (hidden) set({ hideIgnored: false })
+  }
+
   /** Main watches exactly the folders the tree shows open. */
   const syncWatches = (): void => {
     const open = shownOpenFolders()
@@ -91,6 +111,7 @@ export const useFileTreeStore = create<FileTreeState>((set, get) => {
         if (requests.get(path) !== request) return
         requests.delete(path)
         set((state) => ({ listings: { ...state.listings, [path]: listing } }))
+        showLocated()
         // A restored tree has expanded subfolders that were never listed; they open as they are reached.
         if (listing.status === 'ok') {
           for (const entry of listing.entries) {
@@ -164,6 +185,16 @@ export const useFileTreeStore = create<FileTreeState>((set, get) => {
     reveal: (path) => {
       window.desktop.revealPath(path).catch(failed)
     },
+    locating: null,
+    selectOpenedFile: () => {
+      const path = useEditorTabStore.getState().activePath
+      const located = path === null ? null : locateInTree(get().roots, path)
+      if (path === null || located === null) return
+      set({ locating: { path, key: located.key } })
+      get().expand(located.folders)
+      showLocated()
+    },
+    locateDone: () => set({ locating: null }),
     connect: () =>
       window.desktop.subscribeDirectoryChanges((paths) => {
         const open = new Set(shownOpenFolders())

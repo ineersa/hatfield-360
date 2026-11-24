@@ -4,6 +4,7 @@ import {
   CircleAlert,
   Copy,
   CopySlash,
+  Crosshair,
   Eye,
   EyeOff,
   FolderInput,
@@ -45,6 +46,7 @@ import { useWorkspaceStore } from '@/state/workspace-store'
 import { useWorktreeStore } from '@/state/worktree-store'
 import {
   folderOf,
+  locateInTree,
   nameOf,
   pathOf,
   type Row,
@@ -465,12 +467,14 @@ function StatusRow({
 function HeaderButton({
   label,
   pressed,
+  disabled = false,
   onClick,
   tip,
   children
 }: {
   label: string
   pressed?: boolean
+  disabled?: boolean
   onClick: () => void
   tip?: ReactNode
   children: ReactNode
@@ -482,10 +486,12 @@ function HeaderButton({
           type="button"
           aria-label={label}
           aria-pressed={pressed}
+          disabled={disabled}
           onClick={onClick}
           className={cn(
             'flex size-icon-button items-center justify-center rounded-button text-muted-foreground hover:bg-hover hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none',
-            pressed && 'bg-selection-inactive text-foreground'
+            pressed && 'bg-selection-inactive text-foreground',
+            disabled && 'pointer-events-none opacity-40'
           )}
         >
           {children}
@@ -514,6 +520,14 @@ export function FilesPanel(): React.JSX.Element {
   const reload = useFileTreeStore((state) => state.reload)
   const copyPath = useFileTreeStore((state) => state.copyPath)
   const [selected, setSelected] = useState<string | null>(null)
+  const locating = useFileTreeStore((state) => state.locating)
+  const selectOpenedFile = useFileTreeStore((state) => state.selectOpenedFile)
+  const locateDone = useFileTreeStore((state) => state.locateDone)
+  const activePath = useEditorTabStore((state) => state.activePath)
+  const selectOpenedFileKey = appShortcutLabel(
+    useKeymapStore((state) => state.shell),
+    'select-opened-file'
+  )
   const treeRef = useRef<HTMLDivElement>(null)
   const typeAhead = useRef({ text: '', at: 0 })
 
@@ -536,6 +550,28 @@ export function FilesPanel(): React.JSX.Element {
   useEffect(() => () => setRoots([]), [setRoots])
 
   const { rows, hiddenIgnored } = treeRows(roots, expanded, listings, hideIgnored)
+  const canSelectOpenedFile = activePath !== null && locateInTree(watchedRoots, activePath) !== null
+  const locatedShown = locating !== null && rows.some((row) => row.key === locating.key)
+
+  // Select Opened File: once the file's row shows, focusing it selects it and scrolls it into view.
+  useEffect(() => {
+    if (!locatedShown || !locating) return
+    const items = treeRef.current?.querySelectorAll<HTMLElement>('[data-tree-key]') ?? []
+    for (const item of items) if (item.dataset.treeKey === locating.key) item.focus()
+    locateDone()
+  }, [locatedShown, locating, locateDone])
+
+  // Select Opened File on a key bound in keybindings.json, from the editor as from the tree.
+  useEffect(() => {
+    const onKeyDown = (event: globalThis.KeyboardEvent): void => {
+      if (event.defaultPrevented) return
+      if (appCommandForKey(event, useKeymapStore.getState().shell) !== 'select-opened-file') return
+      event.preventDefault()
+      selectOpenedFile()
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [selectOpenedFile])
   const navigable = rows.filter((row) => row.type !== 'loading' && row.type !== 'empty')
   const focusable = navigable.some((row) => row.key === selected)
     ? selected
@@ -691,6 +727,21 @@ export function FilesPanel(): React.JSX.Element {
     <>
       <div className="flex h-panel-header shrink-0 items-center gap-1 pt-1 pr-2 pl-4">
         <h2 className="type-panel-title flex-1 truncate">Files</h2>
+        <HeaderButton
+          label="Select Opened File"
+          disabled={!canSelectOpenedFile}
+          onClick={selectOpenedFile}
+          tip={
+            <span className="flex flex-col">
+              <span>Select Opened File</span>
+              {selectOpenedFileKey ? (
+                <span className="text-tooltip-muted-foreground">{selectOpenedFileKey}</span>
+              ) : null}
+            </span>
+          }
+        >
+          <Crosshair className="size-4.5" strokeWidth={1.75} aria-hidden />
+        </HeaderButton>
         <HeaderButton label="Collapse All" onClick={collapseAll}>
           <ChevronsDownUp className="size-4.5" strokeWidth={1.75} aria-hidden />
         </HeaderButton>

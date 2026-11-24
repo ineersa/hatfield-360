@@ -14,6 +14,9 @@ describe('keybindingsTemplate', () => {
       '  // { "key": "ctrl+shift+d", "command": "hatfield.terminal.splitRight" }, // Split Right'
     )
     expect(text).toContain('"command": "hatfield.editor.closeTab" }, // Close Tab')
+    expect(text).toContain(
+      '  // hatfield.files.selectOpenedFile (Select Opened File) has no default key: add an entry to give it one.'
+    )
     const commented = text.split('\n').filter((line) => line.startsWith('  // { '))
     const keyed = EDITOR_KEYMAP.filter((binding) => editorShortcut(binding, 'linux') !== null)
     const shell = shellActions('linux').filter((action) => action.key !== null)
