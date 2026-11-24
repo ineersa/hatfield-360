@@ -1,19 +1,11 @@
-import { discardTerminalOutput } from '@/lib/terminal-output-router'
-import { createPortal } from 'react-dom'
-import { RestoreFailurePane } from './RestoreFailurePane'
-import {
-  checkpointTab,
-  clearRestore,
-  setRestore,
-  useTerminalWorkspace
-} from '@/state/terminal-workspace'
-import type { PaneLayout, SavedConversation } from '../../../../shared/terminal-workspace-api'
+import { checkpointTab, currentTerminalGeneration } from '@/state/terminal-workspace'
+import type { PaneLeaf } from '../../../../shared/terminal-workspace-api'
 import type { ManagedPane } from '@/lib/pane-manager/pane-manager-types'
 import { notify } from '@/state/notification-store'
 import { mainErrorMessage } from '@/lib/main-error-message'
 import type { AgentLaunch } from '../../../../shared/agent-api'
 import type { ITerminalOptions } from '@xterm/xterm'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef } from 'react'
 import { PaneManager } from '@/lib/pane-manager/pane-manager'
 import { terminalShortcutLabel } from '@/lib/keymap-match'
 import { useKeymapStore } from '@/state/keymap-store'
@@ -47,9 +39,6 @@ export function TerminalTabBody({
   /** Active and on screen: no other page (Settings, another view) covers the terminals. */
   shown: boolean
 }): React.JSX.Element {
-  const [recovery, setRecovery] = useState<
-    { pane: ManagedPane; retry: (() => void) | null; close: () => void }[]
-  >([])
   const root = useRef<HTMLDivElement>(null)
   const isShown = useRef(shown)
   const manager = useRef<PaneManager | null>(null)
@@ -64,22 +53,19 @@ export function TerminalTabBody({
     if (!element) return undefined
     const shells = new Map<number, PaneShell>()
     const closeTab = useTerminalStore.getState().closeTab
-    const publishActivePane = () => {
-      const activeDataset = panes.getActivePane()?.container.dataset
-      useTerminalStore
-        .getState()
-        .setActivePane(tab.id, activeDataset?.terminalId ?? activeDataset?.layoutId ?? null)
-      checkpoint()
-    }
+    const owner = tab.generation ?? currentTerminalGeneration()
+    const leaves = new Map<string, PaneLeaf>()
     const checkpoint = () => {
-      const layout = panes.layout((leaf) => ({
-        kind: 'pane',
-        id: leaf.dataset.layoutId ?? crypto.randomUUID(),
-        conversation: leaf.dataset.conversation ?? null,
-        ...(leaf.dataset.terminalId ? { terminalId: leaf.dataset.terminalId } : {})
-      }))
+      const layout = panes.layout((container) => {
+        const id = container.dataset.layoutId ?? crypto.randomUUID()
+        const leaf = leaves.get(id) ?? { kind: 'pane', id, cwd: tab.cwd }
+        return {
+          ...leaf,
+          ...(container.dataset.terminalId ? { terminalId: container.dataset.terminalId } : {})
+        }
+      })
       if (layout)
-        checkpointTab({
+        checkpointTab(owner, {
           id: tab.id,
           label: tab.label,
           cwd: tab.cwd,
@@ -87,100 +73,51 @@ export function TerminalTabBody({
           layout
         })
     }
-    const recoveryIds = new Map<number, string>()
-    const mountRecovery = (pane: ManagedPane, id: string) => {
-      const saved = useTerminalWorkspace.getState().history.find((item) => item.id === id)
-      const paneKey = pane.container.dataset.layoutId ?? id
-      recoveryIds.set(pane.id, paneKey)
-      const retry = saved
-        ? () => {
-            shells.get(pane.id)?.dispose()
-            setRestore(paneKey, saved, null)
-            let cancelled = false
-            const attempt = crypto.randomUUID()
-            const shell = startPaneShell(
-              pane,
-              saved.cwd,
-              () => panes.closePane(pane.id),
-              undefined,
-              () => {
-                clearRestore(paneKey)
-                setRecovery((current) => current.filter((item) => item.pane.id !== pane.id))
-                publishActivePane()
-              },
-              async (cols, rows) => {
-                try {
-                  const result = await window.desktop.resumeTerminalConversation(
-                    id,
-                    attempt,
-                    cols,
-                    rows
-                  )
-                  if ('terminal' in result) return result.terminal
-                  if (result.discardedTerminalId) discardTerminalOutput(result.discardedTerminalId)
-                  if (!cancelled) setRestore(paneKey, saved, result.failure)
-                } catch (error) {
-                  if (!cancelled)
-                    setRestore(paneKey, saved, {
-                      reason: 'launch failed',
-                      detail: mainErrorMessage(error),
-                      settings: false
-                    })
-                }
-                return null
-              }
-            )
-            shells.set(pane.id, {
-              dispose: () => {
-                cancelled = true
-                void window.desktop.cancelTerminalResume(attempt).catch(() => undefined)
-                shell.dispose()
-              }
-            })
-          }
-        : null
-      setRecovery((current) => [
-        ...current.filter((item) => item.pane.id !== pane.id),
-        { pane, retry, close: () => panes.closePane(pane.id) }
-      ])
-      retry?.()
+    const publishActivePane = () => {
+      useTerminalStore
+        .getState()
+        .setActivePane(tab.id, panes.getActivePane()?.container.dataset.terminalId ?? null)
+      checkpoint()
     }
-    let nextResume: SavedConversation | undefined
-    const createPane = (pane: ManagedPane, leaf?: Extract<PaneLayout, { kind: 'pane' }>) => {
-      const conversation = leaf?.conversation ?? nextResume?.id
-      nextResume = undefined
-      pane.container.dataset.layoutId = leaf?.id ?? crypto.randomUUID()
+    let nextLaunch = tab.agent
+    const create = (pane: ManagedPane, saved?: PaneLeaf) => {
+      const leaf = saved ?? { kind: 'pane', id: crypto.randomUUID(), cwd: tab.cwd }
+      pane.container.dataset.layoutId = leaf.id
+      leaves.set(leaf.id, leaf)
+      const agent: AgentLaunch | undefined =
+        saved?.agent && owner !== undefined
+          ? {
+              provider: saved.agent.provider,
+              target: { restore: { generation: owner, paneId: leaf.id } }
+            }
+          : nextLaunch
+      nextLaunch = undefined
       bindClipboardKeys(pane.terminal)
-      if (conversation) {
-        pane.container.dataset.conversation = conversation
-        mountRecovery(pane, conversation)
-      } else {
-        const agent = nextLaunch
-        nextLaunch = undefined
-        shells.set(
-          pane.id,
-          startPaneShell(pane, tab.cwd, () => panes.closePane(pane.id), agent, publishActivePane)
+      shells.set(
+        pane.id,
+        startPaneShell(
+          pane,
+          leaf.cwd,
+          () => panes.closePane(pane.id),
+          agent,
+          publishActivePane,
+          Boolean(saved)
         )
-      }
-      publishActivePane()
+      )
+      checkpoint()
     }
-    let nextLaunch = tab.saved ? undefined : tab.agent
     const panes = new PaneManager(
       element,
       {
         terminalOptions: currentTerminalOptions,
         gpuAcceleration: () => useSettingsStore.getState().values['terminal.gpuAcceleration'],
         onActivePaneChange: publishActivePane,
-        onPaneCreated: createPane,
+        onPaneCreated: create,
         onPaneClosed: (paneId) => {
           shells.get(paneId)?.dispose()
           shells.delete(paneId)
-          const recoveryId = recoveryIds.get(paneId)
-          if (recoveryId) clearRestore(recoveryId)
-          recoveryIds.delete(paneId)
-          setRecovery((current) => current.filter((item) => item.pane.id !== paneId))
           if (panes.getPanes().length === 0) closeTab(tab.id)
-          else publishActivePane()
+          else checkpoint()
         },
         closePaneTitle: `Close Pane (${terminalShortcutLabel(useKeymapStore.getState().shell, 'close-pane')})`,
         onLinkClick: (event, url) => {
@@ -198,17 +135,10 @@ export function TerminalTabBody({
       checkpoint
     )
     manager.current = panes
-    if (tab.saved) panes.restore(tab.saved.layout, tab.saved.activePane, createPane)
+    if (tab.saved) panes.restore(tab.saved.layout, tab.saved.activePane, create)
     else panes.createInitialPane()
     const findTerminal = (id: string) =>
-      panes
-        .getPanes()
-        .find(
-          ({ container: { dataset } }) =>
-            dataset.terminalId === id ||
-            dataset.layoutId === id ||
-            (dataset.conversation === id && !dataset.terminalId)
-        )
+      panes.getPanes().find((item) => item.container.dataset.terminalId === id)
     terminalTabControllers.set(tab.id, {
       hasTerminal: (id) => findTerminal(id) !== undefined,
       run: (command) => {
@@ -232,16 +162,6 @@ export function TerminalTabBody({
         panes.setActivePane(pane.id, isShown.current)
         return true
       },
-      resumeSplit: (conversation) => {
-        const pane = panes.getActivePane()
-        if (!pane) return false
-        nextResume = conversation
-        try {
-          return panes.splitPane(pane.id, 'vertical') !== null
-        } finally {
-          nextResume = undefined
-        }
-      },
       launchSplit: (provider) => {
         const pane = panes.getActivePane()
         const sourceTerminalId = pane?.container.dataset.terminalId
@@ -253,21 +173,13 @@ export function TerminalTabBody({
           nextLaunch = undefined
         }
       },
-      focus: () => {
-        const pane = panes.getActivePane()
-        const action = pane?.container.querySelector<HTMLButtonElement>(
-          '[data-resume-action]:not(:disabled)'
-        )
-        if (action) action.focus()
-        else pane?.terminal.focus()
-      },
+      focus: () => panes.getActivePane()?.terminal.focus(),
       isShown: () => isShown.current
     })
     return () => {
       terminalTabControllers.delete(tab.id)
       for (const shell of shells.values()) shell.dispose()
       shells.clear()
-      for (const id of recoveryIds.values()) clearRestore(id)
       panes.destroy()
       manager.current = null
     }
@@ -295,38 +207,25 @@ export function TerminalTabBody({
   }, [shown, tab.id])
 
   return (
-    <>
-      <TerminalContextMenu
-        activeTerminal={() => manager.current?.getActivePane()?.terminal ?? null}
-        launchSplit={(provider) => terminalTabControllers.get(tab.id)?.launchSplit(provider)}
-        canLaunch={() => {
-          const pane = manager.current?.getActivePane()
-          return Boolean(pane?.container.dataset.terminalId && !pane.container.dataset.exited)
-        }}
-        runCommand={(command) => terminalTabControllers.get(tab.id)?.run(command)}
-        rearrangePanes={() => manager.current?.startRearrange()}
-        canRearrange={() => (manager.current?.getPanes().length ?? 0) > 1}
-      >
-        <div
-          ref={root}
-          role="tabpanel"
-          aria-label={tab.title}
-          data-testid="terminal-tab-panel"
-          className="min-h-0 flex-1 rounded-b-island"
-          hidden={!active}
-        />
-      </TerminalContextMenu>
-      {recovery.map(({ pane, retry, close }) =>
-        createPortal(
-          <RestoreFailurePane
-            pane={pane.container.dataset.layoutId ?? ''}
-            retry={retry}
-            close={close}
-          />,
-          pane.container,
-          String(pane.id)
-        )
-      )}
-    </>
+    <TerminalContextMenu
+      activeTerminal={() => manager.current?.getActivePane()?.terminal ?? null}
+      launchSplit={(provider) => terminalTabControllers.get(tab.id)?.launchSplit(provider)}
+      canLaunch={() => {
+        const pane = manager.current?.getActivePane()
+        return Boolean(pane?.container.dataset.terminalId && !pane.container.dataset.exited)
+      }}
+      runCommand={(command) => terminalTabControllers.get(tab.id)?.run(command)}
+      rearrangePanes={() => manager.current?.startRearrange()}
+      canRearrange={() => (manager.current?.getPanes().length ?? 0) > 1}
+    >
+      <div
+        ref={root}
+        role="tabpanel"
+        aria-label={tab.title}
+        data-testid="terminal-tab-panel"
+        className="min-h-0 flex-1 rounded-b-island"
+        hidden={!active}
+      />
+    </TerminalContextMenu>
   )
 }

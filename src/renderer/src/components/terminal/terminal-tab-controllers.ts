@@ -1,4 +1,3 @@
-import type { SavedConversation } from '../../../../shared/terminal-workspace-api'
 import { useShellLayoutStore } from '@/state/shell-layout-store'
 import { useTerminalStore } from '@/state/terminal-store'
 import type { AgentProvider } from '../../../../shared/agent-api'
@@ -10,7 +9,6 @@ export type TerminalTabController = {
   hasTerminal: (id: string) => boolean
   closeTerminal: (id: string) => boolean
   selectTerminal: (id: string) => boolean
-  resumeSplit: (conversation: SavedConversation) => boolean
   launchSplit: (provider: AgentProvider) => void
   focus: () => void
   /** Whether the tab's panes are on screen (its tab is active and no other page covers them). */

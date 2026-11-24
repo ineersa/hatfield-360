@@ -1,7 +1,6 @@
-import { terminalWorkspaceStore } from './terminal-workspace/terminal-workspace-store'
+import { workspaceStore } from './workspace/workspace-store'
 import { registerLanguageServerIpc } from './ipc/language-server-ipc'
 import { languageServerSessions } from './language-servers/language-server-sessions'
-import { registerTerminalWorkspaceIpc } from './ipc/terminal-workspace-ipc'
 import { registerAgentIpc } from './ipc/agent-ipc'
 import { app, BrowserWindow } from 'electron'
 import { agentStatusServer } from './agent-status/status-server'
@@ -47,15 +46,12 @@ void app.whenReady().then(async () => {
   registerShellLayoutIpc()
   registerTerminalIpc()
   registerWebLinkIpc()
-  registerTerminalWorkspaceIpc(registerAgentIpc())
+  registerAgentIpc()
   registerLanguageServerIpc()
   installAppMenu()
   followAppTheme()
-  const [, theme] = await Promise.all([
-    windowStateStore.load(),
-    chosenAppTheme(),
-    terminalWorkspaceStore.view()
-  ])
+  // The window opens where it was left and in the chosen theme, so both are read first.
+  const [, theme] = await Promise.all([windowStateStore.load(), chosenAppTheme()])
   createMainWindow(theme)
 
   app.on('activate', () => {
@@ -76,9 +72,7 @@ app.on('before-quit', (event) => {
   // Unsaved edits are saved or discarded first; a cancelled quit leaves everything running.
   if (quitWaitsForUnsavedChanges()) return
   quitting = true
-  const savedTerminals = terminalWorkspaceStore.freeze()
   void Promise.allSettled([
-    savedTerminals,
     agentStatusServer.stop().catch((error: unknown) => {
       console.error('Stopping agent status server failed:', error)
     }),
@@ -88,6 +82,7 @@ app.on('before-quit', (event) => {
     filesSessionStore
       .flush()
       .catch((error: unknown) => console.error('Saving Files sessions failed:', error)),
+    workspaceStore.flush(),
     terminalSessions.killAll(),
     languageServerSessions.stopAll()
   ]).finally(() => {

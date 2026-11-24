@@ -1,4 +1,3 @@
-import { terminalWorkspaceStore } from '../terminal-workspace/terminal-workspace-store'
 import { BrowserWindow } from 'electron'
 import { join } from 'node:path'
 import appIcon from '../../../resources/icon.png?asset'
@@ -10,15 +9,8 @@ import { isBackgroundLaunch } from './window-launch-mode'
 import { appThemeFrame } from './window-theme'
 import type { AppThemeId } from '../../shared/settings-api'
 
-const freezeWorkspace = () => {
-  void terminalWorkspaceStore
-    .freeze()
-    .catch((error: unknown) => console.error('Saving terminal workspace failed:', error))
-}
-
 /** Opens the app window in the given app theme, so it doesn't flash another theme's colours. */
 export function createMainWindow(theme: AppThemeId): BrowserWindow {
-  terminalWorkspaceStore.thaw()
   const background = isBackgroundLaunch(process.env)
   const { bounds, maximized } = windowStateStore.initialPlacement()
   const window = new BrowserWindow({
@@ -53,14 +45,6 @@ export function createMainWindow(theme: AppThemeId): BrowserWindow {
   }
   windowStateStore.track(window, { background, requested: bounds })
   guardUnsavedChanges(window)
-  window.on('close', (event) => {
-    if (!event.defaultPrevented) freezeWorkspace()
-  })
-  window.webContents.on('render-process-gone', freezeWorkspace)
-  window.webContents.on('did-start-navigation', (details) => {
-    if (details.isMainFrame && !details.isSameDocument) freezeWorkspace()
-  })
-  window.webContents.on('dom-ready', () => terminalWorkspaceStore.thaw())
 
   // The window only ever shows the app. Opening external links needs an explicit, validated IPC capability.
   window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))

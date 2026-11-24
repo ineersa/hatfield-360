@@ -30,8 +30,6 @@ import {
 } from '@/components/ui/tooltip'
 import { cn } from '@/lib/class-names'
 import { Fragment, useId, useState } from 'react'
-import { restoredSessionRow, useTerminalWorkspace } from '@/state/terminal-workspace'
-import { RecentSessions, useRecentSessions } from './RecentSessions'
 import { OpenTerminalMenuContent } from '@/components/terminal/OpenTerminalMenuContent'
 import {
   OpenFolderEmptyState,
@@ -136,14 +134,11 @@ function LinkedWorktrees({
 
 function ProjectContents({
   folder,
-  visible,
-  showRecent
+  visible
 }: {
   folder: WorkspaceFolder
   visible: AgentSession[]
-  showRecent: boolean
 }): React.JSX.Element | null {
-  const recent = useRecentSessions(folder)
   const project = useWorktreeStore((state) => state.projects[folder.path])
   const collapsed = useWorktreeStore((state) => state.collapsed[folder.path] === true)
   if (collapsed) return null
@@ -165,7 +160,6 @@ function ProjectContents({
           </p>
         </li>
       )}
-      {showRecent && <RecentSessions folder={folder} sessions={recent} />}
       {linked.length > 0 && <LinkedWorktrees folder={folder} worktrees={linked} />}
     </>
   )
@@ -268,16 +262,7 @@ export function WorkspacePanel(): React.JSX.Element {
 
   const allFolders = workspace?.folders ?? []
   const folders = allFolders.filter((folder) => folder.kind === 'project')
-  const live = useAgentSessions()
-  const error = live.error
-  const restore = useTerminalWorkspace((state) => state.restore)
-  const history = useTerminalWorkspace((state) => state.history)
-  const sessions = [
-    ...live.sessions,
-    ...Object.entries(restore).flatMap(([pane, { session }]) =>
-      live.sessions.some((item) => item.id === session.id) ? [] : restoredSessionRow(pane, session)
-    )
-  ]
+  const { sessions, error } = useAgentSessions()
   const [project, setProject] = useState('')
   const [filter, setFilter] = useState<SessionFilter | null>(null)
   const scope = folders.some((folder) => folder.path === project) ? project : ''
@@ -372,15 +357,11 @@ export function WorkspacePanel(): React.JSX.Element {
                 <Fragment key={folder.path}>
                   <ProjectRow
                     folder={folder}
-                    hasSessions={
-                      sessions.some((session) => session.project === folder.path) ||
-                      history.some((item) => item.project === folder.path && item.closedAt !== null)
-                    }
+                    hasSessions={sessions.some((session) => session.project === folder.path)}
                   />
                   {folder.missing ? null : (
                     <ProjectContents
                       folder={folder}
-                      showRecent={filter === null}
                       visible={visible.filter((session) => session.project === folder.path)}
                     />
                   )}

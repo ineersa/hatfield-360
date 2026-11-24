@@ -36,8 +36,6 @@ input are required. Search results show memory provenance and distinguish openin
 a running terminal from resuming a historical session. Unmapped sources must not
 pretend to be resumable.
 
-Each project also has a collapsible Recent list for the last 14 days. Closed conversations are resumed explicitly, and removing an entry does not delete provider data.
-
 ## Explicit launches and identity
 
 For v1, track only launches requested through the app. Project/worktree and
@@ -55,13 +53,7 @@ Existing terminal actions must not type into or terminate an arbitrary editor,
 busy shell or agent. Safe new-pane placement and known launch directories take
 precedence over pretending to know shell idleness or a directory changed by `cd`.
 
-Persist conversation/project/worktree and placement references for restoration,
-not active PIDs, saved commands or reusable launch credentials. Automatically
-resume open conversations through the provider's current Settings command and
-supported resume ID, with fresh launch credentials. Closed history is resumed
-only explicitly. Ordinary terminals reopen as fresh shells, without command replay.
-Previously running processes must not appear live merely because their records
-survived a restart; restored agents confirm their conversation identity first.
+The current workspace file saves terminal tabs, split layout, selection and pane-to-conversation mappings as they change. On reopen, ordinary panes get fresh shells. Agent panes use the provider's current Settings command with the saved conversation ID. A failed restore is reported without starting a substitute conversation.
 
 ## Honest information and limits
 
@@ -89,7 +81,7 @@ manually typed launch detection are outside v1.
 - [#25](https://github.com/ineersa/hatfield-360/issues/25): real Claude/Hatfield
   protocol producers and provider-specific lifecycle/identity validation.
 - [#37](https://github.com/ineersa/hatfield-360/issues/37): durable history,
-  automatic open-session/layout restoration and explicit history resume.
+  workspace autosave and automatic restart restoration.
 - [#38](https://github.com/ineersa/hatfield-360/issues/38): real Librarian search
   and source-session navigation/resume.
 

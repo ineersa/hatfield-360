@@ -74,7 +74,6 @@ class TerminalSessions {
   }
 
   private readonly sessions = new Map<string, Session>()
-  private readonly ownerGenerations = new WeakMap<WebContents, number>()
   private readonly trackedOwners = new WeakSet<WebContents>()
   /** Endings still waiting on lingering jobs; kept after their shell leaves `sessions`. */
   private readonly endings = new Set<Promise<void>>()
@@ -82,7 +81,7 @@ class TerminalSessions {
 
   directory(owner: WebContents, id: string) {
     const session = this.owned(owner, id)
-    return session && !session.detached ? { cwd: session.cwd, project: session.project } : null
+    return session ? { cwd: session.cwd, project: session.project } : null
   }
 
   manualPlacement(id: string) {
@@ -101,13 +100,10 @@ class TerminalSessions {
       executable: string
       args: string[]
       env: Record<string, string>
-      signal?: AbortSignal
       onClosing: () => void
-      onExit: (exitCode: number) => void
+      onExit: () => void
     }
   ): Promise<TerminalSession> {
-    this.endWithOwner(owner)
-    const generation = this.ownerGenerations.get(owner)
     this.helperChecked ??= ensureSpawnHelperExecutable()
     await this.helperChecked
     const env = terminalEnvironment(process.env, {
@@ -128,12 +124,7 @@ class TerminalSessions {
     }
     const pty = (() => {
       try {
-        if (
-          owner.isDestroyed() ||
-          generation !== this.ownerGenerations.get(owner) ||
-          agent?.signal?.aborted
-        )
-          throw new Error('The terminal launch was cancelled.')
+        if (owner.isDestroyed()) throw new Error('The terminal window has closed.')
         return spawn(shell.file, shell.args, {
           name: 'xterm-256color',
           cols: request.cols,
@@ -174,12 +165,13 @@ class TerminalSessions {
       onClosing: agent?.onClosing
     }
     this.sessions.set(id, session)
+    this.endWithOwner(owner)
     pty.onData((data) => this.queueOutput(session, data))
     pty.onExit(({ exitCode, signal }) => {
       this.flushOutput(session)
       this.sessions.delete(id)
       closeBootstrap()
-      agent?.onExit(exitCode)
+      agent?.onExit()
       const exit: TerminalExit = { id, exitCode, signal: signal ?? null }
       if (!session.detached && !owner.isDestroyed()) owner.send(TERMINAL_CHANNELS.exit, exit)
     })
@@ -291,7 +283,6 @@ class TerminalSessions {
     if (this.trackedOwners.has(owner)) return
     this.trackedOwners.add(owner)
     const endOwned = () => {
-      this.ownerGenerations.set(owner, (this.ownerGenerations.get(owner) ?? 0) + 1)
       for (const session of this.sessions.values()) {
         if (session.owner !== owner) continue
         session.detached = true

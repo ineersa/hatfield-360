@@ -23,7 +23,7 @@ Every telemetry event needs `version: 1`, `kind`, `launchId`, `token`, `eventId`
 - `turn`: `null` or `{ "id": "...", "status": "working" }`; statuses are `working`, `completed`, `failed`, `cancelled`, `unknown`.
 - `attention`: `null` or `{ "id": "...", "reason": "permission" }`; reasons are `permission`, `question`, `external-input`.
 - `activeSubagents`, `backgroundScripts`: each `null` or an integer from 0 through 1024. Counts are best-effort aggregates from provider observations, not an authoritative process census. Report `0` when the provider tracker currently observes no active work of that kind. Use `null` when the signal is unsupported, unavailable, or cannot be reconstructed; missing hooks are not evidence of zero. Claude may track subagents by `agent_id` without parent links or unique execution IDs. The lack of those IDs alone does not require `null`.
-- `title`: optional provider-reported conversation title, up to 1024 Unicode scalar values, or `null`. Omission and `null` both clear the provider-reported title on any accepted snapshot. Claude can fall back to canonical local metadata for that exact conversation. A newer selection never inherits an older title. Displayed as plain text.
+- `title`: optional provider-reported conversation title, up to 1024 Unicode scalar values, or `null`. Omission and `null` both clear the title on any accepted snapshot. A newer selection never inherits an older title. Displayed as plain text.
 - `tool`: `null` or a name of up to 128 scalar values; never send inputs or results.
 
 ```jsonl

@@ -3,7 +3,10 @@ import type { TerminalSession } from './terminal-api'
 export const AGENT_PROVIDERS = { hatfield: 'Hatfield', claude: 'Claude' } as const
 export type AgentProvider = keyof typeof AGENT_PROVIDERS
 export type AgentProfile = { executable: string; args: string[] }
-type AgentTarget = { project: string; cwd: string } | { sourceTerminalId: string }
+type AgentTarget =
+  | { project: string; cwd: string }
+  | { sourceTerminalId: string }
+  | { restore: { generation: number; paneId: string } }
 export type AgentLaunch = { provider: AgentProvider; target: AgentTarget }
 export type AgentSession = {
   id: string

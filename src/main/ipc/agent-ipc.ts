@@ -1,4 +1,4 @@
-import { terminalWorkspaceStore } from '../terminal-workspace/terminal-workspace-store'
+import { basename } from 'node:path'
 import { BrowserWindow } from 'electron'
 import { AGENT_CHANNELS, type AgentNotification } from '../../shared/agent-api'
 import { isPlainObject } from '../../shared/plain-object'
@@ -11,15 +11,9 @@ import { workspaceStore } from '../workspace/workspace-store'
 import { existingDirectory } from './terminal-ipc'
 import { handleTrusted } from './trusted-ipc'
 
-export function registerAgentIpc() {
+export function registerAgentIpc(): void {
   const launch = trackAgentSessions(
-    (owner) => {
-      const snapshot = agentSnapshot(owner)
-      owner.send(AGENT_CHANNELS.changed, snapshot)
-      void terminalWorkspaceStore
-        .observe(owner, snapshot.sessions)
-        .catch((error: unknown) => console.error('Saving terminal workspace failed:', error))
-    },
+    (owner) => owner.send(AGENT_CHANNELS.changed, agentSnapshot(owner)),
     (owner, notice) => {
       const window = BrowserWindow.fromWebContents(owner)
       owner.send(AGENT_CHANNELS.notification, {
@@ -42,6 +36,53 @@ export function registerAgentIpc() {
     const folders = (await workspaceStore.view()).folders.filter((folder) => !folder.missing)
     let cwd: string
     let project: string | null
+    if (isPlainObject(target.restore)) {
+      const { generation, paneId } = target.restore
+      if (typeof generation !== 'number' || !isTerminalId(paneId))
+        throw new Error('Invalid saved pane.')
+      const pane = await workspaceStore.savedPane(generation, paneId)
+      const id = pane?.agent?.providerSessionId
+      if (
+        pane?.agent?.provider !== provider ||
+        !id ||
+        !(provider === 'hatfield'
+          ? /^\d+$/.test(id)
+          : /^[\da-f]{8}(?:-[\da-f]{4}){3}-[\da-f]{12}$/i.test(id))
+      )
+        throw new Error('The saved conversation ID is unavailable.')
+      if (!pane.cwd) throw new Error('The saved conversation folder is unavailable.')
+      const profile = (await settingsStore.view()).values[`agents.${provider}`]
+      const directClaudePrompt =
+        provider === 'claude' &&
+        basename(profile.executable) === 'claude' &&
+        !!profile.args[0] &&
+        !profile.args[0].startsWith('-')
+      if (
+        directClaudePrompt ||
+        profile.args.some((arg) =>
+          /^(?:--(?:resume|continue|fork-session|from-pr|session-id|prompt|print|cwd|storage)(?:=|$)|-[rcp]|--)$/u.test(
+            arg.split('=')[0] ?? ''
+          )
+        )
+      )
+        throw new Error(
+          'Remove conversation, prompt or folder overrides from the agent profile in Settings.'
+        )
+      return launch(
+        event.sender,
+        provider,
+        {
+          ...profile,
+          args: [
+            ...profile.args,
+            ...(provider === 'hatfield' ? [`--resume=${id}`] : ['--resume', id])
+          ]
+        },
+        pane.agent.project,
+        { ...size, cwd: await existingDirectory(pane.cwd) },
+        true
+      )
+    }
     if (isTerminalId(target.sourceTerminalId)) {
       const placement = terminalSessions.directory(event.sender, target.sourceTerminalId)
       if (!placement) throw new Error('The original terminal is no longer available.')
@@ -83,5 +124,4 @@ export function registerAgentIpc() {
       cwd: await existingDirectory(cwd)
     })
   })
-  return launch
 }

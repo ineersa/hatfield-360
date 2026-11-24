@@ -9,7 +9,3 @@ allowBuilds:
   core-js: false
   # Its install script only warns about dependents' version ranges (pulled in by Intelephense).
   protobufjs: false
-
-# Only the metadata API is used; do not install the SDK’s bundled agent executables.
-ignoredOptionalDependencies:
-  - '@anthropic-ai/claude-agent-sdk-*'

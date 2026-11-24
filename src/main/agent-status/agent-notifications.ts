@@ -25,32 +25,27 @@ export class AgentNotificationPolicy {
     return true
   }
 
-  accept(
-    event: StatusEvent,
-    session: NonNullable<ReturnType<StatusState['snapshot']>>,
-    baseline = false
-  ): Message[] {
+  accept(event: StatusEvent, session: NonNullable<ReturnType<StatusState['snapshot']>>): Message[] {
     if (session.epoch !== this.#epoch) {
       this.#epoch = session.epoch
       this.#notified.clear()
     }
     if (!session.telemetry) return []
     if (event.kind === 'notification')
-      return baseline ? [] : [{ kind: 'explicit', title: event.title, body: event.body }]
+      return [{ kind: 'explicit', title: event.title, body: event.body }]
     if (this.#closing) return []
 
     const { turn, attention, activeSubagents } = session.telemetry
     const messages: Message[] = []
     if (attention && this.#first(`attention:${attention.id}`))
       messages.push({ kind: 'needs-input' })
-    if (turn?.status === 'failed' && this.#first(`failed:${turn.id}`) && !baseline)
+    if (turn?.status === 'failed' && this.#first(`failed:${turn.id}`))
       messages.push({ kind: 'failed' })
     if (
       turn?.status === 'completed' &&
       activeSubagents === 0 &&
       !attention &&
-      this.#first(`completed:${turn.id}`) &&
-      !baseline
+      this.#first(`completed:${turn.id}`)
     )
       messages.push({ kind: 'completed' })
     return messages

@@ -1,4 +1,3 @@
-import { claudeSessionTitle } from './claude-session-title'
 import { randomUUID } from 'node:crypto'
 import { realpath } from 'node:fs/promises'
 import { isPathInside } from '../files/path-containment'
@@ -15,12 +14,11 @@ import { workspaceStore } from '../workspace/workspace-store'
 import { UnsupportedAgentShell } from '../terminal/agent-shell-command'
 import { terminalSessions } from '../terminal/terminal-sessions'
 import { AgentNotificationPolicy } from './agent-notifications'
-import type { SavedConversation } from '../../shared/terminal-workspace-api'
 import { agentStatusServer } from './status-server'
 
 const records = new Map<
   string,
-  { owner: WebContents; session: AgentSession; observedCwd: string | null }
+  { owner: WebContents; session: AgentSession; observedCwd: string | null; manual: boolean }
 >()
 const trackedOwners = new WeakSet<WebContents>()
 const manualHistory = new WeakMap<WebContents, string[]>()
@@ -31,9 +29,7 @@ const launches = new Map<
     session: AgentSession
     policy: AgentNotificationPolicy
     manual?: true
-    confirm?: (id: string) => boolean
-    metadataTitle?: string
-    titleRead?: { id: string; epoch: number }
+    resumeBaseline?: boolean
   }
 >()
 let revision = 0
@@ -42,27 +38,30 @@ export function agentSnapshot(owner: WebContents): AgentSnapshot {
   return {
     revision,
     sessions: [...records.values()]
-      .filter(
-        (record) =>
-          record.owner === owner &&
-          terminalSessions.directory(owner, record.session.terminalId) !== null
-      )
+      .filter((record) => record.owner === owner)
       .map((record) => ({ ...record.session }))
   }
 }
 
-function recordSession(
-  owner: WebContents,
-  session: AgentSession,
-  observedCwd: string | null = null
-) {
+export function resumeDirectory(session: AgentSession): string | null {
+  const record = records.get(session.id)
+  if (!record) return null
+  return record.manual ? record.observedCwd : session.cwd
+}
+
+function recordSession(owner: WebContents, session: AgentSession, observedCwd?: string | null) {
   if (!trackedOwners.has(owner)) {
     trackedOwners.add(owner)
     owner.once('destroyed', () => {
       for (const [id, record] of records) if (record.owner === owner) records.delete(id)
     })
   }
-  records.set(session.id, { owner, session, observedCwd })
+  records.set(session.id, {
+    owner,
+    session,
+    observedCwd: observedCwd ?? null,
+    manual: observedCwd !== undefined
+  })
 }
 
 function newSession(
@@ -236,15 +235,12 @@ export function trackAgentSessions(
       .snapshot()
       .find((entry) => entry.launchId === change.launchId)?.session
     const trusted = reported?.provider === session.provider ? reported : undefined
-    const confirming = !!launch.confirm
-    if (trusted && launch.confirm) {
-      if (!launch.confirm(trusted.id)) return
-      delete launch.confirm
-      recordSession(owner, session)
-    }
     if (change.kind === 'event') {
       if (trusted && !owner.isDestroyed()) {
-        for (const message of policy.accept(change.event, trusted, confirming)) {
+        const messages = policy.accept(change.event, trusted)
+        const baseline = launch.resumeBaseline
+        if (change.event.kind === 'session.snapshot') launch.resumeBaseline = false
+        for (const message of baseline ? [] : messages) {
           notify(owner, {
             provider: session.provider,
             terminalId: session.terminalId,
@@ -256,41 +252,8 @@ export function trackAgentSessions(
       if (change.event.kind === 'notification') return
     }
     if (trusted) {
-      if (session.providerSessionId !== trusted.id) {
-        delete launch.metadataTitle
-        delete launch.titleRead
-      }
-      session.title = trusted.title ?? launch.metadataTitle ?? null
       session.providerSessionId = trusted.id
-      if (
-        session.provider === 'claude' &&
-        change.kind === 'event' &&
-        change.event.kind === 'session.snapshot'
-      ) {
-        if (trusted.title !== null) {
-          delete launch.titleRead
-        } else if (
-          launch.titleRead?.id !== trusted.id ||
-          launch.titleRead.epoch !== trusted.epoch
-        ) {
-          const read = { id: trusted.id, epoch: trusted.epoch }
-          launch.titleRead = read
-          void claudeSessionTitle(read.id, session.cwd).then((title) => {
-            if (launch.titleRead !== read) return
-            delete launch.titleRead
-            if (
-              !title ||
-              owner.isDestroyed() ||
-              launches.get(change.launchId) !== launch ||
-              records.get(session.id)?.session !== session
-            )
-              return
-            launch.metadataTitle = title
-            session.title = title
-            changed(owner)
-          })
-        }
-      }
+      session.title = trusted.title
     }
     const live = trusted?.telemetry
     const status = live?.turn?.status
@@ -316,12 +279,7 @@ export function trackAgentSessions(
     profile: AgentProfile,
     project: string | null,
     request: { cwd: string; cols: number; rows: number },
-    resume?: {
-      saved: SavedConversation
-      signal: AbortSignal
-      confirm: (id: string) => boolean
-      exited: (exitCode: number) => void
-    }
+    resumeBaseline = false
   ) => {
     if (process.platform === 'win32' && /\.(cmd|bat|ps1)[. ]*$/i.test(profile.executable)) {
       throw new Error(
@@ -331,25 +289,11 @@ export function trackAgentSessions(
     const terminalId = randomUUID()
     const endpoint = await agentStatusServer.start().catch(() => undefined)
     const credential = endpoint
-      ? agentStatusServer.registerLaunch({ terminalId, cwd: request.cwd }, provider)
+      ? agentStatusServer.registerLaunch({ terminalId, cwd: request.cwd })
       : undefined
     const session = newSession(terminalId, provider, request.cwd, project)
     const policy = new AgentNotificationPolicy()
-    if (resume && !credential) throw new Error('Could not authorize agent status reporting.')
-    if (resume)
-      Object.assign(session, {
-        id: resume.saved.id,
-        providerSessionId: resume.saved.providerSessionId,
-        title: resume.saved.title,
-        worktree: resume.saved.worktree
-      })
-    if (credential)
-      launches.set(credential.launchId, {
-        owner,
-        session,
-        policy,
-        ...(resume ? { confirm: resume.confirm } : {})
-      })
+    if (credential) launches.set(credential.launchId, { owner, session, policy, resumeBaseline })
     const release = () => {
       if (!credential) return
       launches.delete(credential.launchId)
@@ -368,17 +312,14 @@ export function trackAgentSessions(
               H360_STATUS_LAUNCH_ID: credential.launchId
             }
           : {},
-        ...(resume ? { signal: resume.signal } : {}),
         onClosing: () => policy.beginClosing(),
-        onExit: (exitCode) => {
-          resume?.exited(exitCode)
+        onExit: () => {
           release()
           session.process = 'exited'
-          if (records.get(session.id)?.session === session && records.delete(session.id))
-            changed(owner)
+          if (records.delete(session.id)) changed(owner)
         }
       })
-      if (!resume && session.process !== 'exited') {
+      if (session.process !== 'exited') {
         recordSession(owner, session)
         changed(owner)
       }

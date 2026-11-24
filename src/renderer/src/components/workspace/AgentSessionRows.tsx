@@ -9,18 +9,7 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { notify } from '@/state/notification-store'
 import { cn } from '@/lib/class-names'
-import {
-  Activity,
-  Check,
-  Copy,
-  LoaderCircle,
-  MessageCircle,
-  SquareTerminal,
-  TriangleAlert,
-  Users,
-  X
-} from 'lucide-react'
-import { useTerminalWorkspace } from '@/state/terminal-workspace'
+import { Activity, Check, Copy, MessageCircle, SquareTerminal, Users, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import {
   AGENT_PROVIDERS,
@@ -129,7 +118,6 @@ export function agentSessionIdentity(session: AgentSession) {
 
 export function AgentSessionRows({ sessions }: { sessions: AgentSession[] }): React.JSX.Element {
   const selected = useTerminalStore(activeTerminalId)
-  const restore = useTerminalWorkspace((state) => state.restore)
   const focusAfterMenu = useRef<string | null>(null)
   return (
     <>
@@ -145,26 +133,13 @@ export function AgentSessionRows({ sessions }: { sessions: AgentSession[] }): Re
             : session.activity === 'unknown'
               ? null
               : session.activity
-        const restoring = restore[session.id]
-        const status =
-          restoring && !restoring.failure
-            ? { icon: LoaderCircle, color: 'text-muted-foreground', label: 'Resuming…', spin: true }
-            : restoring?.failure
-              ? {
-                  icon: TriangleAlert,
-                  color: 'text-error',
-                  label: `Can't resume · ${restoring.failure.reason}`,
-                  spin: false
-                }
-              : state
-                ? { ...statuses[state], spin: false }
-                : null
+        const status = state ? statuses[state] : null
         const label = status?.label
         const accessibleName = [providerIdentity, title, label].filter(Boolean).join(' · ')
         const detail = [
           providerIdentity,
           title,
-          restoring ? label : state === 'stopped' ? 'Stopped' : sessionDescription(session),
+          state === 'stopped' ? 'Stopped' : sessionDescription(session),
           session.outcome && `Last foreground response: ${outcomes[session.outcome].toLowerCase()}`,
           session.runningChildren !== null && `Active agents: ${session.runningChildren}`,
           session.runningScripts !== null && `Background scripts: ${session.runningScripts}`,
@@ -215,13 +190,7 @@ export function AgentSessionRows({ sessions }: { sessions: AgentSession[] }): Re
                           <span className="type-hint flex min-w-0 items-center gap-2.5 text-muted-foreground">
                             {status ? (
                               <span className={cn('flex min-w-0 items-center gap-1', status.color)}>
-                                <status.icon
-                                  className={cn(
-                                    'size-3.5 shrink-0',
-                                    status.spin && 'motion-safe:animate-spin'
-                                  )}
-                                  aria-hidden
-                                />
+                                <status.icon className="size-3.5 shrink-0" aria-hidden />
                                 <span className="truncate">{label}</span>
                               </span>
                             ) : null}
