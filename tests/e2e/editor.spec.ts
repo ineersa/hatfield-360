@@ -410,7 +410,9 @@ test('after a restart the Files view has the same folders expanded and tabs open
       async (_app, page) => {
         // The shell layout already reopens the Files view.
         await expect(
-          page.getByRole('navigation', { name: 'Views' }).getByRole('button', { name: 'Files' })
+          page
+            .getByRole('navigation', { name: 'Views' })
+            .getByRole('button', { name: 'Files', exact: true })
         ).toHaveAttribute('aria-pressed', 'true')
         await expect(item(page, 'app')).toHaveAttribute('aria-expanded', 'true')
         await expect(item(page, 'src')).toHaveAttribute('aria-expanded', 'true')

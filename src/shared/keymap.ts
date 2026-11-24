@@ -491,7 +491,8 @@ export const APP_COMMANDS = [
   'previous-editor-tab',
   'copy-absolute-path',
   'copy-relative-path',
-  'select-opened-file'
+  'select-opened-file',
+  'find-in-files'
 ] as const
 export type AppCommand = (typeof APP_COMMANDS)[number]
 
@@ -550,6 +551,12 @@ const APP_KEYMAP: Record<AppCommand, ShellAction> = {
     label: 'Select Opened File',
     mac: null,
     other: null
+  },
+  'find-in-files': {
+    id: 'hatfield.search.findInFiles',
+    label: 'Find in Files',
+    mac: 'Command+Shift+F',
+    other: 'Ctrl+Shift+F'
   }
 }
 

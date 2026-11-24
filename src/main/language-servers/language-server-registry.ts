@@ -1,4 +1,5 @@
 import { execFile } from 'node:child_process'
+import { unpackedPath } from '../asar-unpacked-path'
 import { constants } from 'node:fs'
 import { access, readdir } from 'node:fs/promises'
 import { createRequire } from 'node:module'
@@ -130,9 +131,6 @@ async function intelephenseConfiguration(): Promise<ServerConfiguration> {
   }
 }
 
-// Packaged, native executables run from the unpacked copy: the OS can't execute a file inside an asar.
-const unpacked = (path: string): string => path.replace(/app\.asar([/\\])/, 'app.asar.unpacked$1')
-
 /**
  * A script run on the app's own Node; `resolve` finds it lazily, as a literal path tools can follow.
  * Packaged, a script unpacked from the asar runs from there (basedpyright changes into its own folder).
@@ -141,7 +139,7 @@ const nodeScript =
   (resolve: () => string, ...args: string[]) =>
   async (): Promise<ServerCommand> => {
     const file = resolve()
-    const real = unpacked(file)
+    const real = unpackedPath(file)
     return { file: real !== file && (await exists(real)) ? real : file, args, node: true }
   }
 
@@ -150,14 +148,14 @@ const packageFolder =
   (resolve: () => string, ...path: string[]) =>
   async (): Promise<string[]> => {
     const folder = join(dirname(resolve()), ...path)
-    return [...new Set([folder, unpacked(folder)])]
+    return [...new Set([folder, unpackedPath(folder)])]
   }
 
 /** The native TypeScript build's `lib` folder: its server and the standard library's `.d.ts` files. */
 function typescriptLib(): string {
   const name = `@typescript/typescript-${process.platform}-${process.arch}`
   const fromTypescript = createRequire(require.resolve('typescript/package.json'))
-  return unpacked(join(dirname(fromTypescript.resolve(`${name}/package.json`)), 'lib'))
+  return unpackedPath(join(dirname(fromTypescript.resolve(`${name}/package.json`)), 'lib'))
 }
 
 /** TypeScript 7 is native and has its own language server (`tsc --lsp`). */

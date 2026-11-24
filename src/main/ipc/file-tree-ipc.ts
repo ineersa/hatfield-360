@@ -4,6 +4,7 @@ import { listDirectory } from '../files/directory-listing'
 import { DirectoryWatchers } from '../files/directory-watchers'
 import { fileRoots } from '../files/file-roots'
 import { resolveInsideRoots, rootRelativePath } from '../files/path-containment'
+import { outermostPaths, renameEntry, resolveChangeableEntry } from '../files/tree-file-operations'
 import { handleTrusted } from './trusted-ipc'
 
 /** More expanded folders than any tree shows; a longer list is a bug or abuse. */
@@ -63,6 +64,29 @@ export function registerFileTreeIpc(): void {
 
   handleTrusted(FILE_TREE_CHANNELS.reveal, async (_event, path) => {
     shell.showItemInFolder(await workspacePath(path, await rootPaths()))
+  })
+
+  handleTrusted(FILE_TREE_CHANNELS.trash, async (_event, paths) => {
+    if (
+      !Array.isArray(paths) ||
+      paths.length === 0 ||
+      paths.length > MAX_WATCHED ||
+      !paths.every((path): path is string => typeof path === 'string' && path !== '')
+    ) {
+      throw new Error('trashPaths expects a list of paths')
+    }
+    const roots = await rootPaths()
+    // Every path is checked before anything moves, so a refused one leaves the rest in place.
+    const entries = await Promise.all(paths.map((path) => resolveChangeableEntry(path, roots)))
+    // A folder selected with what is in it: once the folder is gone, its contents can't be trashed.
+    for (const entry of outermostPaths(entries)) await shell.trashItem(entry)
+  })
+
+  handleTrusted(FILE_TREE_CHANNELS.rename, async (_event, path, name) => {
+    if (typeof path !== 'string' || typeof name !== 'string') {
+      throw new Error('renamePath expects a path and a name')
+    }
+    return renameEntry(path, name, await rootPaths())
   })
 
   // A folder leaving the workspace stops being watched.

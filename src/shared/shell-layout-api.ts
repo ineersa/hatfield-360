@@ -1,4 +1,4 @@
-export const SHELL_VIEW_IDS = ['agents', 'files', 'git'] as const
+export const SHELL_VIEW_IDS = ['agents', 'files', 'search', 'git'] as const
 
 export type ShellViewId = (typeof SHELL_VIEW_IDS)[number]
 
@@ -15,11 +15,16 @@ export type ShellLayout = {
 /** Stored side panel widths; a narrow window still caps the panel on screen. */
 export const SIDE_PANEL_WIDTH_RANGE = { min: 180, max: 4000 } as const
 
-const DEFAULT_PANEL: SidePanelLayout = { width: 300, collapsed: false }
+export const DEFAULT_PANEL: SidePanelLayout = { width: 300, collapsed: false }
 
 export const DEFAULT_SHELL_LAYOUT: ShellLayout = {
   activeView: 'agents',
-  panels: { agents: DEFAULT_PANEL, files: DEFAULT_PANEL, git: DEFAULT_PANEL },
+  panels: {
+    agents: DEFAULT_PANEL,
+    files: DEFAULT_PANEL,
+    search: DEFAULT_PANEL,
+    git: DEFAULT_PANEL
+  },
   notificationsWidth: 380
 }
 

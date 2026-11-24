@@ -1,4 +1,5 @@
 import { app, type WebContents } from 'electron'
+import { unpackedPath } from '../asar-unpacked-path'
 import { randomUUID } from 'node:crypto'
 import { chmod, stat } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
@@ -53,9 +54,8 @@ type Session = {
 async function ensureSpawnHelperExecutable(): Promise<void> {
   if (process.platform !== 'darwin') return
   const packageRoot = dirname(dirname(require.resolve('node-pty/lib/unixTerminal.js')))
-  const helper = join(packageRoot, 'prebuilds', `darwin-${process.arch}`, 'spawn-helper').replace(
-    /app\.asar([/\\])/,
-    'app.asar.unpacked$1'
+  const helper = unpackedPath(
+    join(packageRoot, 'prebuilds', `darwin-${process.arch}`, 'spawn-helper')
   )
   try {
     const { mode } = await stat(helper)

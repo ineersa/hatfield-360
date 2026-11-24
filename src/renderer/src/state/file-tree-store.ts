@@ -29,6 +29,10 @@ type FileTreeState = {
   restore: (expanded: string[], hideIgnored: boolean) => void
   copyPath: (path: string, form: PathForm) => void
   reveal: (path: string) => void
+  /** Moves the entries to the system trash, then lists their folders again. */
+  trash: (paths: string[]) => void
+  /** Renames an entry in its folder; resolves false, after telling the user why, when main refuses. */
+  rename: (path: string, name: string) => Promise<boolean>
   /** The file Select Opened File is revealing, until the tree shows its row (by `key`). */
   locating: { path: string; key: string } | null
   /** Expands the tree down to the active editor tab's file, which the Files panel then selects. */
@@ -56,6 +60,12 @@ function openFolders(state: FileTreeState, from: string[]): string[] {
   }
   for (const path of from) visit(path, worktrees.get(path) ?? [])
   return [...open]
+}
+
+const parentOf = (path: string): string => {
+  const separator = separatorOf(path)
+  const cut = path.lastIndexOf(separator)
+  return cut <= 0 ? separator : path.slice(0, cut)
 }
 
 const failed = (error: unknown): void => {
@@ -184,6 +194,27 @@ export const useFileTreeStore = create<FileTreeState>((set, get) => {
     },
     reveal: (path) => {
       window.desktop.revealPath(path).catch(failed)
+    },
+    trash: (paths) => {
+      // The watcher would also catch it; listing at once keeps the tree from showing what's gone.
+      const folders = [...new Set(paths.map(parentOf))]
+      window.desktop
+        .trashPaths(paths)
+        .catch(failed)
+        .finally(() => {
+          for (const folder of folders) if (get().listings[folder]) load(folder)
+        })
+    },
+    rename: async (path, name) => {
+      try {
+        await window.desktop.renamePath(path, name)
+        return true
+      } catch (error) {
+        failed(error)
+        return false
+      } finally {
+        if (get().listings[parentOf(path)]) load(parentOf(path))
+      }
     },
     locating: null,
     selectOpenedFile: () => {

@@ -34,12 +34,25 @@ const newTab = (path: string): EditorTab => ({
   preview: false
 })
 
+/** Where in a file to show once its tab does: a range on one line, columns from 0. */
+type EditorPosition = {
+  line: number
+  start: number
+  end: number
+  /** The editor takes the keys, as when a result is opened with Enter. */
+  focus: boolean
+}
+
 type EditorTabState = {
   /** In tab-bar order. */
   tabs: EditorTab[]
   activePath: string | null
-  /** Opens a tab for the file, or switches to it if it is already open. */
-  open: (path: string) => void
+  /** Where the editor should go next, set by opening a file at a position. */
+  reveal: (EditorPosition & { path: string }) | null
+  /** Opens a tab for the file, or switches to it if it is already open; `at` selects a range in it. */
+  open: (path: string, at?: EditorPosition) => void
+  /** The editor showed `reveal`. */
+  revealDone: () => void
   activate: (path: string) => void
   /** Moves a tab to another tab's place in the bar. */
   move: (path: string, before: string) => void
@@ -60,13 +73,16 @@ const update = (tabs: EditorTab[], path: string, change: Partial<EditorTab>): Ed
 export const useEditorTabStore = create<EditorTabState>((set) => ({
   tabs: [],
   activePath: null,
-  open: (path) =>
+  reveal: null,
+  open: (path, at) =>
     set((state) => ({
       tabs: state.tabs.some((tab) => tab.path === path)
         ? state.tabs
         : [...state.tabs, newTab(path)],
-      activePath: path
+      activePath: path,
+      reveal: at ? { ...at, path } : null
     })),
+  revealDone: () => set({ reveal: null }),
   activate: (path) => set({ activePath: path }),
   move: (path, before) =>
     set((state) => {
