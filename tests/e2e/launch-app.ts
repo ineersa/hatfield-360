@@ -39,6 +39,8 @@ export async function withApp(
     options.userDataDir === undefined
       ? await makeTempDir('user-data')
       : [options.userDataDir, async () => {}]
+  // Test terminals run the user's real shell: keep what they type out of the user's history.
+  const [historyDir, cleanHistory] = await makeTempDir('shell-history')
   const app = await electron.launch({
     ...launchTarget,
     ...(options.recordVideo ? { recordVideo: options.recordVideo } : {}),
@@ -47,13 +49,20 @@ export async function withApp(
       '--mute-audio',
       ...(ownDir === null ? [] : [`--user-data-dir=${ownDir}`])
     ],
-    env: { ...process.env, ...options.env, APP_BACKGROUND_LAUNCH: '1' }
+    env: {
+      ...process.env,
+      HISTFILE: join(historyDir, 'history'),
+      fish_private_mode: '1',
+      ...options.env,
+      APP_BACKGROUND_LAUNCH: '1'
+    }
   })
   try {
     await body(app, await app.firstWindow())
   } finally {
     await app.close()
     await cleanup()
+    await cleanHistory()
   }
 }
 
