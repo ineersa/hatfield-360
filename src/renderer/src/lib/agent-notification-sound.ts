@@ -1,14 +1,67 @@
-export const agentNotificationCues = {
-  completed: { label: 'Completed', notes: [523.25, 659.25, 783.99] },
-  'needs-input': { label: 'Needs input', notes: [659.25, 523.25] },
-  failed: { label: 'Failed', notes: [392, 293.66] }
-} as const
+import type { AgentSound } from '../../../shared/agent-sound-catalog'
 
-type Cue = keyof typeof agentNotificationCues
+const presets = {
+  chime: {
+    notes: [523.25, 659.25, 783.99],
+    volume: 0.2,
+    spacing: 0.19,
+    duration: 0.28
+  },
+  'double-ring': {
+    notes: [659.25, 880, 659.25, 880],
+    volume: 0.28,
+    spacing: 0.24,
+    duration: 0.2
+  },
+  'low-alert': {
+    notes: [392, 293.66, 220],
+    volume: 0.24,
+    spacing: 0.23,
+    duration: 0.32
+  },
+  bell: { notes: [1046.5], volume: 0.21, spacing: 0.3, duration: 0.55, wave: 'sine' },
+  marimba: { notes: [392, 523.25, 587.33, 783.99], volume: 0.22, spacing: 0.11, duration: 0.15 },
+  fanfare: {
+    notes: [523.25, 523.25, 783.99],
+    volume: 0.22,
+    spacing: 0.17,
+    duration: 0.24,
+    wave: 'sawtooth'
+  },
+  pulse: { notes: [740, 740, 740], volume: 0.23, spacing: 0.27, duration: 0.15 },
+  'soft-knock': { notes: [262, 262], volume: 0.26, spacing: 0.17, duration: 0.16 },
+  beacon: { notes: [988, 494, 988], volume: 0.23, spacing: 0.3, duration: 0.24, wave: 'sine' },
+  'door-chime': { notes: [880, 659.25], volume: 0.23, spacing: 0.29, duration: 0.4 },
+  ripple: {
+    notes: [523.25, 783.99, 659.25, 1046.5, 783.99],
+    volume: 0.2,
+    spacing: 0.13,
+    duration: 0.19
+  },
+  'falling-whistle': {
+    notes: [1100],
+    volume: 0.23,
+    spacing: 0.3,
+    duration: 0.65,
+    wave: 'sine',
+    endPitch: 440
+  }
+} satisfies Record<
+  AgentSound,
+  {
+    notes: number[]
+    volume: number
+    spacing: number
+    duration: number
+    wave?: OscillatorType
+    endPitch?: number
+  }
+>
+
 let audio: AudioContext | undefined
 
 export async function playAgentNotificationSound(
-  cue: Cue,
+  sound: AgentSound,
   allowed: () => boolean = () => true
 ): Promise<boolean> {
   try {
@@ -17,16 +70,21 @@ export async function playAgentNotificationSound(
     if (context.state === 'suspended') await context.resume()
     if (context.state !== 'running' || !allowed()) return false
 
-    const notes = agentNotificationCues[cue].notes
+    const preset = presets[sound]
+    const { notes, volume, spacing, duration } = preset
     const start = context.currentTime
     const finished = notes.map((frequency, index) => {
-      const at = start + index * 0.09
-      const end = at + 0.13
+      const at = start + index * spacing
+      const end = at + duration
       const oscillator = context.createOscillator()
       const gain = context.createGain()
-      oscillator.frequency.value = frequency
+      oscillator.type = 'wave' in preset ? preset.wave : 'triangle'
+      oscillator.frequency.setValueAtTime(frequency, at)
+      if ('endPitch' in preset)
+        oscillator.frequency.exponentialRampToValueAtTime(preset.endPitch, end)
       gain.gain.setValueAtTime(0, at)
-      gain.gain.linearRampToValueAtTime(0.055, at + 0.012)
+      gain.gain.linearRampToValueAtTime(volume, at + 0.02)
+      gain.gain.setValueAtTime(volume, at + duration * 0.55)
       gain.gain.linearRampToValueAtTime(0, end)
       oscillator.connect(gain).connect(context.destination)
       const ended = new Promise<void>((resolve) => {

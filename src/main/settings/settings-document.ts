@@ -7,6 +7,7 @@ import {
   printParseErrorCode
 } from 'jsonc-parser'
 import { isPlainObject } from '../../shared/plain-object'
+import { AGENT_SOUND_IDS } from '../../shared/agent-sound-catalog'
 import {
   DEFAULT_SETTINGS,
   FONT_SIZE_RANGE,
@@ -69,6 +70,7 @@ function oneOf<T extends string>(choices: readonly T[]): (value: unknown) => Che
 }
 
 const ids = <T extends string>(themes: readonly { id: T }[]): T[] => themes.map(({ id }) => id)
+const agentSound = oneOf(AGENT_SOUND_IDS)
 
 function flag(value: unknown): Checked<boolean> {
   return typeof value === 'boolean' ? { value } : { problem: 'must be true or false' }
@@ -97,6 +99,9 @@ const CHECKS: { [K in SettingKey]: (value: unknown) => Checked<Settings[K]> } = 
   'agents.hatfield': agentProfile,
   'agents.claude': agentProfile,
   'notifications.agentSounds': flag,
+  'notifications.completedSound': agentSound,
+  'notifications.needsInputSound': agentSound,
+  'notifications.failedSound': agentSound,
   'app.fontFamily': fontFamily,
   'app.fontSize': fontSize,
   'terminal.fontFamily': fontFamily,

@@ -1,4 +1,5 @@
 import type { AgentProfile } from './agent-api'
+import type { AgentSound } from './agent-sound-catalog'
 import type { Notice } from './notice'
 import type { APP_THEMES } from './themes/app-theme-catalog'
 import type { EDITOR_THEMES } from './themes/editor-theme-catalog'
@@ -9,6 +10,9 @@ export type Settings = {
   'agents.hatfield': AgentProfile
   'agents.claude': AgentProfile
   'notifications.agentSounds': boolean
+  'notifications.completedSound': AgentSound
+  'notifications.needsInputSound': AgentSound
+  'notifications.failedSound': AgentSound
   'app.fontFamily': string
   'app.fontSize': number
   'terminal.fontFamily': string
@@ -55,6 +59,9 @@ export const DEFAULT_SETTINGS: Settings = {
   'agents.hatfield': { executable: 'hatfield', args: [] },
   'agents.claude': { executable: 'claude', args: [] },
   'notifications.agentSounds': true,
+  'notifications.completedSound': 'chime',
+  'notifications.needsInputSound': 'double-ring',
+  'notifications.failedSound': 'low-alert',
   'app.fontFamily': "'Inter Variable', system-ui, sans-serif",
   'app.fontSize': 14,
   'terminal.fontFamily': MONOSPACE_FONTS,

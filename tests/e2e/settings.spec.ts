@@ -335,8 +335,13 @@ test('the largest app font in the smallest window keeps the status bar and Setti
   }
 })
 
-test('agent sound previews play through Web Audio and the mute preference survives restart', async () => {
+test('agent sound choices and mute survive restart, and selected sounds preview while muted', async () => {
   const [userDataDir, cleanup] = await makeTempDir('agent-sounds')
+  const choices = [
+    ['Completed', 'Desk bell'],
+    ['Needs input', 'Triple pulse'],
+    ['Failed', 'Falling whistle']
+  ] as const
   try {
     await withApp(
       async (_app, page) => {
@@ -345,14 +350,32 @@ test('agent sound previews play through Web Audio and the mute preference surviv
         const mute = settings.getByRole('checkbox', { name: 'Agent notification sounds' })
         await expect(mute).toBeChecked()
         await mute.uncheck()
-        for (const cue of ['Completed', 'Needs input', 'Failed']) {
+        for (const [cue, sound] of choices) {
+          const picker = settings.getByRole('button', { name: new RegExp(`^${cue} sound:`) })
+          await picker.press('Enter')
+          const option = page
+            .getByRole('dialog', { name: `${cue} sound` })
+            .getByRole('button', { name: sound, exact: true })
+          await option.press('Enter')
+          await expect(picker).toHaveAccessibleName(`${cue} sound: ${sound}`)
           await settings.getByRole('button', { name: `Preview ${cue}`, exact: true }).click()
-          await expect(
-            settings.getByText(`${cue} preview finished.`, { exact: true })
-          ).toBeVisible()
+          await expect(settings.getByRole('status', { name: 'Sound preview result' })).toHaveText(
+            `${cue} preview finished: ${sound}.`
+          )
         }
+        await expect(
+          page.evaluate(() =>
+            Reflect.apply(globalThis.desktop.updateSetting, undefined, [
+              'notifications.completedSound',
+              'not-a-preset'
+            ])
+          )
+        ).rejects.toThrow(/must be one of/)
         expect(parse(await readFile(join(userDataDir, 'settings.json'), 'utf8'))).toMatchObject({
-          'notifications.agentSounds': false
+          'notifications.agentSounds': false,
+          'notifications.completedSound': 'bell',
+          'notifications.needsInputSound': 'pulse',
+          'notifications.failedSound': 'falling-whistle'
         })
       },
       { userDataDir }
@@ -363,6 +386,11 @@ test('agent sound previews play through Web Audio and the mute preference surviv
         await expect(
           settingsMain(page).getByRole('checkbox', { name: 'Agent notification sounds' })
         ).not.toBeChecked()
+        for (const [cue, sound] of choices) {
+          await expect(
+            settingsMain(page).getByRole('button', { name: `${cue} sound: ${sound}`, exact: true })
+          ).toBeVisible()
+        }
       },
       { userDataDir }
     )

@@ -1,5 +1,6 @@
 import { isTerminalShown, selectTerminal } from '@/components/terminal/terminal-tab-controllers'
 import { AGENT_PROVIDERS, type AgentNotification } from '../../../shared/agent-api'
+import { AGENT_SOUND_KEYS } from '../../../shared/agent-sound-catalog'
 import { playAgentNotificationSound } from '@/lib/agent-notification-sound'
 import { useSettingsStore } from './settings-store'
 import { shouldShowAgentToast } from './agent-toast-policy'
@@ -51,6 +52,7 @@ export function receiveAgentNotification({
     }
   )
   if (!explicit && showToast && soundsEnabled()) {
-    void playAgentNotificationSound(message.kind, soundsEnabled)
+    const sound = useSettingsStore.getState().values[AGENT_SOUND_KEYS[message.kind]]
+    void playAgentNotificationSound(sound, soundsEnabled)
   }
 }
