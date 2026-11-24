@@ -4,6 +4,7 @@ import { SEARCH_CHANNELS, type SearchEvent, type SearchQuery } from '../../share
 import { fileRoots } from '../files/file-roots'
 import { resolveInsideRoots } from '../files/path-containment'
 import { startRipgrep } from '../search/ripgrep-search'
+import { SearchRuns } from '../search/search-runs'
 import { handleTrusted } from './trusted-ipc'
 
 /** Longer than any search box holds; a longer query is a bug or abuse. */
@@ -51,47 +52,30 @@ async function searchPaths(scope: string[]): Promise<string[]> {
 }
 
 export function registerSearchIpc(): void {
-  const running = new Map<WebContents, () => void>()
-  /** Each window's latest search: one started while an earlier one checked its folders wins. */
-  const latest = new Map<WebContents, number>()
-
-  const stop = (sender: WebContents): void => {
-    running.get(sender)?.()
-    running.delete(sender)
-  }
+  const runs = new SearchRuns<WebContents>()
 
   handleTrusted(SEARCH_CHANNELS.start, async (event, id, value) => {
     if (typeof id !== 'number' || !Number.isSafeInteger(id)) throw new Error('Expected a search id')
     const query = parseQuery(value)
     const sender = event.sender
-    stop(sender)
-    if (!latest.has(sender)) {
-      sender.once('destroyed', () => {
-        stop(sender)
-        latest.delete(sender)
-      })
-    }
-    latest.set(sender, id)
-    const paths = await searchPaths(query.scope)
-    if (latest.get(sender) !== id) return
+    if (!runs.knows(sender)) sender.once('destroyed', () => runs.forget(sender))
     const send = (message: SearchEvent): void => {
       if (!sender.isDestroyed()) sender.send(SEARCH_CHANNELS.event, message)
     }
-    if (paths.length === 0) {
-      send({ id, kind: 'done', limited: false, error: null })
-      return
-    }
-    running.set(
-      sender,
-      startRipgrep(query, paths, {
+    await runs.start(sender, id, searchPaths(query.scope), (paths, finished) => {
+      if (paths.length === 0) {
+        send({ id, kind: 'done', limited: false, error: null })
+        return () => {}
+      }
+      return startRipgrep(query, paths, {
         results: (files) => send({ id, kind: 'results', files }),
         done: (limited, error) => {
-          running.delete(sender)
+          finished()
           send({ id, kind: 'done', limited, error })
         }
       })
-    )
+    })
   })
 
-  handleTrusted(SEARCH_CHANNELS.cancel, (event) => stop(event.sender))
+  handleTrusted(SEARCH_CHANNELS.cancel, (event) => runs.cancel(event.sender))
 }

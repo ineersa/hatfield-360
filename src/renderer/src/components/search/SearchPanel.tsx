@@ -96,6 +96,7 @@ export function SearchPanel(): React.JSX.Element {
   const focusRequest = useSearchStore((state) => state.focusRequest)
   const setQuery = useSearchStore((state) => state.setQuery)
   const cancel = useSearchStore((state) => state.cancel)
+  const resume = useSearchStore((state) => state.resume)
   const openFile = useEditorTabStore((state) => state.open)
   const folders = useWorkspaceStore((state) => state.workspace?.folders)
   const projects = useWorktreeStore((state) => state.projects)
@@ -125,17 +126,15 @@ export function SearchPanel(): React.JSX.Element {
     [files]
   )
   /** Where each file's first match is in `matches`. */
-  const firstIndex = useMemo(
-    () =>
-      files.reduce<number[]>(
-        (starts, file, at) => [
-          ...starts,
-          (starts[at - 1] ?? 0) + (files[at - 1]?.matches.length ?? 0)
-        ],
-        []
-      ),
-    [files]
-  )
+  const firstIndex = useMemo(() => {
+    const starts: number[] = []
+    let total = 0
+    for (const file of files) {
+      starts.push(total)
+      total += file.matches.length
+    }
+    return starts
+  }, [files])
   const count = matches.length
 
   useEffect(() => {
@@ -143,8 +142,11 @@ export function SearchPanel(): React.JSX.Element {
     input.current?.focus()
     input.current?.select()
   }, [focusRequest])
-  // A search still running when the panel closes stops; its results so far stay.
-  useEffect(() => () => cancel(), [cancel])
+  // A search still running when the panel closes stops, and runs again when it opens.
+  useEffect(() => {
+    resume()
+    return cancel
+  }, [cancel, resume])
   useEffect(() => {
     list.current?.querySelector(`#${optionId(active)}`)?.scrollIntoView({ block: 'nearest' })
   }, [active])

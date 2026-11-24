@@ -153,3 +153,39 @@ test('Find in Folder… searches only the folders chosen in the Files tree', asy
     await cleanProject()
   }
 })
+
+test('results follow the workspace: a folder removed from it leaves them', async () => {
+  const [app, cleanProject] = await makeProject()
+  const other = join(app, '..', 'other')
+  await mkdir(other)
+  await writeFile(join(other, 'notes.txt'), 'needle\n')
+  const [userData, cleanUserData] = await seedWorkspace([
+    { path: app, kind: 'project' },
+    { path: other, kind: 'folder' }
+  ])
+  try {
+    await withApp(
+      async (_app, page) => {
+        await expect(page.getByRole('complementary', { name: 'Agents panel' })).toBeVisible()
+        await page.keyboard.press('ControlOrMeta+Shift+KeyF')
+        await page.keyboard.type('needle')
+        await expect(summary(page)).toHaveText('4 matches in 3 files')
+
+        await showView(page, 'Files')
+        await item(page, 'other').click({ button: 'right' })
+        await page.getByRole('menuitem', { name: 'Remove from Workspace' }).click()
+        await expect(item(page, 'other')).toHaveCount(0)
+        await page
+          .getByRole('navigation', { name: 'Views' })
+          .getByRole('button', { name: 'Find in Files' })
+          .click()
+        await expect(summary(page)).toHaveText('3 matches in 2 files')
+        await expect(results(page).getByRole('group', { name: 'notes.txt' })).toHaveCount(0)
+      },
+      { userDataDir: userData }
+    )
+  } finally {
+    await cleanUserData()
+    await cleanProject()
+  }
+})

@@ -54,16 +54,16 @@ export function ripgrepArgs(query: SearchQuery, paths: string[]): string[] {
   return args
 }
 
-const utf16Length = (bytes: Buffer, end: number): number =>
-  bytes.subarray(0, end).toString('utf8').length
-
 type RipgrepMessage =
   | { kind: 'match'; path: string; matches: SearchMatch[] }
   /** Every match in the file has been reported. */
   | { kind: 'end'; path: string }
 
-/** A line of ripgrep's JSON output: a matched line or a file's end, or null for its other messages. */
-export function parseRipgrepLine(line: string): RipgrepMessage | null {
+/**
+ * A line of ripgrep's JSON output: a matched line or a file's end, or null for its other messages.
+ * At most `limit` matches are read from a line.
+ */
+export function parseRipgrepLine(line: string, limit = SEARCH_MATCH_LIMIT): RipgrepMessage | null {
   let message: unknown
   try {
     message = JSON.parse(line)
@@ -80,24 +80,34 @@ export function parseRipgrepLine(line: string): RipgrepMessage | null {
   if (typeof lineNumber !== 'number' || !Array.isArray(submatches)) return null
   const text = lines.text.replace(/\r?\n$/, '')
   const bytes = Buffer.from(text, 'utf8')
-  const matches = submatches.flatMap((submatch: unknown): SearchMatch[] => {
-    if (!isPlainObject(submatch)) return []
+  const cut = text.length > LINE_TEXT_LIMIT
+  const matches: SearchMatch[] = []
+  // ripgrep's offsets are bytes; one pass turns them into editor columns, however many matches a
+  // minified line has.
+  let byteAt = 0
+  let charAt = 0
+  const columnOf = (offset: number): number => {
+    charAt += bytes.subarray(byteAt, offset).toString('utf8').length
+    byteAt = offset
+    return charAt
+  }
+  for (const submatch of submatches) {
+    if (matches.length >= limit) break
+    if (!isPlainObject(submatch)) continue
     const { start, end } = submatch
-    if (typeof start !== 'number' || typeof end !== 'number') return []
-    const from = utf16Length(bytes, start)
-    const to = utf16Length(bytes, end)
-    const cut = text.length > LINE_TEXT_LIMIT
+    if (typeof start !== 'number' || typeof end !== 'number') continue
+    if (start < byteAt || end < start || end > bytes.length) continue
+    const from = columnOf(start)
+    const to = columnOf(end)
     const textStart = cut ? Math.max(0, from - LINE_TEXT_BEFORE) : 0
-    return [
-      {
-        line: lineNumber,
-        start: from,
-        end: to,
-        text: cut ? text.slice(textStart, textStart + LINE_TEXT_LIMIT) : text,
-        textStart
-      }
-    ]
-  })
+    matches.push({
+      line: lineNumber,
+      start: from,
+      end: to,
+      text: cut ? text.slice(textStart, textStart + LINE_TEXT_LIMIT) : text,
+      textStart
+    })
+  }
   return { kind: 'match', path: path.text, matches }
 }
 
@@ -157,7 +167,7 @@ export function startRipgrep(
   const lines = createInterface({ input: child.stdout })
   lines.on('line', (line) => {
     if (stopped || limited) return
-    const message = parseRipgrepLine(line)
+    const message = parseRipgrepLine(line, SEARCH_MATCH_LIMIT - count)
     if (!message) return
     if (message.kind === 'end') {
       if (current?.path === message.path) endFile()

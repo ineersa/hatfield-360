@@ -7,7 +7,8 @@ import type { SearchFileResult, SearchQuery } from '../../../shared/search-api'
 /** Typing pauses this long before a search starts, so each letter doesn't start one. */
 const TYPING_PAUSE_MS = 200
 
-type SearchStatus = 'idle' | 'searching' | 'done'
+/** `interrupted`: stopped by the panel closing; it runs again when the panel opens. */
+type SearchStatus = 'idle' | 'searching' | 'done' | 'interrupted'
 
 type SearchState = {
   query: SearchQuery
@@ -27,7 +28,12 @@ type SearchState = {
   setQuery: (change: Partial<SearchQuery>) => void
   /** Shows Find in Files with the search box focused: the editor's selection as the text, if any. */
   findInFiles: (scope?: string[]) => void
+  /** Stops the running search, to run again on `resume`. */
   cancel: () => void
+  /** Runs a search the panel closing interrupted. */
+  resume: () => void
+  /** The workspace's folders changed: results from the old ones are dropped and the search runs again. */
+  workspaceChanged: () => void
 }
 
 const EMPTY_QUERY: SearchQuery = {
@@ -108,7 +114,15 @@ export const useSearchStore = create<SearchState>((set, get) => {
       timer = null
       searchId += 1
       void window.desktop.cancelSearch()
-      if (get().status === 'searching') set({ status: 'done' })
+      if (get().status === 'searching') set({ status: 'interrupted' })
+    },
+    resume: () => {
+      if (get().status === 'interrupted') run()
+    },
+    workspaceChanged: () => {
+      // A folder searched in may have left the workspace.
+      set((state) => ({ query: { ...state.query, scope: [] } }))
+      run()
     }
   }
 })

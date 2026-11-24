@@ -84,6 +84,23 @@ describe('parseRipgrepLine', () => {
     })
   })
 
+  it('reads many matches on a minified line in order, up to the limit', () => {
+    // Two-byte characters before each match: columns and bytes drift further apart with each one.
+    const line = 'é needle '.repeat(5)
+    const bytesPerRepeat = Buffer.byteLength('é needle ')
+    const submatches = [0, 1, 2, 3, 4].map((at) => ({
+      start: at * bytesPerRepeat + 3,
+      end: at * bytesPerRepeat + 9
+    }))
+    const parsed = parseRipgrepLine(match(line, submatches), 3)
+    if (parsed?.kind !== 'match') throw new Error('Expected a match')
+    expect(parsed.matches.map(({ start, end }) => [start, end])).toEqual([
+      [2, 8],
+      [11, 17],
+      [20, 26]
+    ])
+  })
+
   it('cuts a very long line to the part around the match', () => {
     const line = `${'x'.repeat(1000)}needle${'y'.repeat(1000)}`
     const parsed = parseRipgrepLine(match(line, [{ start: 1000, end: 1006 }]))
