@@ -109,7 +109,7 @@ function WorktreeRow({
         <OpenTerminalMenuContent cwd={worktree.path} project={project} disabled={worktree.prunable}>
           {worktree.prunable && !worktree.locked ? (
             <ContextMenuItem onSelect={() => void pruneMissing(project, worktree.path)}>
-              <Trash2 aria-hidden /> Prune all missing worktree entries in repository
+              <Trash2 aria-hidden /> Remove missing worktree entry
             </ContextMenuItem>
           ) : null}
         </OpenTerminalMenuContent>

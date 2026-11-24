@@ -3,6 +3,7 @@ import { AgentProviderIcon } from '@/components/icons/AgentProviderIcon'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { selectTerminal } from '@/components/terminal/terminal-tab-controllers'
 import { notify } from '@/state/notification-store'
+import { cn } from '@/lib/class-names'
 import type { AgentSession } from '../../../../shared/agent-api'
 import type { WorkspaceFolder } from '../../../../shared/workspace-api'
 import { agentSessionIdentity } from './AgentSessionRows'
@@ -19,18 +20,30 @@ export function AgentAttention({
 }: {
   sessions: AgentSession[]
   folders: WorkspaceFolder[]
-}): React.JSX.Element | null {
+}): React.JSX.Element {
   const waiting = sessions.filter(
     (session) => session.wait !== null && session.process === 'running'
   )
-  if (!waiting.length) return null
   return (
     <section
       aria-label="Agents needing attention"
-      className="mx-2 mb-2 min-h-0 shrink-0 rounded-component bg-warning-background"
+      className={cn(
+        'mx-2 mb-2 min-h-0 shrink-0 rounded-component',
+        waiting.length > 0 && 'bg-warning-background'
+      )}
     >
-      <h3 className="type-section-title flex items-center gap-1.5 px-2 pt-2 pb-1 text-warning">
-        <MessageCircle className="size-4 shrink-0" aria-hidden /> Needs input ({waiting.length})
+      <h3
+        className={cn(
+          'type-section-title flex items-center gap-1.5 px-2 pt-2 pb-1',
+          waiting.length > 0 ? 'text-warning' : 'text-muted-foreground'
+        )}
+      >
+        <MessageCircle className="size-4 shrink-0" aria-hidden /> Needs input
+        {waiting.length > 0 ? (
+          <span>({waiting.length})</span>
+        ) : (
+          <span className="type-hint ml-auto">No requests</span>
+        )}
       </h3>
       <ul aria-label="Unresolved requests" className="max-h-36 overflow-y-auto px-2 pb-1">
         {waiting.map((session) => {

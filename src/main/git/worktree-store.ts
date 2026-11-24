@@ -128,7 +128,7 @@ export class WorktreeStore {
     const { state } = await readProject(folder)
     const entry = state.status === 'git' && state.worktrees.find((tree) => tree.path === path)
     if (!entry || entry.project || entry.locked || !entry.prunable) {
-      throw new Error('That worktree entry is no longer eligible for pruning')
+      throw new Error('That worktree entry is no longer eligible for removal')
     }
     const absent = await lstat(entry.path).then(
       () => false,
@@ -137,7 +137,7 @@ export class WorktreeStore {
     if (!absent || this.projects.get(folder) !== project) {
       throw new Error('That worktree is no longer missing from this workspace project')
     }
-    await runGit(folder, ['worktree', 'prune', '--expire', 'now'])
+    await runGit(folder, ['worktree', 'remove', '--', entry.path])
     if (await this.refresh(folder)) this.emit()
   }
 

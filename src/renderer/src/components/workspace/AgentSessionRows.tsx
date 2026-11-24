@@ -47,7 +47,7 @@ function sessionDescription(session: AgentSession): string {
   if (session.wait) return `Needs input: ${waitLabel(session)}`
   if (session.activity === 'working') return session.tool ? `Working · ${session.tool}` : 'Working'
   if (session.activity === 'idle') return 'Idle'
-  return 'Running'
+  return 'Activity not reported'
 }
 
 function waitLabel(session: AgentSession): string {
@@ -65,7 +65,7 @@ export const statuses = {
   working: { icon: Activity, color: 'text-info', label: 'Working' },
   attention: { icon: MessageCircle, color: 'text-warning', label: 'Needs input' },
   idle: { icon: Check, color: 'text-success', label: 'Idle' },
-  stopped: { icon: X, color: 'text-muted-foreground', label: 'Stopped' }
+  stopped: { icon: X, color: 'text-error', label: 'Stopped' }
 } as const
 
 function isStopped(session: AgentSession): boolean {
@@ -132,7 +132,7 @@ export function AgentSessionRows({ sessions }: { sessions: AgentSession[] }): Re
               ? null
               : session.activity
         const status = state ? statuses[state] : null
-        const label = status?.label ?? (session.process === 'unknown' ? 'Unknown' : 'Running')
+        const label = status?.label
         const accessibleName = [providerIdentity, title, label].filter(Boolean).join(' · ')
         const detail = [
           providerIdentity,
@@ -186,15 +186,17 @@ export function AgentSessionRows({ sessions }: { sessions: AgentSession[] }): Re
                           {session.runningScripts}
                         </span>
                       ) : null}
-                      <span
-                        className={cn(
-                          'flex min-w-24 shrink-0 items-center justify-end gap-1',
-                          status?.color ?? 'text-muted-foreground'
-                        )}
-                      >
-                        {status ? <status.icon className="size-4 shrink-0" aria-hidden /> : null}
-                        <span className="truncate">{label}</span>
-                      </span>
+                      {status ? (
+                        <span
+                          className={cn(
+                            'flex min-w-24 shrink-0 items-center justify-end gap-1',
+                            status.color
+                          )}
+                        >
+                          <status.icon className="size-4 shrink-0" aria-hidden />
+                          <span className="truncate">{label}</span>
+                        </span>
+                      ) : null}
                     </button>
                   </TooltipTrigger>
                 </ContextMenuTrigger>

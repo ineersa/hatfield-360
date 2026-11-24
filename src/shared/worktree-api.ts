@@ -27,7 +27,7 @@ export const WORKTREE_CHANNELS = {
 } as const
 
 export type WorktreeApi = {
-  /** Prunes eligible missing entries in the repository after validating the selected entry. */
+  /** Removes only the selected missing registration, preserving branches and other worktrees. */
   pruneMissingWorktrees: (project: string, missingPath: string) => Promise<void>
   /** Every project folder of the open workspace that main has looked at, in workspace order. */
   getWorktrees: () => Promise<ProjectWorktrees[]>

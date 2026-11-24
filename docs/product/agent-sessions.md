@@ -23,6 +23,8 @@ the attention strip. Status, title, and conversation-selection updates do not
 reorder existing records. A bounded attention strip above the tree keeps open
 requests visible even when browsing filters hide the session. It names the reason
 and opens the owning terminal, where the user answers or approves the request.
+When empty, the section stays visible with a compact "No requests" state.
+Stopped responses use the error colour; process exits remove the row instead.
 Clicking a live session also selects its actual tab/pane.
 
 Search is a project-scoped Librarian popup above the mounted terminal workspace,

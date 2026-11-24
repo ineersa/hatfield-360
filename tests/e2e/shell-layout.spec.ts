@@ -22,7 +22,9 @@ async function panelWidth(page: Page, view: string): Promise<number> {
 test('activity bar switches between the Agents, Files and Git views', async () => {
   await withApp(async (_app, page) => {
     await expect(viewButton(page, 'Agents')).toHaveAttribute('aria-pressed', 'true')
-    await expect(sidePanel(page, 'Agents').getByRole('heading')).toHaveText('Agents')
+    await expect(
+      sidePanel(page, 'Agents').getByRole('heading', { name: 'Agents', exact: true, level: 2 })
+    ).toBeVisible()
     // An empty workspace shows the welcome screen in every view's main area.
     await expect(page.getByRole('main', { name: 'Agents' })).toContainText('has no folders yet')
 

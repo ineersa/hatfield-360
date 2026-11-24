@@ -99,7 +99,8 @@ test('agent launches report through the real socket and sidebar rows select exac
           expect(orderedRows).toHaveText([/^a3f91c2d|^Triage/, /^#hatfield-e2e/])
         await expect(output(first)).toContainText('Scenario ready: literal $HOME; *')
         await expect(output(first)).toContainText(`Directory: ${project}`)
-        await expect(hatfield).toContainText('Running')
+        await expect(hatfield).toHaveText('ID not reported')
+        await expect(hatfield).toHaveAttribute('aria-description', /Activity not reported/)
         await expect(hatfield).not.toContainText(/unknown|unavailable|working|idle/i)
         const filter = page.getByRole('group', { name: 'Filter sessions by status' })
         await expect(
@@ -119,12 +120,12 @@ test('agent launches report through the real socket and sidebar rows select exac
         await page.getByRole('menuitem', { name: 'Launch Claude in New Split' }).click()
         await expect(output(second)).toContainText('Scenario ready: split')
         await expect(output(second)).toContainText(`Directory: ${project}`)
-        await expect(claude).toContainText('Running')
+        await expect(claude).toHaveText('ID not reported')
         await expect(hatfield).toHaveAttribute('aria-description', /Working · Read/)
         await filter.getByRole('button', { name: 'Working', exact: true }).click()
         await expect(claude).toHaveCount(0)
         await filter.getByRole('button', { name: 'All', exact: true }).click()
-        await expect(claude).toContainText('Running')
+        await expect(claude).toHaveText('ID not reported')
         await command(page, second, 'start')
         await expect(claude).toHaveText('a3f91c2dWorking')
         await command(page, first, 'title')
@@ -227,7 +228,9 @@ test('agent launches report through the real socket and sidebar rows select exac
         await expect(hatfield).toHaveAttribute('aria-description', /Needs input: permission/)
         await filter.getByRole('button', { name: 'All', exact: true }).click()
         await command(page, first, 'resolve')
-        await expect(attentionStrip).toHaveCount(0)
+        await expect(attentionStrip).toBeVisible()
+        await expect(attentionStrip).toContainText('No requests')
+        await expect(attentionActions).toHaveCount(0)
         await expect(
           projectList
             .getByRole('button', { name: /^(?:Hatfield #|Claude [a-f0-9])/ })
@@ -350,7 +353,7 @@ test('agent launches report through the real socket and sidebar rows select exac
         await command(page, second, 'end-reporting')
         await expect(claude).toHaveAttribute(
           'aria-description',
-          /Running · Last foreground response: cancelled/
+          /Activity not reported · Last foreground response: cancelled/
         )
         await stopped.click()
         await expect(claude).toHaveCount(0)
@@ -375,7 +378,7 @@ test('agent launches report through the real socket and sidebar rows select exac
         ).toHaveCount(0)
         await expect(claude).toHaveAttribute(
           'aria-description',
-          /Running · Last foreground response: cancelled/
+          /Activity not reported · Last foreground response: cancelled/
         )
         await claude.click({ button: 'right' })
         await page.getByRole('menuitem', { name: 'Copy session ID' }).click()
@@ -834,7 +837,7 @@ test('an unavailable subagent count does not prove completion', async () => {
         await command(page, pane, 'children-unknown')
         await expect(session).toHaveAttribute(
           'aria-description',
-          /Running · Last foreground response: completed/
+          /Activity not reported · Last foreground response: completed/
         )
         await expect(completion).toHaveCount(0)
         await command(page, pane, 'child-done')
@@ -932,7 +935,7 @@ test('a project with broken Git metadata still displays its launched session', a
   }
 })
 
-test('pruning missing worktree entries preserves live worktrees and branches', async () => {
+test('removing a missing worktree entry preserves other missing entries, live worktrees and branches', async () => {
   const { repo, projects, cleanup: cleanRepo } = await makeRepo()
   try {
     const missing = join(projects, 'missing-feature')
@@ -972,17 +975,17 @@ test('pruning missing worktree entries preserves live worktrees and branches', a
               },
               { project: repo, path: live }
             )
-          ).toContain('no longer eligible for pruning')
+          ).toContain('no longer eligible for removal')
           await expect(missingRow).toBeVisible()
           await missingRow.click({ button: 'right' })
           await page
             .getByRole('menuitem', {
-              name: 'Prune all missing worktree entries in repository',
+              name: 'Remove missing worktree entry',
               exact: true
             })
             .click()
           await expect(missingRow).toHaveCount(0)
-          await expect(otherRow).toHaveCount(0)
+          await expect(otherRow).toBeVisible()
           await expect(liveRow).toBeVisible()
           expect(await readFile(data, 'utf8')).toBe('keep this local file')
           git(repo, 'show-ref', '--verify', 'refs/heads/missing-feature')

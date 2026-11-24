@@ -9,7 +9,7 @@ type WorktreeState = {
   /** Project folders whose worktree rows are hidden; kept while the app runs. */
   collapsed: Record<string, boolean>
   toggleCollapsed: (folder: string) => void
-  /** Requests repository-wide pruning from an eligible missing entry. */
+  /** Removes only the selected missing worktree registration. */
   pruneMissing: (project: string, path: string) => Promise<void>
   /** Loads the worktrees and follows git changes main sees; returns the unsubscribe. */
   connect: () => () => void
@@ -29,7 +29,7 @@ export const useWorktreeStore = create<WorktreeState>((set) => ({
     } catch (error: unknown) {
       notify({
         severity: 'error',
-        title: 'Could not prune missing worktrees',
+        title: 'Could not remove missing worktree entry',
         body: mainErrorMessage(error)
       })
     }
