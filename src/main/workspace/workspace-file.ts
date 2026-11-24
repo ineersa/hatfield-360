@@ -62,7 +62,7 @@ export function writeWorkspaceFile(
 ): Promise<void> {
   const document = {
     ...EMPTY_WORKSPACE_DOCUMENT,
-    ...(terminals ? { terminals } : {}),
+    ...(terminals?.tabs.length ? { terminals } : {}),
     folders: folders.map(({ path, kind }) => ({ path: toStoredFolderPath(path, file), kind }))
   }
   return writeFileAtomic(file, serializeWorkspaceDocument(document))

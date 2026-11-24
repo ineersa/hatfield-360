@@ -444,6 +444,7 @@ class WorkspaceStore {
     const run = this.queue.then(async () => {
       const { workspace } = await this.ready()
       if (generation !== this.terminalGeneration) return
+      if (!workspace.terminals && layout.tabs.length === 0) return
       if (workspace.problem) throw new Error(workspace.problem)
       const previous = new Map<string, PaneLeaf>()
       const remember = (node: PaneLayout): void => {
