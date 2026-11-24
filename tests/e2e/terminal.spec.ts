@@ -257,11 +257,12 @@ test(
               : "printf '    copy-first  inner  \\n\\n  copy-last\\ncopy-end\\n'"
             await run(page, pane, command)
             const screen = screenText(pane)
-            const outputRow = (text: string) =>
+            // Whole rows only: the typed command line holds the same words, before the output shows.
+            const outputRow = (text: RegExp) =>
               screen.locator(':scope > div').filter({ hasText: text })
-            const start = outputRow('copy-first').last()
-            const end = outputRow('copy-end').last()
-            await expect(end).toContainText('copy-end')
+            const start = outputRow(/^\s*copy-first\s+inner\s*$/)
+            const end = outputRow(/^\s*copy-end\s*$/)
+            await expect(end).toBeVisible()
             const select = async (): Promise<{ x: number; y: number }> => {
               const from = await start.boundingBox()
               const to = await end.boundingBox()
