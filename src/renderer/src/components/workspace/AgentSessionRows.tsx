@@ -1,3 +1,4 @@
+import { focusActiveTerminal } from '@/components/terminal/use-terminal-commands'
 import { AgentProviderIcon } from '@/components/icons/AgentProviderIcon'
 import {
   ContextMenu,
@@ -9,7 +10,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { notify } from '@/state/notification-store'
 import { cn } from '@/lib/class-names'
 import { Activity, Check, Copy, MessageCircle, SquareTerminal, Users, X } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   AGENT_PROVIDERS,
   type AgentSession,
@@ -97,6 +98,7 @@ function activeTerminalId(state: ReturnType<typeof useTerminalStore.getState>): 
 
 export function AgentSessionRows({ sessions }: { sessions: AgentSession[] }): React.JSX.Element {
   const selected = useTerminalStore(activeTerminalId)
+  const focusAfterMenu = useRef<string | null>(null)
   return (
     <>
       {sessions.map((session) => {
@@ -113,7 +115,7 @@ export function AgentSessionRows({ sessions }: { sessions: AgentSession[] }): Re
             ? `${identity} — ${title}`
             : title
           : identity
-        const accessibleName = id
+        const providerIdentity = id
           ? `${provider} ${session.provider === 'hatfield' ? '#' : ''}${id}`
           : `${provider} · ID not reported`
         const state = isStopped(session)
@@ -124,9 +126,10 @@ export function AgentSessionRows({ sessions }: { sessions: AgentSession[] }): Re
               ? null
               : session.activity
         const status = state ? statuses[state] : null
-        const label = status?.label ?? sessionDescription(session)
+        const label = status?.label ?? (session.process === 'unknown' ? 'Unknown' : 'Running')
+        const accessibleName = [providerIdentity, title, label].filter(Boolean).join(' · ')
         const detail = [
-          accessibleName,
+          providerIdentity,
           title,
           state === 'stopped' ? 'Stopped' : sessionDescription(session),
           session.outcome && `Last foreground response: ${outcomes[session.outcome].toLowerCase()}`,
@@ -138,8 +141,9 @@ export function AgentSessionRows({ sessions }: { sessions: AgentSession[] }): Re
           .join(' · ')
         const current = selected === session.terminalId
         const go = () => {
-          if (!selectTerminal(session.terminalId))
-            notify({ severity: 'warning', title: 'Terminal is no longer available' })
+          if (selectTerminal(session.terminalId)) return true
+          notify({ severity: 'warning', title: 'Terminal is no longer available' })
+          return false
         }
         return (
           <li key={session.id} className="pl-tree-indent">
@@ -183,17 +187,26 @@ export function AgentSessionRows({ sessions }: { sessions: AgentSession[] }): Re
                         )}
                       >
                         {status ? <status.icon className="size-4 shrink-0" aria-hidden /> : null}
-                        <span className="truncate">
-                          {session.process === 'unknown' && !status ? 'Unknown' : label}
-                        </span>
+                        <span className="truncate">{label}</span>
                       </span>
                     </button>
                   </TooltipTrigger>
                 </ContextMenuTrigger>
                 <TooltipContent className="max-w-72 break-words">{detail}</TooltipContent>
               </Tooltip>
-              <ContextMenuContent>
-                <ContextMenuItem onSelect={go}>
+              <ContextMenuContent
+                onCloseAutoFocus={(event) => {
+                  if (focusAfterMenu.current !== session.id) return
+                  focusAfterMenu.current = null
+                  event.preventDefault()
+                  setTimeout(focusActiveTerminal, 0)
+                }}
+              >
+                <ContextMenuItem
+                  onSelect={() => {
+                    if (go()) focusAfterMenu.current = session.id
+                  }}
+                >
                   <SquareTerminal aria-hidden />
                   Go to terminal
                 </ContextMenuItem>

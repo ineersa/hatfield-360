@@ -39,6 +39,7 @@ export function ProjectPicker({
         <button
           type="button"
           aria-label="Filter by project"
+          aria-haspopup="listbox"
           className="type-body flex h-control w-full min-w-0 items-center gap-2 rounded-component border border-input-border bg-input px-2.5 text-left text-input-foreground outline-none hover:bg-hover focus-visible:ring-2 focus-visible:ring-ring"
         >
           <span className="min-w-0 flex-1 truncate">

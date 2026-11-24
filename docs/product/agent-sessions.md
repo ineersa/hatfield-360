@@ -7,16 +7,19 @@ This is a product plan, not a claim that the capabilities below are implemented.
 ## Terminal-first, detailed navigation
 
 The selected design is **A3: Detailed tree**. Preserve the actual terminal tabs and
-split panes. Projects, worktrees, agent sessions, status filters and attention
-shortcuts belong in the left sidebar. Session rows have two lines: a title, then
-provider identity and status or wait reason. Do not hide that detail solely in a
-tooltip. The sidebar scrolls independently; do not replace terminal space with a
-dashboard or session table.
+split panes. Projects, checkouts, agent sessions and single-select status filters
+belong in the left sidebar. Projects with linked worktrees group sessions under
+collapsible checkout rows, including the primary checkout. Projects without
+linked worktrees list sessions directly. The sidebar scrolls independently;
+do not replace terminal space with a dashboard or session table.
 
-Use existing app theme roles and independently configured terminal themes. Keep
-attention restrained, with a collapsible needs-input section. Session recency is
-newest-first within its project/worktree scope; attention shortcuts do not
-silently reorder the tree. Clicking a live session selects its actual tab/pane.
+A compact one-line session row shows a provider icon, identity or title, and a
+readable colored status icon and label. Hatfield uses `#ID — title`; Claude uses
+the title alone. Without a reported title, use the Hatfield `#ID` or the first
+eight characters of the Claude ID. The tooltip gives the full title and ID,
+wait or tool details, and background counts. Use existing app theme roles and
+independently configured terminal themes. Sessions are newest-first within
+their checkout or project. Clicking a live session selects its actual tab/pane.
 
 Search is a project-scoped Librarian popup above the mounted terminal workspace,
 not a new page or a separate transcript engine. Keyboard opening, Escape,
@@ -57,10 +60,9 @@ subagent count is known to be zero, and no input is needed. Background scripts
 have a separate indicator and do not block completion. Missing reporting never
 implies success. Best-effort delivery cannot guarantee live-state convergence.
 
-The current protocol supplies provider identity, tool name and wait category, but
-not session titles or free-form questions. Use honest fallbacks unless an explicit
-bounded metadata extension is designed. Notifications are not a substitute for
-missing metadata fields. Bounded server launch records are not durable history.
+The protocol supplies provider identity, an optional bounded conversation title,
+tool name and wait category, but not free-form questions. Use honest fallbacks
+when metadata is absent. Bounded server launch records are not durable history.
 
 Librarian searches retained memories by relevance, not all transcripts or a live
 session catalog. Partial indexing, unavailable service, stale queries and unmapped

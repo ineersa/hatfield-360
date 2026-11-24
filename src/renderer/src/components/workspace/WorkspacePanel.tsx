@@ -43,53 +43,82 @@ const worktreeLabel = (worktree: Worktree): string =>
 
 function WorktreeRow({
   worktree,
-  project
+  project,
+  sessions,
+  hasSessions
 }: {
   worktree: Worktree
   project: string
+  sessions: AgentSession[]
+  hasSessions: boolean
 }): React.JSX.Element {
   const label = worktreeLabel(worktree)
+  const [collapsed, setCollapsed] = useState(false)
   const pathTip = usePointerTooltip()
   const pruneMissing = useWorktreeStore((state) => state.pruneMissing)
   return (
-    <ContextMenu>
-      <Tooltip delayDuration={PATH_TOOLTIP_DELAY_MS} onOpenChange={pathTip.onOpenChange}>
-        <ContextMenuTrigger asChild>
-          <TooltipTrigger asChild onPointerMove={pathTip.track}>
-            <li
-              tabIndex={0}
-              aria-label={`${label} worktree${worktree.prunable ? ' (missing)' : ''}`}
-              className="type-tree-row flex h-tree-row cursor-default items-center gap-2 rounded-component pr-2.5 pl-tree-indent outline-none select-none hover:bg-row-hover focus-visible:bg-selection-inactive data-[state=open]:bg-selection-inactive"
-            >
-              <GitBranch className="size-4 shrink-0 text-muted-foreground" aria-hidden />
-              <span
-                className={cn(
-                  'truncate',
-                  worktree.prunable && 'text-muted-foreground line-through'
-                )}
+    <li aria-label={`${label} worktree${worktree.prunable ? ' (missing)' : ''}`}>
+      <ContextMenu>
+        <Tooltip delayDuration={PATH_TOOLTIP_DELAY_MS} onOpenChange={pathTip.onOpenChange}>
+          <ContextMenuTrigger asChild>
+            <TooltipTrigger asChild onPointerMove={pathTip.track}>
+              <div
+                tabIndex={0}
+                className="type-tree-row flex h-tree-row cursor-default items-center gap-2 rounded-component pr-2.5 pl-1 text-muted-foreground outline-none select-none hover:bg-row-hover focus-visible:bg-selection-inactive data-[state=open]:bg-selection-inactive"
               >
-                {label}
-              </span>
-              <span className="type-hint min-w-0 shrink truncate">{worktree.name}</span>
-              {worktree.locked ? (
-                <Lock className="size-3.5 shrink-0 text-muted-foreground" aria-label="locked" />
-              ) : null}
-              {worktree.prunable ? (
-                <span className="type-hint ml-auto shrink-0 text-error">missing</span>
-              ) : null}
-            </li>
-          </TooltipTrigger>
-        </ContextMenuTrigger>
-        <TooltipContent {...pathTip.placement}>{worktree.path}</TooltipContent>
-      </Tooltip>
-      <OpenTerminalMenuContent cwd={worktree.path} project={project} disabled={worktree.prunable}>
-        {worktree.prunable && !worktree.locked ? (
-          <ContextMenuItem onSelect={() => void pruneMissing(project, worktree.path)}>
-            <Trash2 aria-hidden /> Prune all missing worktree entries in repository
-          </ContextMenuItem>
-        ) : null}
-      </OpenTerminalMenuContent>
-    </ContextMenu>
+                {hasSessions ? (
+                  <button
+                    type="button"
+                    aria-label={`${collapsed ? 'Expand' : 'Collapse'} ${label} checkout`}
+                    aria-expanded={!collapsed}
+                    onClick={() => setCollapsed(!collapsed)}
+                    className="flex size-4 shrink-0 items-center justify-center rounded-button focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    <ChevronRight
+                      className={cn('size-3.5', !collapsed && 'rotate-90')}
+                      aria-hidden
+                    />
+                  </button>
+                ) : (
+                  <span className="size-4 shrink-0" aria-hidden />
+                )}
+                <GitBranch className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+                <span
+                  className={cn(
+                    'truncate',
+                    worktree.prunable && 'text-muted-foreground line-through'
+                  )}
+                >
+                  {label}
+                </span>
+                {!worktree.project && (
+                  <span className="type-hint min-w-0 shrink truncate">{worktree.name}</span>
+                )}
+                {worktree.locked ? (
+                  <Lock className="size-3.5 shrink-0 text-muted-foreground" aria-label="locked" />
+                ) : null}
+                {worktree.prunable ? (
+                  <span className="type-hint ml-auto shrink-0 text-error">missing</span>
+                ) : null}
+              </div>
+            </TooltipTrigger>
+          </ContextMenuTrigger>
+          <TooltipContent {...pathTip.placement}>{worktree.path}</TooltipContent>
+        </Tooltip>
+        <OpenTerminalMenuContent cwd={worktree.path} project={project} disabled={worktree.prunable}>
+          {worktree.prunable && !worktree.locked ? (
+            <ContextMenuItem onSelect={() => void pruneMissing(project, worktree.path)}>
+              <Trash2 aria-hidden /> Prune all missing worktree entries in repository
+            </ContextMenuItem>
+          ) : null}
+        </OpenTerminalMenuContent>
+      </ContextMenu>
+      {!collapsed && sessions.length > 0 && (
+        <ul aria-label={`${label} checkout sessions`}>
+          <AgentSessionRows sessions={sessions} />
+        </ul>
+      )}
+    </li>
   )
 }
 
@@ -101,14 +130,46 @@ function hasChildRows(project: ProjectWorktrees | undefined): boolean {
 
 function ProjectWorktreeRows({
   folder,
-  sessions
+  sessions,
+  visible
 }: {
   folder: string
   sessions: AgentSession[]
+  visible: AgentSession[]
 }): React.JSX.Element | null {
   const project = useWorktreeStore((state) => state.projects[folder])
   const collapsed = useWorktreeStore((state) => state.collapsed[folder] === true)
   if (collapsed) return null
+  if (project?.status === 'git' && hasChildRows(project)) {
+    const primary = project.worktrees.find((tree) => tree.project)
+    const linked = project.worktrees.filter((tree) => !tree.project)
+    const belongsTo = (session: AgentSession, tree: Worktree) =>
+      tree.project
+        ? !linked.some((item) => item.path === session.worktree)
+        : session.worktree === tree.path
+    return (
+      <li>
+        <ul aria-label="Project checkouts" className="flex flex-col gap-1 pl-tree-indent">
+          {(primary ? [primary, ...linked] : linked).map((tree) => (
+            <WorktreeRow
+              key={tree.path}
+              worktree={tree}
+              project={folder}
+              sessions={visible.filter((session) => belongsTo(session, tree))}
+              hasSessions={sessions.some((session) => belongsTo(session, tree))}
+            />
+          ))}
+          {!primary && (
+            <AgentSessionRows
+              sessions={visible.filter(
+                (session) => !linked.some((item) => item.path === session.worktree)
+              )}
+            />
+          )}
+        </ul>
+      </li>
+    )
+  }
   return (
     <>
       {project?.status === 'error' && (
@@ -117,24 +178,7 @@ function ProjectWorktreeRows({
           <span className="min-w-0 break-words">Git: {project.message}</span>
         </li>
       )}
-      <AgentSessionRows
-        sessions={sessions.filter(
-          (session) =>
-            project?.status !== 'git' ||
-            !project.worktrees.some((tree) => !tree.project && tree.path === session.worktree)
-        )}
-      />
-      {project?.status === 'git' &&
-        project.worktrees
-          .filter((worktree) => !worktree.project)
-          .map((worktree) => (
-            <Fragment key={worktree.path}>
-              <WorktreeRow worktree={worktree} project={folder} />
-              <AgentSessionRows
-                sessions={sessions.filter((session) => session.worktree === worktree.path)}
-              />
-            </Fragment>
-          ))}
+      <AgentSessionRows sessions={visible} />
     </>
   )
 }
@@ -199,7 +243,7 @@ function ProjectRow({
               >
                 {folder.name}
               </span>
-              {checkout ? (
+              {checkout && !hasChildRows(project) ? (
                 <span className="type-hint flex min-w-0 shrink items-center gap-1">
                   <GitBranch className="size-3.5 shrink-0" aria-hidden />
                   <span className="truncate">{worktreeLabel(checkout)}</span>
@@ -330,7 +374,8 @@ export function WorkspacePanel(): React.JSX.Element {
                   {folder.missing ? null : (
                     <ProjectWorktreeRows
                       folder={folder.path}
-                      sessions={visible.filter((session) => session.project === folder.path)}
+                      sessions={sessions.filter((session) => session.project === folder.path)}
+                      visible={visible.filter((session) => session.project === folder.path)}
                     />
                   )}
                 </Fragment>

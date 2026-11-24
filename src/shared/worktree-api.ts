@@ -27,8 +27,9 @@ export const WORKTREE_CHANNELS = {
 } as const
 
 export type WorktreeApi = {
-  /** Every project folder of the open workspace that main has looked at, in workspace order. */
+  /** Prunes eligible missing entries in the repository after validating the selected entry. */
   pruneMissingWorktrees: (project: string, missingPath: string) => Promise<void>
+  /** Every project folder of the open workspace that main has looked at, in workspace order. */
   getWorktrees: () => Promise<ProjectWorktrees[]>
   subscribeWorktrees: (callback: (projects: ProjectWorktrees[]) => void) => () => void
 }

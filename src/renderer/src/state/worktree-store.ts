@@ -9,8 +9,9 @@ type WorktreeState = {
   /** Project folders whose worktree rows are hidden; kept while the app runs. */
   collapsed: Record<string, boolean>
   toggleCollapsed: (folder: string) => void
-  /** Loads the worktrees and follows git changes main sees; returns the unsubscribe. */
+  /** Requests repository-wide pruning from an eligible missing entry. */
   pruneMissing: (project: string, path: string) => Promise<void>
+  /** Loads the worktrees and follows git changes main sees; returns the unsubscribe. */
   connect: () => () => void
 }
 

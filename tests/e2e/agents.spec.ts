@@ -138,7 +138,9 @@ test('agent launches report through the real socket and sidebar rows select exac
         await expect(second).toHaveClass(/is-active/)
         await expect(
           projectList.getByRole('button', { name: /^(?:Hatfield (?:#|·)|Claude )/ }).first()
-        ).toHaveAccessibleName('Claude a3f91c2d-3691-4c2f-b54f-e4db8704bbc1')
+        ).toHaveAccessibleName(
+          'Claude a3f91c2d-3691-4c2f-b54f-e4db8704bbc1 · Triage <draft> · Working'
+        )
         const firstId = await first.getAttribute('data-terminal-id')
         if (!firstId) throw new Error('Hatfield terminal missing')
         const originalRow = await hatfield.elementHandle()
@@ -160,7 +162,7 @@ test('agent launches report through the real socket and sidebar rows select exac
         await originalPane.dispose()
         await expect(
           projectList.getByRole('button', { name: /^(?:Hatfield (?:#|·)|Claude )/ }).first()
-        ).toHaveAccessibleName('Hatfield #hatfield-e2e')
+        ).toHaveAccessibleName('Hatfield #hatfield-e2e · Review <draft> · Needs input')
         await expect(second).toHaveClass(/is-active/)
         await command(page, second, 'wait')
         await expect(
@@ -993,6 +995,25 @@ test('a linked worktree launches into its own tab and publishes only public sess
               .getByTestId('terminal-pane')
             await expect(output(worktreePane)).toContainText(`Directory: ${worktree}`)
             await startFocusedScenario(page, worktreePane)
+            const primary = page.getByRole('listitem', { name: 'main worktree', exact: true })
+            const linked = page.getByRole('listitem', { name: 'feature worktree', exact: true })
+            const primarySession = primary
+              .getByRole('list', { name: 'main checkout sessions' })
+              .getByRole('button', { name: /^Hatfield #hatfield-e2e/ })
+            const linkedSessionRow = linked
+              .getByRole('list', { name: 'feature checkout sessions' })
+              .getByRole('button', { name: /^Claude a3f91c2d/ })
+            await expect(primarySession).toBeVisible()
+            await expect(linkedSessionRow).toBeVisible()
+            await primary.getByRole('button', { name: 'Collapse main checkout' }).click()
+            await expect(primarySession).toHaveCount(0)
+            await expect(linkedSessionRow).toBeVisible()
+            await primary.getByRole('button', { name: 'Expand main checkout' }).click()
+            await linked.getByRole('button', { name: 'Collapse feature checkout' }).click()
+            await expect(linkedSessionRow).toHaveCount(0)
+            await expect(primarySession).toBeVisible()
+            await linked.getByRole('button', { name: 'Expand feature checkout' }).click()
+            await expect(linkedSessionRow).toBeVisible()
             const worktreeId = await worktreePane.getAttribute('data-terminal-id')
             if (!worktreeId) throw new Error('Linked worktree terminal missing')
             const settings = page.getByRole('main', { name: 'Settings', exact: true })
@@ -1008,7 +1029,8 @@ test('a linked worktree launches into its own tab and publishes only public sess
             await expect(page.getByRole('tab', { name: 'Hatfield', selected: true })).toBeVisible()
             await page.evaluate((id) => globalThis.desktop.writeTerminal(id, 'wait\r'), worktreeId)
             const attention = page.getByRole('button', {
-              name: 'Claude a3f91c2d-3691-4c2f-b54f-e4db8704bbc1'
+              name: 'Claude a3f91c2d-3691-4c2f-b54f-e4db8704bbc1 · Needs input',
+              exact: true
             })
             await expect(attention).toHaveAttribute('aria-description', /Needs input: permission/)
             const scope = page.getByRole('button', { name: 'Filter by project' })
@@ -1065,7 +1087,7 @@ test('a linked worktree launches into its own tab and publishes only public sess
             const linkedSession = folders.getByRole('button', { name: /^Claude / })
             await expect(linkedSession).toHaveCount(1)
             await expect(linkedSession).toHaveAccessibleName(
-              'Claude a3f91c2d-3691-4c2f-b54f-e4db8704bbc1'
+              'Claude a3f91c2d-3691-4c2f-b54f-e4db8704bbc1 · Needs input'
             )
           } finally {
             await reports.evaluate(({ stop }) => stop())
@@ -1304,10 +1326,10 @@ test('manual placement groups linked worktree subdirectories after Git discovery
         await rename(backup, gitDir)
         const feature = folders.getByRole('listitem', { name: 'feature worktree', exact: true })
         await expect(feature).toBeVisible()
-        const adjacent = feature
-          .locator('xpath=following-sibling::li[1]')
+        const nested = feature
+          .getByRole('list', { name: 'feature checkout sessions' })
           .getByRole('button', { name: /linked-subdir/ })
-        await expect(adjacent).toBeVisible()
+        await expect(nested).toBeVisible()
         const outside = await launchManualPlacement(page, 'app', boundary, 'boundary')
         await expect(outside).toBeVisible()
         await expect
@@ -1322,12 +1344,12 @@ test('manual placement groups linked worktree subdirectories after Git discovery
             return { cwd: session?.cwd, project: session?.project, worktree: session?.worktree }
           })
           .toEqual({ cwd: boundary, project: repo, worktree: null })
-        await expect(adjacent).toBeVisible()
+        await expect(nested).toBeVisible()
         await folders.getByRole('button', { name: 'Collapse app' }).click()
         await expect(child).toHaveCount(0)
         await expect(outside).toHaveCount(0)
         await folders.getByRole('button', { name: 'Expand app' }).click()
-        await expect(adjacent).toBeVisible()
+        await expect(nested).toBeVisible()
       },
       { userDataDir }
     )
