@@ -4,6 +4,9 @@ import { useShellLayoutStore } from './shell-layout-store'
 
 export type TerminalTab = {
   id: string
+  /** Visible label: the folder the tab started in. */
+  label: string
+  /** Accessible name; an agent tab also names its provider, which the strip shows as an icon. */
   title: string
   /** The folder new shells in this tab start in; null for the home folder. */
   cwd: string | null
@@ -36,9 +39,11 @@ export const useTerminalStore = create<TerminalState>((set, get) => ({
   tabs: [],
   activeTabId: null,
   openTerminal: (cwd, agent) => {
+    const label = cwd ? folderName(cwd) : 'Terminal'
     const tab: TerminalTab = {
       id: `terminal-tab-${nextTabNumber++}`,
-      title: agent ? AGENT_PROVIDERS[agent.provider] : cwd ? folderName(cwd) : 'Terminal',
+      label,
+      title: agent ? `${AGENT_PROVIDERS[agent.provider]} · ${label}` : label,
       cwd,
       ...(agent ? { agent } : {})
     }

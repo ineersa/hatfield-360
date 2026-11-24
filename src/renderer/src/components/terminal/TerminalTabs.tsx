@@ -1,4 +1,5 @@
 import { Columns2, Plus, Rows2, SquareTerminal, X } from 'lucide-react'
+import { AgentProviderIcon } from '@/components/icons/AgentProviderIcon'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/class-names'
 import { terminalShortcutLabel } from '@/lib/keymap-match'
@@ -75,12 +76,17 @@ export function TerminalTabs({ hidden }: { hidden: boolean }): React.JSX.Element
                     <button
                       type="button"
                       role="tab"
+                      aria-label={tab.title}
                       aria-selected={active}
                       onClick={() => activateTab(tab.id)}
                       className="flex min-w-0 flex-1 items-center gap-2 pr-2 pl-3.5 leading-none outline-none focus-visible:underline"
                     >
-                      <SquareTerminal className="size-4 shrink-0" aria-hidden />
-                      <span className="truncate">{tab.title}</span>
+                      {tab.agent ? (
+                        <AgentProviderIcon provider={tab.agent.provider} className="size-4" />
+                      ) : (
+                        <SquareTerminal className="size-4 shrink-0" aria-hidden />
+                      )}
+                      <span className="truncate">{tab.label}</span>
                     </button>
                   </TooltipTrigger>
                   <TooltipContent side="bottom">

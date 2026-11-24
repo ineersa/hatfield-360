@@ -773,7 +773,9 @@ test('agent notifications follow accepted transitions and open only the owning t
           /ACK message: accepted.*ACK duplicate: duplicate/s
         )
         await expect(message).toHaveCount(1)
-        await page.getByRole('button', { name: 'Close Hatfield', exact: true }).click()
+        await page
+          .getByRole('button', { name: 'Close Hatfield · agent-project', exact: true })
+          .click()
         await openSettings.click()
         await message.getByRole('button', { name: 'Open terminal' }).click()
         await expect(
@@ -1081,7 +1083,9 @@ test('a linked worktree launches into its own tab and publishes only public sess
             await expect(agentsView).toHaveAttribute('aria-pressed', 'true')
             await expect(rootPane).toBeVisible()
             await expect(rootPane.locator('textarea')).toBeFocused()
-            await expect(page.getByRole('tab', { name: 'Hatfield', selected: true })).toBeVisible()
+            await expect(
+              page.getByRole('tab', { name: 'Hatfield · app', exact: true, selected: true })
+            ).toHaveText('app')
             await page.evaluate((id) => globalThis.desktop.writeTerminal(id, 'wait\r'), worktreeId)
             const attention = page.getByRole('button', {
               name: 'Claude a3f91c2d-3691-4c2f-b54f-e4db8704bbc1 · Needs input',
@@ -1113,7 +1117,9 @@ test('a linked worktree launches into its own tab and publishes only public sess
             await expect(agentsView).toHaveAttribute('aria-pressed', 'true')
             await expect(worktreePane).toBeVisible()
             await expect(worktreePane.locator('textarea')).toBeFocused()
-            await expect(page.getByRole('tab', { name: 'Claude', selected: true })).toBeVisible()
+            await expect(
+              page.getByRole('tab', { name: 'Claude · app-feature', exact: true, selected: true })
+            ).toHaveText('app-feature')
             await expect(worktreePane).toHaveAttribute('data-terminal-id', worktreeId)
             await expect(output(worktreePane)).toContainText('ACK wait: accepted')
 
