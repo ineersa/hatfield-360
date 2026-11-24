@@ -150,6 +150,45 @@ test('splits and tabs each get their own shell; closing them ends it, and so doe
   }
 })
 
+test('terminal tabs that overflow scroll with arrow buttons and keep the selected tab in view', async () => {
+  const { userData, cleanup } = await seedProject()
+  try {
+    await withApp(
+      async (_app, page) => {
+        await openProjectTerminal(page)
+        const left = page.getByRole('button', { name: 'Scroll tabs left' })
+        const right = page.getByRole('button', { name: 'Scroll tabs right' })
+        await expect(left).toHaveCount(0)
+        const tabs = page.getByRole('tab', { name: 'pty-project' })
+        for (let count = 2; count <= 12; count++) {
+          await page.getByRole('button', { name: 'New Terminal' }).click()
+          await expect(tabs).toHaveCount(count)
+        }
+        await expect(tabs.last()).toHaveAttribute('aria-selected', 'true')
+        await expect(tabs.last()).toBeInViewport()
+        await expect(tabs.first()).not.toBeInViewport()
+        await expect(left).toBeEnabled()
+        await expect(right).toBeDisabled()
+        await saveScreenshot(page, 'terminal-tabs-overflow')
+
+        await left.click()
+        await expect(tabs.last()).not.toBeInViewport()
+        await expect(right).toBeEnabled()
+
+        await page.keyboard.press(
+          process.platform === 'darwin' ? 'Meta+Shift+BracketRight' : 'Control+PageDown'
+        )
+        await expect(tabs.first()).toHaveAttribute('aria-selected', 'true')
+        await expect(tabs.first()).toBeInViewport()
+        await expect(left).toBeDisabled()
+      },
+      { userDataDir: userData }
+    )
+  } finally {
+    await cleanup()
+  }
+})
+
 test('terminal tab upper edge and icon activate it, with shortcuts visible on hover', async () => {
   const { userData, cleanup } = await seedProject()
   try {

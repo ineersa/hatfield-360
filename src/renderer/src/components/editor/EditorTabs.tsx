@@ -1,5 +1,6 @@
 import { CircleAlert, Eye, FileX, X } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
+import { ScrollingTabList } from '@/components/shell/ScrollingTabList'
 import { FileTreeIcon } from '@/components/icons/FileTreeIcon'
 import {
   AlertDialog,
@@ -231,11 +232,7 @@ export function EditorTabs({ hidden }: { hidden: boolean }): React.JSX.Element {
   return (
     <div className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-island" hidden={hidden}>
       <div className="flex h-tab-bar shrink-0 items-stretch bg-frame shadow-[inset_0_-1px_0_var(--separator)]">
-        <div
-          role="tablist"
-          aria-label="Editor tabs"
-          className="flex min-w-0 items-stretch overflow-x-auto"
-        >
+        <ScrollingTabList label="Editor tabs" selected={activePath}>
           {tabs.map((tab) => (
             <Tab
               key={tab.path}
@@ -257,7 +254,7 @@ export function EditorTabs({ hidden }: { hidden: boolean }): React.JSX.Element {
               onDragEnd={() => setDragged(null)}
             />
           ))}
-        </div>
+        </ScrollingTabList>
         {canPreview ? (
           <button
             type="button"

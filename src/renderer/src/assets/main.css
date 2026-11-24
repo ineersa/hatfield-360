@@ -134,3 +134,8 @@ body {
 * {
   scrollbar-color: var(--scrollbar-thumb) transparent;
 }
+
+/* Tab strips scroll with arrow buttons; a scrollbar under the tabs only crowds them. */
+@utility scrollbar-hidden {
+  scrollbar-width: none;
+}

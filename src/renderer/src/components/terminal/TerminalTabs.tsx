@@ -1,4 +1,5 @@
 import { Columns2, Plus, Rows2, SquareTerminal, X } from 'lucide-react'
+import { ScrollingTabList } from '@/components/shell/ScrollingTabList'
 import { AgentProviderIcon } from '@/components/icons/AgentProviderIcon'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/class-names'
@@ -54,11 +55,7 @@ export function TerminalTabs({ hidden }: { hidden: boolean }): React.JSX.Element
     <div className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-island" hidden={hidden}>
       {/* The active tab covers the strip's bottom line, so it reads as one piece with its panes. */}
       <div className="flex h-tab-bar shrink-0 items-stretch bg-frame shadow-[inset_0_-1px_0_var(--separator)]">
-        <div
-          role="tablist"
-          aria-label="Terminals"
-          className="flex min-w-0 items-stretch overflow-x-auto"
-        >
+        <ScrollingTabList label="Terminals" selected={activeTabId}>
           {tabs.map((tab) => {
             const active = tab.id === activeTabId
             return (
@@ -114,7 +111,7 @@ export function TerminalTabs({ hidden }: { hidden: boolean }): React.JSX.Element
               </div>
             )
           })}
-        </div>
+        </ScrollingTabList>
         <div className="flex flex-1 items-center gap-0.5 px-2">
           <StripCommand command="new-terminal" label="New Terminal" icon={Plus} />
           <div className="flex-1" />
