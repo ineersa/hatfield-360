@@ -11,11 +11,14 @@ export function OpenTerminalMenuContent({
   cwd,
   project,
   disabled,
+  onCloseAutoFocus,
   children
 }: {
   cwd: string
   project?: string
   disabled: boolean
+  /** Runs as the menu closes, unless it opened a terminal; may keep focus from returning to the row. */
+  onCloseAutoFocus?: (event: Event) => void
   children?: ReactNode
 }): React.JSX.Element {
   const openTerminal = useTerminalStore((state) => state.openTerminal)
@@ -23,7 +26,10 @@ export function OpenTerminalMenuContent({
   return (
     <ContextMenuContent
       onCloseAutoFocus={(event) => {
-        if (!openedTerminal.current) return
+        if (!openedTerminal.current) {
+          onCloseAutoFocus?.(event)
+          return
+        }
         // The new terminal gets the keys, not the row the menu would return them to.
         event.preventDefault()
         openedTerminal.current = false
