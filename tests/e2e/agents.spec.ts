@@ -16,6 +16,7 @@ declare global {
 const fixture = resolve(__dirname, 'fixtures/agent-scenario.mjs')
 const demoSize = { width: 1600, height: 1000 }
 const demo = process.env.E2E_AGENT_DEMO === '1'
+const literalPattern = (value: string) => new RegExp(value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
 const artifacts = resolve(__dirname, '../../test-results/agents-demo')
 const output = (pane: Locator) => pane.locator('.xterm-rows')
 const projectRow = (page: Page) =>
@@ -952,6 +953,7 @@ test('removing a missing worktree entry preserves other missing entries, live wo
     try {
       await withApp(
         async (_app, page) => {
+          await page.getByRole('button', { name: 'Worktrees (3)', exact: true }).click()
           const missingRow = page.getByRole('listitem', {
             name: 'missing-feature worktree (missing)',
             exact: true
@@ -1029,6 +1031,14 @@ test('a linked worktree launches into its own tab and publishes only public sess
             await expect(output(rootPane)).toContainText(`Directory: ${repo}`)
             await startFocusedScenario(page, rootPane)
 
+            const disclosure = page.getByRole('button', { name: 'Worktrees (1)', exact: true })
+            const projectSessions = page.getByRole('list', { name: 'app sessions', exact: true })
+            const primarySession = projectSessions.getByRole('button', {
+              name: /^Hatfield #hatfield-e2e/
+            })
+            await expect(primarySession).toBeVisible()
+            await expect(disclosure).toHaveAttribute('aria-expanded', 'false')
+            await disclosure.click()
             await page
               .getByRole('listitem', { name: 'feature worktree' })
               .click({ button: 'right' })
@@ -1038,24 +1048,18 @@ test('a linked worktree launches into its own tab and publishes only public sess
               .getByTestId('terminal-pane')
             await expect(output(worktreePane)).toContainText(`Directory: ${worktree}`)
             await startFocusedScenario(page, worktreePane)
-            const primary = page.getByRole('listitem', { name: 'main worktree', exact: true })
-            const linked = page.getByRole('listitem', { name: 'feature worktree', exact: true })
-            const primarySession = primary
-              .getByRole('list', { name: 'main checkout sessions' })
-              .getByRole('button', { name: /^Hatfield #hatfield-e2e/ })
-            const linkedSessionRow = linked
-              .getByRole('list', { name: 'feature checkout sessions' })
-              .getByRole('button', { name: /^Claude a3f91c2d/ })
-            await expect(primarySession).toBeVisible()
+            const linkedSessionRow = projectSessions.getByRole('button', {
+              name: /^Claude a3f91c2d/
+            })
             await expect(linkedSessionRow).toBeVisible()
-            await primary.getByRole('button', { name: 'Collapse main checkout' }).click()
-            await expect(primarySession).toHaveCount(0)
-            await expect(linkedSessionRow).toBeVisible()
-            await primary.getByRole('button', { name: 'Expand main checkout' }).click()
-            await linked.getByRole('button', { name: 'Collapse feature checkout' }).click()
-            await expect(linkedSessionRow).toHaveCount(0)
+            await expect(linkedSessionRow).toHaveAttribute(
+              'aria-description',
+              literalPattern(worktree)
+            )
+            await disclosure.click()
+            await expect(disclosure).toHaveAttribute('aria-expanded', 'false')
+            await expect(page.getByRole('list', { name: 'app worktrees' })).toHaveCount(0)
             await expect(primarySession).toBeVisible()
-            await linked.getByRole('button', { name: 'Expand feature checkout' }).click()
             await expect(linkedSessionRow).toBeVisible()
             const worktreeId = await worktreePane.getAttribute('data-terminal-id')
             if (!worktreeId) throw new Error('Linked worktree terminal missing')
@@ -1287,7 +1291,7 @@ test('manual placement retains the workspace alias for a symlinked project', asy
   }
 })
 
-test('manual placement groups linked worktree subdirectories after Git discovery recovers', async () => {
+test('manual placement keeps linked worktree sessions visible when Git discovery recovers', async () => {
   test.skip(process.platform !== 'linux', 'Manual registration uses Linux process identity')
   const { repo, projects, cleanup: cleanRepo } = await makeRepo()
   const { userDataDir, cleanup } = await seed(repo)
@@ -1312,32 +1316,23 @@ test('manual placement groups linked worktree subdirectories after Git discovery
         await expect(child).toBeVisible()
         await rmdir(gitDir)
         await rename(backup, gitDir)
-        const feature = folders.getByRole('listitem', { name: 'feature worktree', exact: true })
-        await expect(feature).toBeVisible()
-        const nested = feature
-          .getByRole('list', { name: 'feature checkout sessions' })
-          .getByRole('button', { name: /linked-subdir/ })
-        await expect(nested).toBeVisible()
+        const disclosure = folders.getByRole('button', { name: 'Worktrees (1)', exact: true })
+        await expect(disclosure).toHaveAttribute('aria-expanded', 'false')
+        const linkedSession = folders
+          .getByRole('list', { name: 'app sessions' })
+          .getByRole('button', { name: 'Hatfield #linked-subdir · Working', exact: true })
+        await expect(linkedSession).toHaveAttribute(
+          'aria-description',
+          literalPattern(`Worktree: ${tree} · ${src}`)
+        )
         const outside = await launchManualPlacement(page, 'app', boundary, 'boundary')
-        await expect(outside).toBeVisible()
-        await expect
-          .poll(async () => {
-            const session = await readManualPlacement(page, 'linked-subdir')
-            return { cwd: session?.cwd, project: session?.project, worktree: session?.worktree }
-          })
-          .toEqual({ cwd: src, project: repo, worktree: tree })
-        await expect
-          .poll(async () => {
-            const session = await readManualPlacement(page, 'boundary')
-            return { cwd: session?.cwd, project: session?.project, worktree: session?.worktree }
-          })
-          .toEqual({ cwd: boundary, project: repo, worktree: null })
-        await expect(nested).toBeVisible()
+        await expect(outside).toHaveAttribute('aria-description', literalPattern(boundary))
+        await expect(outside).not.toHaveAttribute('aria-description', /Worktree:/)
         await folders.getByRole('button', { name: 'Collapse app' }).click()
         await expect(child).toHaveCount(0)
         await expect(outside).toHaveCount(0)
         await folders.getByRole('button', { name: 'Expand app' }).click()
-        await expect(nested).toBeVisible()
+        await expect(linkedSession).toBeVisible()
       },
       { userDataDir }
     )

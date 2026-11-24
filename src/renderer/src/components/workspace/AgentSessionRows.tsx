@@ -141,6 +141,7 @@ export function AgentSessionRows({ sessions }: { sessions: AgentSession[] }): Re
           session.outcome && `Last foreground response: ${outcomes[session.outcome].toLowerCase()}`,
           session.runningChildren !== null && `Active agents: ${session.runningChildren}`,
           session.runningScripts !== null && `Background scripts: ${session.runningScripts}`,
+          session.worktree && session.worktree !== session.cwd && `Worktree: ${session.worktree}`,
           session.cwd
         ]
           .filter(Boolean)
@@ -152,7 +153,7 @@ export function AgentSessionRows({ sessions }: { sessions: AgentSession[] }): Re
           return false
         }
         return (
-          <li key={session.id} className="pl-tree-indent">
+          <li key={session.id}>
             <ContextMenu>
               <Tooltip>
                 <ContextMenuTrigger asChild>
@@ -189,7 +190,7 @@ export function AgentSessionRows({ sessions }: { sessions: AgentSession[] }): Re
                       {status ? (
                         <span
                           className={cn(
-                            'flex min-w-24 shrink-0 items-center justify-end gap-1',
+                            'flex shrink-0 items-center justify-end gap-1',
                             status.color
                           )}
                         >

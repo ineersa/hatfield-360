@@ -6,20 +6,22 @@ This is a product plan, not a claim that the capabilities below are implemented.
 
 ## Terminal-first, detailed navigation
 
-The selected design is **A3: Detailed tree**. Preserve the actual terminal tabs and
-split panes. Projects, checkouts, agent sessions and single-select status filters
-belong in the left sidebar. Projects with linked worktrees group sessions under
-collapsible checkout rows, including the primary checkout. Projects without
-linked worktrees list sessions directly. The sidebar scrolls independently;
-do not replace terminal space with a dashboard or session table.
+Preserve the actual terminal tabs and split panes. In the left sidebar, each
+project heading shows its primary branch and is followed by a flat session list.
+Linked worktrees are available afterward under a collapsed **Worktrees (N)**
+disclosure. Toggling that disclosure does not hide sessions. The single-select
+status filters use icon buttons with tooltips at narrow widths and show labels
+when room allows. The sidebar scrolls independently; do not replace terminal
+space with a dashboard or session table.
 
 A compact one-line session row shows a provider icon, identity or title, and a
 readable colored status icon and label. Hatfield uses `#ID — title`; Claude uses
 the title alone. Without a reported title, use the Hatfield `#ID` or the first
 eight characters of the Claude ID. The tooltip gives the full title and ID,
-wait or tool details, and background counts. Use existing app theme roles and
-independently configured terminal themes. Sessions appear newest-record-first within their checkout or project, and in
-the attention strip. Status, title, and conversation-selection updates do not
+wait or tool details, background counts, and checkout and working-directory paths.
+Use existing app theme roles and independently configured terminal themes.
+Sessions appear newest-record-first within each project and in the attention
+strip. Status, title, and conversation-selection updates do not
 reorder existing records. A bounded attention strip above the tree keeps open
 requests visible even when browsing filters hide the session. It names the reason
 and opens the owning terminal, where the user answers or approves the request.

@@ -28,7 +28,7 @@ import {
   usePointerTooltip
 } from '@/components/ui/tooltip'
 import { cn } from '@/lib/class-names'
-import { Fragment, useState } from 'react'
+import { Fragment, useId, useState } from 'react'
 import { OpenTerminalMenuContent } from '@/components/terminal/OpenTerminalMenuContent'
 import {
   OpenFolderEmptyState,
@@ -44,17 +44,12 @@ const worktreeLabel = (worktree: Worktree): string =>
 
 function WorktreeRow({
   worktree,
-  project,
-  sessions,
-  hasSessions
+  project
 }: {
   worktree: Worktree
   project: string
-  sessions: AgentSession[]
-  hasSessions: boolean
 }): React.JSX.Element {
   const label = worktreeLabel(worktree)
-  const [collapsed, setCollapsed] = useState(false)
   const pathTip = usePointerTooltip()
   const pruneMissing = useWorktreeStore((state) => state.pruneMissing)
   return (
@@ -67,22 +62,6 @@ function WorktreeRow({
                 tabIndex={0}
                 className="type-tree-row flex h-tree-row cursor-default items-center gap-2 rounded-component pr-2.5 pl-1 text-muted-foreground outline-none select-none hover:bg-row-hover focus-visible:bg-selection-inactive data-[state=open]:bg-selection-inactive"
               >
-                {hasSessions ? (
-                  <button
-                    type="button"
-                    aria-label={`${collapsed ? 'Expand' : 'Collapse'} ${label} checkout`}
-                    aria-expanded={!collapsed}
-                    onClick={() => setCollapsed(!collapsed)}
-                    className="flex size-4 shrink-0 items-center justify-center rounded-button focus-visible:ring-2 focus-visible:ring-ring"
-                  >
-                    <ChevronRight
-                      className={cn('size-3.5', !collapsed && 'rotate-90')}
-                      aria-hidden
-                    />
-                  </button>
-                ) : (
-                  <span className="size-4 shrink-0" aria-hidden />
-                )}
                 <GitBranch className="size-4 shrink-0 text-muted-foreground" aria-hidden />
                 <span
                   className={cn(
@@ -92,9 +71,6 @@ function WorktreeRow({
                 >
                   {label}
                 </span>
-                {!worktree.project && (
-                  <span className="type-hint min-w-0 shrink truncate">{worktree.name}</span>
-                )}
                 {worktree.locked ? (
                   <Lock className="size-3.5 shrink-0 text-muted-foreground" aria-label="locked" />
                 ) : null}
@@ -114,11 +90,6 @@ function WorktreeRow({
           ) : null}
         </OpenTerminalMenuContent>
       </ContextMenu>
-      {!collapsed && sessions.length > 0 && (
-        <ul aria-label={`${label} checkout sessions`}>
-          <AgentSessionRows sessions={sessions} />
-        </ul>
-      )}
     </li>
   )
 }
@@ -129,57 +100,66 @@ function hasChildRows(project: ProjectWorktrees | undefined): boolean {
   return project?.status === 'git' && project.worktrees.some((worktree) => !worktree.project)
 }
 
-function ProjectWorktreeRows({
+function LinkedWorktrees({
   folder,
-  sessions,
+  worktrees
+}: {
+  folder: WorkspaceFolder
+  worktrees: Worktree[]
+}): React.JSX.Element {
+  const [expanded, setExpanded] = useState(false)
+  const listId = useId()
+  return (
+    <li>
+      <button
+        type="button"
+        aria-expanded={expanded}
+        aria-controls={listId}
+        onClick={() => setExpanded(!expanded)}
+        className="type-hint flex h-tree-row w-full items-center gap-2 rounded-component px-1 text-muted-foreground hover:bg-row-hover focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+      >
+        <ChevronRight className={cn('size-4 shrink-0', expanded && 'rotate-90')} aria-hidden />
+        Worktrees ({worktrees.length})
+      </button>
+      <ul id={listId} aria-label={`${folder.name} worktrees`} hidden={!expanded}>
+        {expanded &&
+          worktrees.map((worktree) => (
+            <WorktreeRow key={worktree.path} worktree={worktree} project={folder.path} />
+          ))}
+      </ul>
+    </li>
+  )
+}
+
+function ProjectContents({
+  folder,
   visible
 }: {
-  folder: string
-  sessions: AgentSession[]
+  folder: WorkspaceFolder
   visible: AgentSession[]
 }): React.JSX.Element | null {
-  const project = useWorktreeStore((state) => state.projects[folder])
-  const collapsed = useWorktreeStore((state) => state.collapsed[folder] === true)
+  const project = useWorktreeStore((state) => state.projects[folder.path])
+  const collapsed = useWorktreeStore((state) => state.collapsed[folder.path] === true)
   if (collapsed) return null
-  if (project?.status === 'git' && hasChildRows(project)) {
-    const primary = project.worktrees.find((tree) => tree.project)
-    const linked = project.worktrees.filter((tree) => !tree.project)
-    const belongsTo = (session: AgentSession, tree: Worktree) =>
-      tree.project
-        ? !linked.some((item) => item.path === session.worktree)
-        : session.worktree === tree.path
-    return (
-      <li>
-        <ul aria-label="Project checkouts" className="flex flex-col gap-1 pl-tree-indent">
-          {(primary ? [primary, ...linked] : linked).map((tree) => (
-            <WorktreeRow
-              key={tree.path}
-              worktree={tree}
-              project={folder}
-              sessions={visible.filter((session) => belongsTo(session, tree))}
-              hasSessions={sessions.some((session) => belongsTo(session, tree))}
-            />
-          ))}
-          {!primary && (
-            <AgentSessionRows
-              sessions={visible.filter(
-                (session) => !linked.some((item) => item.path === session.worktree)
-              )}
-            />
-          )}
-        </ul>
-      </li>
-    )
-  }
+  const linked = project?.status === 'git' ? project.worktrees.filter((tree) => !tree.project) : []
   return (
     <>
-      {project?.status === 'error' && (
-        <li role="alert" className="type-hint flex gap-2 py-1 pr-2.5 pl-tree-indent">
-          <CircleAlert className="mt-0.5 size-3.5 shrink-0 text-error" aria-hidden />
-          <span className="min-w-0 break-words">Git: {project.message}</span>
+      {visible.length > 0 && (
+        <li>
+          <ul aria-label={`${folder.name} sessions`}>
+            <AgentSessionRows sessions={visible} />
+          </ul>
         </li>
       )}
-      <AgentSessionRows sessions={visible} />
+      {project?.status === 'error' && (
+        <li>
+          <p role="alert" className="type-hint flex gap-2 px-1 py-1">
+            <CircleAlert className="mt-0.5 size-3.5 shrink-0 text-error" aria-hidden />
+            <span className="min-w-0 break-words">Git: {project.message}</span>
+          </p>
+        </li>
+      )}
+      {linked.length > 0 && <LinkedWorktrees folder={folder} worktrees={linked} />}
     </>
   )
 }
@@ -221,10 +201,9 @@ function ProjectRow({
               {foldable ? (
                 <button
                   type="button"
-                  tabIndex={-1}
                   aria-label={`${collapsed ? 'Expand' : 'Collapse'} ${folder.name}`}
                   aria-expanded={!collapsed}
-                  className="flex size-5 shrink-0 items-center justify-center rounded-button text-muted-foreground"
+                  className="flex size-5 shrink-0 items-center justify-center rounded-button text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
                 >
                   <ChevronRight className={cn('size-4', !collapsed && 'rotate-90')} aria-hidden />
                 </button>
@@ -244,8 +223,8 @@ function ProjectRow({
               >
                 {folder.name}
               </span>
-              {checkout && !hasChildRows(project) ? (
-                <span className="type-hint flex min-w-0 shrink items-center gap-1">
+              {checkout ? (
+                <span className="type-hint flex max-w-24 shrink-0 items-center gap-1 text-muted-foreground">
                   <GitBranch className="size-3.5 shrink-0" aria-hidden />
                   <span className="truncate">{worktreeLabel(checkout)}</span>
                 </span>
@@ -331,7 +310,7 @@ export function WorkspacePanel(): React.JSX.Element {
         />
       ) : (
         <div className="min-h-0 overflow-y-auto">
-          <div className="px-2 pb-2">
+          <div className="@container px-2 pb-2">
             <ProjectPicker folders={folders} value={scope} onChange={setProject} />
             <div
               role="group"
@@ -350,16 +329,21 @@ export function WorkspacePanel(): React.JSX.Element {
                 const { icon: Icon, label, color } = statuses[key]
                 const pressed = filter === key
                 return (
-                  <button
-                    type="button"
-                    key={key}
-                    aria-pressed={pressed}
-                    onClick={() => setFilter(key)}
-                    className={cn(filterClass, color, pressed && 'border-ring bg-hover')}
-                  >
-                    <Icon aria-hidden className="size-3" />
-                    {label}
-                  </button>
+                  <Tooltip key={key}>
+                    <TooltipTrigger asChild>
+                      <button
+                        type="button"
+                        aria-label={label}
+                        aria-pressed={pressed}
+                        onClick={() => setFilter(key)}
+                        className={cn(filterClass, color, pressed && 'border-ring bg-hover')}
+                      >
+                        <Icon aria-hidden className="size-3" />
+                        <span className="hidden @min-[360px]:inline">{label}</span>
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent>{label}</TooltipContent>
+                  </Tooltip>
                 )
               })}
             </div>
@@ -374,9 +358,8 @@ export function WorkspacePanel(): React.JSX.Element {
                     hasSessions={sessions.some((session) => session.project === folder.path)}
                   />
                   {folder.missing ? null : (
-                    <ProjectWorktreeRows
-                      folder={folder.path}
-                      sessions={sessions.filter((session) => session.project === folder.path)}
+                    <ProjectContents
+                      folder={folder}
                       visible={visible.filter((session) => session.project === folder.path)}
                     />
                   )}
@@ -389,7 +372,7 @@ export function WorkspacePanel(): React.JSX.Element {
           {ungrouped.length > 0 && (
             <div className="px-2 py-2">
               <h3 className="type-section-title px-2">Other terminals</h3>
-              <ul>
+              <ul aria-label="Other terminal sessions">
                 <AgentSessionRows sessions={ungrouped} />
               </ul>
             </div>
