@@ -11,6 +11,7 @@ let {
 } = process.env
 const [provider = 'hatfield', sessionId = 'demo', marker = 'demo'] = process.argv.slice(2)
 let sequence = 0
+let sessionEpoch = 1
 let last
 let initial
 const snapshot = {
@@ -75,7 +76,7 @@ async function emit(kind, fields = {}) {
     token,
     launchId,
     sessionId,
-    sessionEpoch: 1,
+    sessionEpoch,
     eventId: `event-${sequence}`,
     sequence,
     kind,
@@ -100,6 +101,10 @@ for await (const command of input) {
         snapshot.tool = null
         reply = await report()
         if (command === 'start') initial = last
+        break
+      case 'reselect':
+        sessionEpoch = sequence + 1
+        reply = await report()
         break
       case 'title':
         snapshot.title = provider === 'hatfield' ? 'Review <draft>' : 'Triage <draft>'

@@ -23,7 +23,11 @@ export type AgentSession = {
   outcome: 'completed' | 'failed' | 'cancelled' | 'unknown' | null
   updatedAt: number
 }
-export type AgentSnapshot = { revision: number; sessions: AgentSession[] }
+export type AgentSnapshot = {
+  revision: number
+  /** Oldest record first. Updating an existing record does not change its position. */
+  sessions: AgentSession[]
+}
 export type AgentNotification = {
   ownerWindowFocusedAndVisible: boolean
   provider: AgentProvider

@@ -18,8 +18,9 @@ readable colored status icon and label. Hatfield uses `#ID — title`; Claude us
 the title alone. Without a reported title, use the Hatfield `#ID` or the first
 eight characters of the Claude ID. The tooltip gives the full title and ID,
 wait or tool details, and background counts. Use existing app theme roles and
-independently configured terminal themes. Sessions are newest-first within
-their checkout or project. A bounded attention strip above the tree keeps open
+independently configured terminal themes. Sessions appear newest-record-first within their checkout or project, and in
+the attention strip. Status, title, and conversation-selection updates do not
+reorder existing records. A bounded attention strip above the tree keeps open
 requests visible even when browsing filters hide the session. It names the reason
 and opens the owning terminal, where the user answers or approves the request.
 Clicking a live session also selects its actual tab/pane.

@@ -39,7 +39,7 @@ export function useAgentSessions() {
       stop()
     }
   }, [])
-  return { sessions: snapshot.sessions.toSorted((a, b) => b.updatedAt - a.updatedAt), error }
+  return { sessions: snapshot.sessions.toReversed(), error }
 }
 
 function sessionDescription(session: AgentSession): string {

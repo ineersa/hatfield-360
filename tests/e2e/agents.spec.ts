@@ -92,6 +92,11 @@ test('agent launches report through the real socket and sidebar rows select exac
         const projectList = page.getByRole('list', { name: 'Workspace folders' })
         const hatfield = projectList.getByRole('button', { name: /^Hatfield (?:#|·)/ })
         const claude = projectList.getByRole('button', { name: /^Claude / })
+        const orderedRows = projectList.getByRole('button', {
+          name: /^(?:Hatfield (?:#|·)|Claude )/
+        })
+        const expectLaunchOrder = () =>
+          expect(orderedRows).toHaveText([/^a3f91c2d|^Triage/, /^#hatfield-e2e/])
         await expect(output(first)).toContainText('Scenario ready: literal $HOME; *')
         await expect(output(first)).toContainText(`Directory: ${project}`)
         await expect(hatfield).toContainText('Running')
@@ -128,6 +133,7 @@ test('agent launches report through the real socket and sidebar rows select exac
           'aria-description',
           /Hatfield #hatfield-e2e · Review <draft>/
         )
+        await expectLaunchOrder()
         await command(page, second, 'title')
         await expect(claude).toHaveText('Triage <draft>Working')
         await expect(claude).toHaveAttribute(
@@ -162,7 +168,9 @@ test('agent launches report through the real socket and sidebar rows select exac
         await originalPane.dispose()
         await expect(
           projectList.getByRole('button', { name: /^(?:Hatfield (?:#|·)|Claude )/ }).first()
-        ).toHaveAccessibleName('Hatfield #hatfield-e2e · Review <draft> · Needs input')
+        ).toHaveAccessibleName(
+          'Claude a3f91c2d-3691-4c2f-b54f-e4db8704bbc1 · Triage <draft> · Working'
+        )
         await expect(second).toHaveClass(/is-active/)
         await command(page, second, 'wait')
         await expect(
@@ -171,6 +179,22 @@ test('agent launches report through the real socket and sidebar rows select exac
             .filter({ hasText: 'Needs input' })
         ).toHaveCount(2)
         expect(await treeTop()).toBeGreaterThan(originalTop)
+        const attentionActions = page
+          .getByRole('region', { name: 'Agents needing attention' })
+          .getByRole('button', { name: /^Open terminal for/ })
+        await expect(attentionActions).toHaveCount(2)
+        await expect(attentionActions.first()).toHaveAccessibleName(
+          'Open terminal for Triage <draft>'
+        )
+        await command(page, first, 'tool')
+        await expect(hatfield).toHaveAttribute('aria-description', /Needs input: permission/)
+        await command(page, first, 'reselect')
+        await expectLaunchOrder()
+        await expect(attentionActions.first()).toHaveAccessibleName(
+          'Open terminal for Triage <draft>'
+        )
+        await command(page, second, 'reselect')
+        await expectLaunchOrder()
         await command(page, second, 'resolve')
         await expect(
           projectList
@@ -228,6 +252,7 @@ test('agent launches report through the real socket and sidebar rows select exac
           /Needs input: question · Last foreground response: completed/
         )
         await command(page, first, 'child-done')
+        await expectLaunchOrder()
         await expect(hatfield).toHaveAttribute(
           'aria-description',
           /Idle · Last foreground response: completed/
