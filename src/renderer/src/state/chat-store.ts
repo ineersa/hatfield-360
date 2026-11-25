@@ -24,8 +24,9 @@ type ChatState = {
   error: string | null
   /** Follows the chats' events from main; returns the unsubscribe. */
   connect: () => () => void
-  /** Shift Shift: opens the panel (starting a chat the first time) or closes it. */
-  toggle: () => void
+  /** Shift Shift: opens the panel with a new chat, ending the one it had. */
+  openNewChat: () => void
+  /** Closes the panel, ending its chat. */
   close: () => void
   newChat: () => void
   /** Sends the prompt; false when it can't go (nothing to expand a reference with, no chat). */
@@ -76,15 +77,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
           set({ items })
       }
     }),
-  toggle: () => {
-    if (get().open) {
-      set({ open: false })
-      return
-    }
+  openNewChat: () => {
     set({ open: true })
-    if (get().status === 'none') get().newChat()
+    get().newChat()
   },
-  close: () => set({ open: false }),
+  close: () => {
+    const { chatId } = get()
+    set({ open: false, chatId: null, status: 'none', items: [], configOptions: [], error: null })
+    if (chatId !== null) window.desktop.endChat(chatId).catch(() => undefined)
+  },
   newChat: () => {
     const previous = get().chatId
     set({ chatId: null, status: 'starting', items: [], configOptions: [], error: null })

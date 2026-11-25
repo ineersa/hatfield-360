@@ -17,6 +17,7 @@ export function parseCodeReference(text: string): CodeReference | null {
 /** What `@file` and `@selection` stand for when the prompt is sent: the editor's shown file. */
 export type PromptContext = {
   file: string | null
+  /** The selected lines and text; a caret alone is its line, with no text. */
   selection: { start: number; end: number; text: string } | null
 }
 
@@ -51,7 +52,12 @@ export function expandPromptReferences(
     return `${before}${selectionReference(context.file, context.selection)}`
   })
   if (problem !== null) return { ok: false, error: problem }
-  if (!selectionUsed || context.file === null || context.selection === null)
+  if (
+    !selectionUsed ||
+    context.file === null ||
+    context.selection === null ||
+    context.selection.text === ''
+  )
     return { ok: true, text: expanded }
   const { text: selected } = context.selection
   const fence = fenceFor(selected)

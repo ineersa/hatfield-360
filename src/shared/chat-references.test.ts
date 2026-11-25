@@ -56,6 +56,15 @@ describe('expandPromptReferences', () => {
     })
   })
 
+  it('gives the caret line for @selection when nothing is selected, without text', () => {
+    expect(
+      expandPromptReferences('Why @selection?', {
+        ...context,
+        selection: { start: 9, end: 9, text: '' }
+      })
+    ).toEqual({ ok: true, text: 'Why `/work/src/main.ts:9`?' })
+  })
+
   it('leaves emails and other words alone', () => {
     expect(expandPromptReferences('mail me@file.dev about @files', context)).toEqual({
       ok: true,

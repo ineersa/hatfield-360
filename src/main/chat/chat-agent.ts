@@ -349,7 +349,11 @@ export class ChatAgentSession {
   private fail(error: unknown): void {
     if (this.ended) return
     const detail = this.stderr.length > 0 ? `\n\n${this.stderr.join('\n')}` : ''
-    this.send({ kind: 'error', message: `${message(error)}${detail}` })
+    const text = `${message(error)}${detail}`
+    const hint = /\b(auth\w*|log ?in|credentials?|401)\b/i.test(text)
+      ? '\n\nLog in to Claude Code: run `claude` in a terminal and use /login, then start a new chat.'
+      : ''
+    this.send({ kind: 'error', message: `${text}${hint}` })
     this.end()
   }
 

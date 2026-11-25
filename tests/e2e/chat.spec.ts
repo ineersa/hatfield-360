@@ -36,7 +36,7 @@ const replaying = (cassette: string) => ({
   HATFIELD_CHAT_CASSETTE: join(fixtures, `${cassette}.jsonl`)
 })
 
-test('Shift Shift opens a chat on Haiku whose answer links to the code it found', async () => {
+test('Shift Shift opens a new chat on Haiku whose answer links to the code it found', async () => {
   const [, userData, cleanup] = await recordedProject()
   try {
     await withApp(
@@ -68,13 +68,14 @@ test('Shift Shift opens a chat on Haiku whose answer links to the code it found'
         await expect(tab(page, 'greeting.js')).toBeVisible()
         await expect(editor(page).locator('.line-numbers.active-line-number')).toHaveText('2')
 
-        // New Chat starts over in a fresh session.
-        await chat.getByRole('button', { name: 'New Chat' }).click()
+        // Shift Shift again starts over in a fresh session, from wherever the keys are.
+        await editor(page).locator('.view-lines').click()
+        await doubleShift(page)
         await expect(chat.getByLabel("Claude's reply")).toHaveCount(0)
         await expect(chat.getByLabel('Model')).toHaveValue('haiku')
+        await expect(chat.getByRole('textbox', { name: 'Message' })).toBeFocused()
 
-        await chat.getByRole('textbox', { name: 'Message' }).focus()
-        await doubleShift(page)
+        await chat.getByRole('button', { name: 'Close Chat' }).click()
         await expect(chat).toBeHidden()
       },
       { userDataDir: userData, env: replaying('answer') }

@@ -396,10 +396,9 @@ export function ChatPanel(): React.JSX.Element {
         style={{ width, maxWidth: `calc(50% - ${SIDE_PANEL_HANDLE_WIDTH}px)` }}
         className="flex min-w-0 flex-col overflow-hidden rounded-island bg-island"
         onKeyDown={(event) => {
-          if (event.key !== 'Escape') return
+          if (event.key !== 'Escape' || !busy) return
           event.preventDefault()
-          if (busy) stop()
-          else close()
+          stop()
         }}
       >
         <div className="flex h-panel-header shrink-0 items-center gap-0.5 pr-2 pl-4">
@@ -414,10 +413,10 @@ export function ChatPanel(): React.JSX.Element {
           <IconButton label="Edit Workspace Map" onClick={editMap}>
             <FilePen className="size-4" aria-hidden />
           </IconButton>
-          <IconButton label="New Chat" onClick={newChat}>
+          <IconButton label="New Chat (Shift Shift)" onClick={newChat}>
             <Plus className="size-4.5" aria-hidden />
           </IconButton>
-          <IconButton label="Close Chat (Shift Shift)" onClick={close}>
+          <IconButton label="Close Chat" onClick={close}>
             <X className="size-4.5" aria-hidden />
           </IconButton>
         </div>

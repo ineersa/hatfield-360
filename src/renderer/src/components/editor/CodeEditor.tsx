@@ -172,11 +172,10 @@ export function CodeEditor({
       const file = shownPath.current
       if (!model || file === null) return { file: null, selection: null }
       const selection = instance.getSelection()
-      if (!selection || selection.isEmpty()) return { file, selection: null }
-      return {
-        file,
-        selection: { ...referencedLines(selection), text: model.getValueInRange(selection) }
-      }
+      if (!selection) return { file, selection: null }
+      // With nothing selected, the caret's line stands for the selection.
+      const text = selection.isEmpty() ? '' : model.getValueInRange(selection)
+      return { file, selection: { ...referencedLines(selection), text } }
     })
     return () => {
       setEditorSelectionSource(null)
