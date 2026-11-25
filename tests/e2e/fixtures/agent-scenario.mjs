@@ -9,7 +9,8 @@ let {
   H360_STATUS_TOKEN: token,
   H360_STATUS_LAUNCH_ID: launchId
 } = process.env
-const [provider = 'hatfield', sessionId = 'demo', marker = 'demo'] = process.argv.slice(2)
+const [provider = 'hatfield', initialSessionId = 'demo', marker = 'demo'] = process.argv.slice(2)
+let sessionId = initialSessionId
 let sequence = 0
 let sessionEpoch = 1
 let last
@@ -92,7 +93,7 @@ print(`Directory: ${process.cwd()}`)
 // Resume scenarios acknowledge the real launch credentials without displaying them.
 if (marker === 'resume-proof') {
   const requested = process.argv.slice(5)
-  if (requested.length !== 1 || !/^--resume=\d+$/.test(requested[0]))
+  if (requested.length !== 1 || requested[0] !== '--resume=7')
     throw new Error('Expected one literal Hatfield resume argument')
   const fingerprint = createHash('sha256').update(token).digest('hex').slice(0, 16)
   snapshot.title = `Resume proof ${fingerprint}`
@@ -111,6 +112,11 @@ for await (const command of input) {
         snapshot.tool = null
         reply = await report()
         if (command === 'start') initial = last
+        break
+      case 'switch-to-8':
+        sessionId = '8'
+        sessionEpoch++
+        reply = await report()
         break
       case 'reselect':
         sessionEpoch = sequence + 1

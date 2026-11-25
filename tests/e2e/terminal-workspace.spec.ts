@@ -1,10 +1,12 @@
 import { expect, test, type Page } from '@playwright/test'
+import { homedir } from 'node:os'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { basename, join, resolve } from 'node:path'
 import { makeTempDir, withApp } from './launch-app'
 import { seedWorkspace } from './workspace-seed'
 
 const activePanes = (page: Page) => page.getByRole('tabpanel').getByTestId('terminal-pane')
+const terminalOutput = (page: Page) => activePanes(page).locator('.xterm-rows')
 const divider = (page: Page) => page.getByRole('separator', { name: 'Resize panes left and right' })
 const open = (page: Page, path: string) =>
   page.evaluate((file) => globalThis.desktop.openRecent({ kind: 'workspace', path: file }), path)
@@ -264,5 +266,151 @@ test('switching named workspaces isolates their terminals and preserves the rear
   } finally {
     await cleanup()
     await cleanProject()
+  }
+})
+
+function savedPane(label: string, cwd: string | null, agent?: { project: string }) {
+  return {
+    activeTabId: id(1),
+    tabs: [
+      {
+        id: id(1),
+        cwd,
+        label,
+        activePane: id(2),
+        layout: {
+          kind: 'pane',
+          id: id(2),
+          cwd,
+          ...(agent
+            ? { agent: { ...agent, provider: 'hatfield', providerSessionId: '7', title: null } }
+            : {})
+        }
+      }
+    ]
+  }
+}
+
+async function withSavedAgent(
+  reportedId: string,
+  run: (page: Page) => Promise<void>,
+  expectedId: string
+) {
+  const [project, cleanProject] = await makeTempDir('resume-identity')
+  const folders = [{ path: project, kind: 'project' as const }]
+  const [userDataDir, cleanup] = await seedWorkspace(folders)
+  const file = join(userDataDir, 'workspaces', 'default.hatfield-workspace')
+  try {
+    await writeFile(
+      file,
+      JSON.stringify({ version: 1, folders, terminals: savedPane('Agent', project, { project }) })
+    )
+    await writeFile(
+      join(userDataDir, 'settings.json'),
+      JSON.stringify({
+        'agents.hatfield': {
+          executable: process.execPath,
+          args: [
+            resolve(__dirname, 'fixtures/agent-scenario.mjs'),
+            'hatfield',
+            reportedId,
+            'resume-proof'
+          ]
+        }
+      })
+    )
+    await withApp(async (_app, page) => run(page), { userDataDir })
+    const saved: unknown = JSON.parse(await readFile(file, 'utf8'))
+    expect(saved).toMatchObject({
+      terminals: { tabs: [{ layout: { agent: { providerSessionId: expectedId } } }] }
+    })
+  } finally {
+    await cleanup()
+    await cleanProject()
+  }
+}
+
+test('rejects a restored agent reporting the wrong conversation without changing its saved ID', async () => {
+  await withSavedAgent(
+    '8',
+    async (page) => {
+      await expect(
+        page
+          .getByRole('alert')
+          .filter({ hasText: 'Expected conversation 7, but the agent reported 8.' })
+      ).toBeVisible()
+      await expect(activePanes(page)).toHaveCount(1)
+      await expect(page.getByRole('button', { name: /^Hatfield #8/ })).toHaveCount(0)
+    },
+    '7'
+  )
+})
+
+test('autosaves an intentional conversation switch after the restored ID matches', async () => {
+  await withSavedAgent(
+    '7',
+    async (page) => {
+      await expect(page.getByRole('button', { name: /^Hatfield #7 · Resume proof/ })).toBeVisible()
+      await activePanes(page).click()
+      await page.keyboard.type('switch-to-8')
+      await page.keyboard.press('Enter')
+      await expect(page.getByRole('button', { name: /^Hatfield #8 · Resume proof/ })).toBeVisible()
+    },
+    '8'
+  )
+})
+
+test('reopening the same workspace loads its edited folders and terminal layout', async () => {
+  const [project, cleanProject] = await makeTempDir('reopen-workspace')
+  const [userDataDir, cleanup] = await seedWorkspace([])
+  const file = join(userDataDir, 'workspaces', 'reload.hatfield-workspace')
+  try {
+    await writeFile(file, JSON.stringify({ version: 1, folders: [] }))
+    await withApp(
+      async (_app, page) => {
+        await open(page, file)
+        await expect(page).toHaveTitle('reload — Hatfield 360')
+        await writeFile(
+          file,
+          JSON.stringify({
+            version: 1,
+            folders: [{ path: project, kind: 'project' }],
+            terminals: savedPane('Edited layout', project)
+          })
+        )
+        await open(page, file)
+        await expect(page.getByRole('listitem', { name: basename(project) })).toBeVisible()
+        await expect(page.getByRole('tab', { name: 'Edited layout' })).toHaveCount(1)
+      },
+      { userDataDir }
+    )
+  } finally {
+    await cleanup()
+    await cleanProject()
+  }
+})
+
+test('restores a saved ordinary shell with null cwd in the home directory', async () => {
+  const [userDataDir, cleanup] = await seedWorkspace([])
+  try {
+    await writeFile(
+      join(userDataDir, 'settings.json'),
+      JSON.stringify({ 'terminal.gpuAcceleration': false })
+    )
+    await writeFile(
+      join(userDataDir, 'workspaces', 'default.hatfield-workspace'),
+      JSON.stringify({ version: 1, folders: [], terminals: savedPane('Home shell', null) })
+    )
+    await withApp(
+      async (_app, page) => {
+        await activePanes(page).click()
+        await page.keyboard.type('pwd')
+        await page.keyboard.press('Enter')
+        await expect(terminalOutput(page)).toContainText(homedir())
+      },
+      { userDataDir }
+    )
+  } finally {
+    await cleanup()
   }
 })

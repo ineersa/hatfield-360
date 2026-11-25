@@ -68,7 +68,7 @@ export function startPaneShell(
       if (disposed) return
       const { cols, rows } = terminal
       const spawn =
-        restoring && !cwd
+        restoring && agent && !cwd
           ? Promise.reject(new Error('The saved terminal folder is unavailable.'))
           : agent
             ? window.desktop.launchAgent({ ...agent, cols, rows })
@@ -93,14 +93,14 @@ export function startPaneShell(
               }),
             exit: (exit) => {
               exited = true
-              if (!exit.signal && (!agent || exit.exitCode === 0)) onShellEnded()
+              if (!exit.error && !exit.signal && (!agent || exit.exitCode === 0)) onShellEnded()
               else {
                 showExited(pane, exit)
                 if (restoring && agent)
                   notify({
                     severity: 'error',
                     title: 'Could not restore agent',
-                    body: `The agent exited with code ${exit.exitCode}.`
+                    body: exit.error ?? `The agent exited with code ${exit.exitCode}.`
                   })
               }
             }

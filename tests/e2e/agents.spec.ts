@@ -1215,6 +1215,74 @@ test('a manual agent exit removes only its row and leaves its shell usable', asy
   }
 })
 
+test('the workspace restores a plain shell after its manually launched agent exits', async () => {
+  test.skip(process.platform !== 'linux', 'Manual registration uses Linux process identity')
+  const { project, userDataDir, cleanup } = await seed()
+  try {
+    await withApp(
+      async (_app, page) => {
+        const row = await launchManualPlacement(page, 'agent-project', project, '7')
+        await expect(row).toBeVisible()
+        await page.keyboard.type('quit')
+        await page.keyboard.press('Enter')
+        await expect(row).toHaveCount(0)
+        const terminalId = await page.getByTestId('terminal-pane').getAttribute('data-terminal-id')
+        if (!terminalId) throw new Error('Expected the parent shell to survive')
+        const layout = await page.evaluate(
+          async ({ terminalId: shellId, project: agentProject }) => {
+            const { terminals, terminalGeneration } = await globalThis.desktop.getWorkspace()
+            const tab = terminals?.tabs[0]
+            if (!tab || tab.layout.kind !== 'pane') throw new Error('Expected a saved shell pane')
+            await globalThis.desktop.checkpointTerminals(terminalGeneration, {
+              activeTabId: tab.id,
+              tabs: [
+                {
+                  ...tab,
+                  layout: {
+                    ...tab.layout,
+                    terminalId: shellId,
+                    agent: {
+                      provider: 'hatfield',
+                      providerSessionId: '7',
+                      title: null,
+                      project: agentProject
+                    }
+                  }
+                }
+              ]
+            })
+            return (await globalThis.desktop.getWorkspace()).terminals?.tabs[0]?.layout
+          },
+          { terminalId, project }
+        )
+        expect(layout).not.toHaveProperty('agent')
+      },
+      { userDataDir }
+    )
+    const saved: unknown = JSON.parse(
+      await readFile(join(userDataDir, 'workspaces/default.hatfield-workspace'), 'utf8')
+    )
+    expect(saved).toMatchObject({ terminals: { tabs: [{ layout: { kind: 'pane' } }] } })
+    expect(saved).not.toMatchObject({
+      terminals: { tabs: [{ layout: { agent: { providerSessionId: '7' } } }] }
+    })
+    await withApp(
+      async (_app, page) => {
+        const pane = page
+          .getByRole('tabpanel', { name: 'agent-project' })
+          .getByTestId('terminal-pane')
+        await pane.click()
+        await page.keyboard.type("printf '%s%s\\n' ordinary- shell")
+        await page.keyboard.press('Enter')
+        await expect(output(pane)).toContainText('ordinary-shell')
+      },
+      { userDataDir }
+    )
+  } finally {
+    await cleanup()
+  }
+})
+
 async function placementWorkspace(userDataDir: string, project: string, folder?: string) {
   await writeFile(
     join(userDataDir, 'workspaces/default.hatfield-workspace'),

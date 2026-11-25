@@ -40,7 +40,10 @@ export function registerWorkspaceIpc(): void {
         placement &&
         sessions.findLast((item) => item.terminalId === terminalId && item.process === 'running')
       if (terminalId && !placement) ended.add(leaf.id)
-      if (!session) return { ...leaf, cwd: placement?.cwd ?? leaf.cwd }
+      if (!session) {
+        if (terminalId && terminalSessions.manualPlacement(terminalId)) delete leaf.agent
+        return { ...leaf, cwd: placement?.cwd ?? leaf.cwd }
+      }
       if (leaf.agent && session.providerSessionId === null) return leaf
       const { provider, providerSessionId, title, project } = session
       return {

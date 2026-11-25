@@ -80,7 +80,7 @@ export function registerAgentIpc(): void {
         },
         pane.agent.project,
         { ...size, cwd: await existingDirectory(pane.cwd) },
-        true
+        id
       )
     }
     if (isTerminalId(target.sourceTerminalId)) {

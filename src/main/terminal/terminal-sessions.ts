@@ -86,7 +86,12 @@ class TerminalSessions {
 
   manualPlacement(id: string) {
     const session = this.sessions.get(id)
-    if (session?.bootstrapToken && !session.detached && !session.owner.isDestroyed())
+    if (
+      session?.bootstrapToken &&
+      !session.ending &&
+      !session.detached &&
+      !session.owner.isDestroyed()
+    )
       return { owner: session.owner, cwd: session.cwd, project: session.project }
     return undefined
   }
@@ -101,7 +106,7 @@ class TerminalSessions {
       args: string[]
       env: Record<string, string>
       onClosing: () => void
-      onExit: () => void
+      onExit: () => string | undefined
     }
   ): Promise<TerminalSession> {
     this.helperChecked ??= ensureSpawnHelperExecutable()
@@ -171,8 +176,13 @@ class TerminalSessions {
       this.flushOutput(session)
       this.sessions.delete(id)
       closeBootstrap()
-      agent?.onExit()
-      const exit: TerminalExit = { id, exitCode, signal: signal ?? null }
+      const error = agent?.onExit()
+      const exit: TerminalExit = {
+        id,
+        exitCode,
+        signal: signal ?? null,
+        ...(error ? { error } : {})
+      }
       if (!session.detached && !owner.isDestroyed()) owner.send(TERMINAL_CHANNELS.exit, exit)
     })
     if (bootstrap)

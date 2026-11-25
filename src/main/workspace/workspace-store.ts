@@ -358,7 +358,6 @@ class WorkspaceStore {
     keepTerminals = false
   ): Promise<void> {
     await this.saveState(session, state)
-    if (session.workspace.file === workspace.file) return
     if (!keepTerminals) this.terminalGeneration += 1
     session.workspace = workspace
   }
