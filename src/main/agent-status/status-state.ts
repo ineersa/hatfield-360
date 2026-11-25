@@ -51,12 +51,13 @@ export class StatusState {
     if (event.kind === 'session.snapshot') {
       if (sameEpoch && session.telemetry === null) return 'state'
       const { provider, turn, attention, activeSubagents, backgroundScripts, tool } = event
+      const schedules = event.schedules ?? null
       this.#session = {
         id: event.sessionId,
         title: event.title ?? null,
         epoch: event.sessionEpoch,
         provider,
-        telemetry: { turn, attention, activeSubagents, backgroundScripts, tool }
+        telemetry: { turn, attention, activeSubagents, backgroundScripts, tool, schedules }
       }
       return undefined
     }
