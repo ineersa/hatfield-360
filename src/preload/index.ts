@@ -53,7 +53,8 @@ const desktopApi: DesktopApi = {
   },
   listDirectory: (path) => ipcRenderer.invoke(FILE_TREE_CHANNELS.list, path),
   watchDirectories: (paths) => ipcRenderer.invoke(FILE_TREE_CHANNELS.watch, paths),
-  copyPath: (path, form) => ipcRenderer.invoke(FILE_TREE_CHANNELS.copyPath, path, form),
+  copyPath: (path, form, lines) =>
+    ipcRenderer.invoke(FILE_TREE_CHANNELS.copyPath, path, form, lines),
   revealPath: (path) => ipcRenderer.invoke(FILE_TREE_CHANNELS.reveal, path),
   trashPaths: (paths) => ipcRenderer.invoke(FILE_TREE_CHANNELS.trash, paths),
   renamePath: (path, name) => ipcRenderer.invoke(FILE_TREE_CHANNELS.rename, path, name),

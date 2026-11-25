@@ -4,7 +4,12 @@ import { locateInTree } from '@/components/files/file-tree-rows'
 import { mainErrorMessage } from '@/lib/main-error-message'
 import { useEditorTabStore } from '@/state/editor-tab-store'
 import { notify } from '@/state/notification-store'
-import type { DirectoryEntry, DirectoryListing, PathForm } from '../../../shared/file-tree-api'
+import type {
+  DirectoryEntry,
+  DirectoryListing,
+  LineRange,
+  PathForm
+} from '../../../shared/file-tree-api'
 import type { WorkspaceFolderKind } from '../../../shared/workspace-api'
 
 /** A top-level folder of the tree, with the linked worktrees shown under it (projects only). */
@@ -27,7 +32,7 @@ type FileTreeState = {
   toggleHideIgnored: () => void
   /** Puts back a workspace's saved tree: its expanded folders and whether ignored files are hidden. */
   restore: (expanded: string[], hideIgnored: boolean) => void
-  copyPath: (path: string, form: PathForm) => void
+  copyPath: (path: string, form: PathForm, lines?: LineRange) => void
   reveal: (path: string) => void
   /** Moves the entries to the system trash, then lists their folders again. */
   trash: (paths: string[]) => void
@@ -189,8 +194,8 @@ export const useFileTreeStore = create<FileTreeState>((set, get) => {
       for (const folder of openFolders(get(), roots)) load(folder)
       syncWatches()
     },
-    copyPath: (path, form) => {
-      window.desktop.copyPath(path, form).catch(failed)
+    copyPath: (path, form, lines) => {
+      window.desktop.copyPath(path, form, lines).catch(failed)
     },
     reveal: (path) => {
       window.desktop.revealPath(path).catch(failed)

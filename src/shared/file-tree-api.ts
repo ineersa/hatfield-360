@@ -25,6 +25,9 @@ export const FILE_TREE_CHANNELS = {
 /** How Copy Path writes a path: as is, or from the root folder it is under. */
 export type PathForm = 'absolute' | 'relative'
 
+/** Lines of a file, from 1, that Copy Reference adds to its path. */
+export type LineRange = { start: number; end: number }
+
 export type FileTreeApi = {
   /** Lists a folder inside the workspace's folders or worktrees: folders first, then files, by name. */
   listDirectory: (path: string) => Promise<DirectoryListing>
@@ -32,8 +35,11 @@ export type FileTreeApi = {
   watchDirectories: (paths: string[]) => Promise<void>
   /** A watched folder changed (an entry or the ignore rules over it); list it again. */
   subscribeDirectoryChanges: (callback: (paths: string[]) => void) => () => void
-  /** Puts a path inside the workspace on the clipboard; `relative` is from its root folder. */
-  copyPath: (path: string, form: PathForm) => Promise<void>
+  /**
+   * Puts a path inside the workspace on the clipboard; `relative` is from its root folder. With
+   * `lines`, a reference: `path:12`, or `path:12-15` for more than one line.
+   */
+  copyPath: (path: string, form: PathForm, lines?: LineRange) => Promise<void>
   /** Shows a file or folder inside the workspace in the system file manager. */
   revealPath: (path: string) => Promise<void>
   /** Moves files and folders inside the workspace to the system trash; never a root folder or one holding a root. */

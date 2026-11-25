@@ -1,9 +1,10 @@
-import { expect, test, type Page } from '@playwright/test'
+import { expect, test, type ElectronApplication, type Page } from '@playwright/test'
 import { chmod, mkdir, readFile, realpath, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { clickMenuItem } from './app-menu'
 import { editor, item, lines, openFile, showView, tab, tabs, typeAtEnd } from './editor-page'
 import { makeTempDir, requireFolderPermissions, saveScreenshot, withApp } from './launch-app'
+import { CLIPBOARD_TAG, keepUserClipboard } from './user-clipboard'
 import { seedWorkspace } from './workspace-seed'
 
 const activeLine = (page: Page) => editor(page).locator('.line-numbers.active-line-number')
@@ -437,3 +438,50 @@ test('after a restart the Files view has the same folders expanded and tabs open
     await cleanProject()
   }
 })
+
+const clipboardText = (app: ElectronApplication) =>
+  app.evaluate(({ clipboard }) => clipboard.readText())
+
+test(
+  "Copy Reference copies the file's path from its root with the caret's or selection's lines",
+  { tag: CLIPBOARD_TAG },
+  async () => {
+    const [app, cleanProject] = await makeProject()
+    await writeFile(join(app, 'src', 'index.ts'), 'one\ntwo\nthree\nfour\n')
+    const [userData, cleanUserData] = await seedWorkspace([{ path: app, kind: 'folder' }])
+    try {
+      await withApp(
+        async (electronApp, page) => {
+          const restoreClipboard = await keepUserClipboard(electronApp)
+          try {
+            await showView(page, 'Files')
+            await openFile(page, 'app', 'src', 'index.ts')
+            // Monaco's menu ignores a click that follows its opening as closely as Playwright's does.
+            const copyReference = async (): Promise<void> => {
+              await page.getByRole('menuitem', { name: /Copy Reference/ }).hover()
+              await page.keyboard.press('Enter')
+            }
+
+            await lines(page).getByText('two', { exact: true }).click({ button: 'right' })
+            await copyReference()
+            await expect.poll(() => clipboardText(electronApp)).toBe(join('src', 'index.ts:2'))
+
+            // From line 2 to the start of line 4: the last line isn't part of the reference.
+            await page.keyboard.press('Home')
+            await page.keyboard.press('Shift+ArrowDown')
+            await page.keyboard.press('Shift+ArrowDown')
+            await lines(page).getByText('two', { exact: true }).click({ button: 'right' })
+            await copyReference()
+            await expect.poll(() => clipboardText(electronApp)).toBe(join('src', 'index.ts:2-3'))
+          } finally {
+            await restoreClipboard()
+          }
+        },
+        { userDataDir: userData }
+      )
+    } finally {
+      await cleanUserData()
+      await cleanProject()
+    }
+  }
+)
