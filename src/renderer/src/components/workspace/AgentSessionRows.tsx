@@ -96,7 +96,9 @@ function activeTerminalId(state: ReturnType<typeof useTerminalStore.getState>): 
   return state.activeTabId ? (state.paneByTab[state.activeTabId] ?? null) : null
 }
 
-export function agentSessionIdentity(session: AgentSession) {
+export function agentSessionIdentity(
+  session: Pick<AgentSession, 'provider' | 'providerSessionId' | 'title'>
+) {
   const provider = AGENT_PROVIDERS[session.provider]
   const id = session.providerSessionId
   const identity = id

@@ -44,7 +44,8 @@ export function parseTerminalLayout(
           provider: agent.provider,
           providerSessionId: agent.providerSessionId,
           title: agent.title,
-          project: agent.project
+          project: agent.project,
+          ...(nullableString(agent.branch, 1024) ? { branch: agent.branch } : {})
         }
       }
       return leaf

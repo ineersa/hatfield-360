@@ -28,6 +28,8 @@ const desktopApi: DesktopApi = {
     return () => ipcRenderer.removeListener(AGENT_CHANNELS.changed, listener)
   },
   getAppInfo: () => ipcRenderer.invoke(IPC_CHANNELS.getAppInfo),
+  removeRecentConversation: (generation, key) =>
+    ipcRenderer.invoke(WORKSPACE_CHANNELS.removeConversation, generation, key),
   checkpointTerminals: (generation, layout) =>
     ipcRenderer.invoke(WORKSPACE_CHANNELS.checkpointTerminals, generation, layout),
   getWorkspace: () => ipcRenderer.invoke(WORKSPACE_CHANNELS.get),

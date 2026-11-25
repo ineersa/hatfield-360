@@ -1,3 +1,9 @@
+import {
+  conversationKey,
+  RECENT_CONVERSATION_MS,
+  type RecentConversation
+} from '../../shared/recent-conversation'
+import { updateRecentConversations } from './recent-conversations'
 import type { PaneLeaf, PaneLayout, TerminalLayout } from '../../shared/terminal-workspace-api'
 import { app } from 'electron'
 import { readdir, rename, stat } from 'node:fs/promises'
@@ -35,6 +41,7 @@ type OpenWorkspace = {
   folders: WorkspaceEntry[]
   problem: string | null
   terminals?: TerminalLayout
+  recentConversations?: RecentConversation[]
 }
 
 type Session = { workspace: OpenWorkspace; state: AppState }
@@ -73,7 +80,8 @@ async function loadDefaultWorkspace(file: string): Promise<OpenWorkspace> {
     return {
       ...workspace,
       folders: read.folders,
-      ...(read.terminals ? { terminals: read.terminals } : {})
+      ...(read.terminals ? { terminals: read.terminals } : {}),
+      ...(read.recentConversations ? { recentConversations: read.recentConversations } : {})
     }
   if (read.status === 'newer') {
     // Leave the file untouched so the newer app version can still read it.
@@ -99,6 +107,7 @@ async function loadWorkspaceFile(file: string): Promise<OpenWorkspace> {
       isDefault: false,
       folders: read.folders,
       ...(read.terminals ? { terminals: read.terminals } : {}),
+      ...(read.recentConversations ? { recentConversations: read.recentConversations } : {}),
       problem: null
     }
   }
@@ -182,6 +191,9 @@ class WorkspaceStore {
       file: workspace.isDefault ? null : workspace.file,
       folders,
       terminalGeneration,
+      ...(workspace.recentConversations
+        ? { recentConversations: workspace.recentConversations }
+        : {}),
       ...(workspace.terminals ? { terminals: workspace.terminals } : {}),
       problem: workspace.problem,
       notice: this.notice,
@@ -202,7 +214,12 @@ class WorkspaceStore {
       if (workspace.problem) throw new Error(workspace.problem)
       const folders = workspace.folders.filter((folder) => folder.path !== path)
       if (folders.length === workspace.folders.length) return false
-      await writeWorkspaceFile(workspace.file, folders, workspace.terminals)
+      await writeWorkspaceFile(
+        workspace.file,
+        folders,
+        workspace.terminals,
+        workspace.recentConversations
+      )
       workspace.folders = folders
       return true
     })
@@ -216,7 +233,12 @@ class WorkspaceStore {
       const folders = workspace.folders.map((folder) =>
         folder.path === path ? { path, kind } : folder
       )
-      await writeWorkspaceFile(workspace.file, folders, workspace.terminals)
+      await writeWorkspaceFile(
+        workspace.file,
+        folders,
+        workspace.terminals,
+        workspace.recentConversations
+      )
       workspace.folders = folders
       return true
     })
@@ -236,7 +258,12 @@ class WorkspaceStore {
       if (workspace.problem) throw new Error(workspace.problem)
       const target = withWorkspaceExtension(file)
       if (target === this.defaultFile()) throw new Error('Choose another place for the workspace.')
-      await writeWorkspaceFile(target, workspace.folders, workspace.terminals)
+      await writeWorkspaceFile(
+        target,
+        workspace.folders,
+        workspace.terminals,
+        workspace.recentConversations
+      )
       await this.switchTo(
         session,
         { ...workspace, file: target, isDefault: false },
@@ -390,7 +417,12 @@ class WorkspaceStore {
           ...workspace.folders,
           { path: folder, kind: (await isRepositoryRoot(folder)) ? 'project' : 'folder' } as const
         ]
-    await writeWorkspaceFile(workspace.file, folders, workspace.terminals)
+    await writeWorkspaceFile(
+      workspace.file,
+      folders,
+      workspace.terminals,
+      workspace.recentConversations
+    )
     workspace.folders = folders
     return true
   }
@@ -432,6 +464,32 @@ class WorkspaceStore {
     return undefined
   }
 
+  async recentConversation(
+    generation: number,
+    key: string
+  ): Promise<RecentConversation | undefined> {
+    await this.queue
+    const { workspace } = await this.ready()
+    if (generation !== this.terminalGeneration) return undefined
+    return workspace.recentConversations?.find(
+      (entry) =>
+        entry.closedAt > Date.now() - RECENT_CONVERSATION_MS && conversationKey(entry) === key
+    )
+  }
+
+  removeConversation(generation: number, key: string): Promise<void> {
+    return this.change(async ({ workspace }) => {
+      if (generation !== this.terminalGeneration || !workspace.recentConversations) return
+      if (workspace.problem) throw new Error(workspace.problem)
+      const history = workspace.recentConversations.filter(
+        (entry) => conversationKey(entry) !== key
+      )
+      if (history.length === workspace.recentConversations.length) return
+      await writeWorkspaceFile(workspace.file, workspace.folders, workspace.terminals, history)
+      workspace.recentConversations = history
+    })
+  }
+
   freezeTerminals(): Promise<unknown> {
     this.terminalsFrozen = true
     return this.queue
@@ -468,8 +526,23 @@ class WorkspaceStore {
         tabs: layout.tabs.map((tab) => ({ ...tab, layout: retain(tab.layout) }))
       }
       if (JSON.stringify(workspace.terminals) === JSON.stringify(layout)) return
-      await writeWorkspaceFile(workspace.file, workspace.folders, layout)
+      const before = [...previous.values()]
+      previous.clear()
+      for (const tab of layout.tabs) remember(tab.layout)
+      const history = updateRecentConversations(
+        workspace.recentConversations ?? [],
+        before,
+        [...previous.values()],
+        Date.now()
+      )
+      const changed =
+        JSON.stringify(history) !== JSON.stringify(workspace.recentConversations ?? [])
+      await writeWorkspaceFile(workspace.file, workspace.folders, layout, history)
       workspace.terminals = layout
+      if (changed) {
+        workspace.recentConversations = history
+        await this.publish()
+      }
     })
     this.queue = run.catch(() => undefined)
     return run

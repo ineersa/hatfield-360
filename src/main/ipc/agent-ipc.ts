@@ -36,21 +36,36 @@ export function registerAgentIpc(): void {
     const folders = (await workspaceStore.view()).folders.filter((folder) => !folder.missing)
     let cwd: string
     let project: string | null
-    if (isPlainObject(target.restore)) {
-      const { generation, paneId } = target.restore
-      if (typeof generation !== 'number' || !isTerminalId(paneId))
-        throw new Error('Invalid saved pane.')
-      const pane = await workspaceStore.savedPane(generation, paneId)
-      const id = pane?.agent?.providerSessionId
+    if (isPlainObject(target.restore) || isPlainObject(target.recent)) {
+      let saved:
+        | {
+            cwd: string | null
+            agent: { provider: string; providerSessionId: string | null; project: string | null }
+          }
+        | undefined
+      if (isPlainObject(target.restore)) {
+        const { generation, paneId } = target.restore
+        if (typeof generation !== 'number' || !isTerminalId(paneId))
+          throw new Error('Invalid saved pane.')
+        const pane = await workspaceStore.savedPane(generation, paneId)
+        if (pane?.agent) saved = { cwd: pane.cwd, agent: pane.agent }
+      } else if (isPlainObject(target.recent)) {
+        const { generation, key } = target.recent
+        if (typeof generation !== 'number' || typeof key !== 'string' || key.length > 26000)
+          throw new Error('Invalid Recent conversation.')
+        const entry = await workspaceStore.recentConversation(generation, key)
+        if (entry) saved = { cwd: entry.cwd, agent: entry }
+      }
+      const id = saved?.agent.providerSessionId
       if (
-        pane?.agent?.provider !== provider ||
+        saved?.agent.provider !== provider ||
         !id ||
         !(provider === 'hatfield'
           ? /^\d+$/.test(id)
           : /^[\da-f]{8}(?:-[\da-f]{4}){3}-[\da-f]{12}$/i.test(id))
       )
         throw new Error('The saved conversation ID is unavailable.')
-      if (!pane.cwd) throw new Error('The saved conversation folder is unavailable.')
+      if (!saved.cwd) throw new Error('The saved conversation folder is unavailable.')
       const profile = (await settingsStore.view()).values[`agents.${provider}`]
       const directClaudePrompt =
         provider === 'claude' &&
@@ -78,8 +93,8 @@ export function registerAgentIpc(): void {
             ...(provider === 'hatfield' ? [`--resume=${id}`] : ['--resume', id])
           ]
         },
-        pane.agent.project,
-        { ...size, cwd: await existingDirectory(pane.cwd) },
+        saved.agent.project,
+        { ...size, cwd: await existingDirectory(saved.cwd) },
         id
       )
     }

@@ -6,6 +6,7 @@ export type AgentProfile = { executable: string; args: string[] }
 type AgentTarget =
   | { project: string; cwd: string }
   | { sourceTerminalId: string }
+  | { recent: { generation: number; key: string } }
   | { restore: { generation: number; paneId: string } }
 export type AgentLaunch = { provider: AgentProvider; target: AgentTarget }
 export type AgentSession = {
@@ -17,6 +18,7 @@ export type AgentSession = {
   project: string | null
   worktree: string | null
   cwd: string
+  resumeCwd?: string | null
   process: 'running' | 'exited' | 'unknown'
   activity: 'working' | 'idle' | 'unknown'
   runningChildren: number | null

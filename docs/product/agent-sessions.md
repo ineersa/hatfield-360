@@ -29,6 +29,15 @@ When empty, the section stays visible with a compact "No requests" state.
 Stopped responses use the error colour; process exits remove the row instead.
 Clicking a live session also selects its actual tab/pane.
 
+Below each project's live sessions, a folded **Recent N** group lists closed
+app-tracked conversations from the last 14 days, newest first. Rows show the
+provider, reported title, differing branch and relative close time. Five rows
+are shown initially; **Show N more** adds pages of 20. Resume opens a new tab,
+Resume in Split uses the active tab, and an already open conversation selects
+its existing pane. Remove from Recent deletes only desktop history, never the
+provider's conversation. History survives restart but does not auto-launch.
+The approved prototype is retained in `docs/design/issue-37-prototype/`.
+
 Search is a project-scoped Librarian popup above the mounted terminal workspace,
 not a new page or a separate transcript engine. Keyboard opening, Escape,
 contained Tab navigation, prior-focus restoration and isolation from terminal
@@ -82,6 +91,8 @@ manually typed launch detection are outside v1.
   protocol producers and provider-specific lifecycle/identity validation.
 - [#37](https://github.com/ineersa/hatfield-360/issues/37): durable history,
   workspace autosave and automatic restart restoration.
+- [#73](https://github.com/ineersa/hatfield-360/issues/73): continuation of #37's
+  approved Recent history and explicit relaunch, with toast-only launch failures.
 - [#38](https://github.com/ineersa/hatfield-360/issues/38): real Librarian search
   and source-session navigation/resume.
 

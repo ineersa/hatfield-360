@@ -1,6 +1,8 @@
 import type { AgentSession } from './agent-api'
 
-type SavedAgent = Pick<AgentSession, 'provider' | 'providerSessionId' | 'title' | 'project'>
+type SavedAgent = Pick<AgentSession, 'provider' | 'providerSessionId' | 'title' | 'project'> & {
+  branch?: string | null
+}
 export type PaneLeaf = {
   kind: 'pane'
   id: string
