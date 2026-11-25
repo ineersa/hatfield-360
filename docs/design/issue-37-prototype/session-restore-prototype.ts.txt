@@ -1,0 +1,317 @@
+// PROTOTYPE for #37: fake restore and history data so the design can be clicked through. Not for merging.
+import { create } from 'zustand'
+import { AGENT_PROVIDERS, type AgentProvider, type AgentSession } from '../../../shared/agent-api'
+import type { WorkspaceFolder } from '../../../shared/workspace-api'
+import { useTerminalStore } from '@/state/terminal-store'
+
+const MINUTE = 60_000
+const HOUR = 60 * MINUTE
+const DAY = 24 * HOUR
+export const RECENT_WINDOW_DAYS = 14
+export const RECENT_FIRST_PAGE = 5
+export const RECENT_PAGE = 20
+
+export type RestoreFailure = {
+  /** Short reason for the row's second line. */
+  reason: string
+  /** The full sentence the pane shows. */
+  detail: string
+  fix: 'settings' | 'retry'
+}
+export type RestoreState =
+  | { state: 'resuming' }
+  | { state: 'failed'; failure: RestoreFailure }
+  | { state: 'restored' }
+
+export type RecentSession = {
+  id: string
+  provider: AgentProvider
+  providerSessionId: string
+  title: string | null
+  branch: string | null
+  closedAt: number
+}
+
+type FakeLive = AgentSession & { failure?: RestoreFailure; restoreAfterMs: number }
+
+const titles = [
+  'Agent sessions and status server',
+  'Fix PTY history leak',
+  'Memory search popup design',
+  'Triage flaky e2e on CI',
+  'Worktree prune keeps branches',
+  'Editor tabs drag reorder',
+  'Settings: agent sound previews',
+  'Investigate xterm reflow on resize',
+  'Inline blame toggle',
+  'Knip config for scripts',
+  'Review notification copy',
+  'Theme roles for status colours',
+  'Split pane proportions on restore',
+  'Remove timing from terminal tests',
+  'Explain IPC trusted handler',
+  'Claude resume argument syntax'
+]
+
+function seeded(seed: number): () => number {
+  let state = seed
+  return () => {
+    state = (state * 1_103_515_245 + 12_345) % 2_147_483_648
+    return state / 2_147_483_648
+  }
+}
+
+function hex(next: () => number): string {
+  return Array.from({ length: 8 }, () => Math.floor(next() * 16).toString(16)).join('')
+}
+
+function fakeLive(folders: WorkspaceFolder[], started: number): FakeLive[] {
+  const [first, second] = folders.filter((folder) => !folder.missing)
+  const base = {
+    process: 'running',
+    runningChildren: null,
+    runningScripts: null,
+    tool: null,
+    wait: null,
+    outcome: null,
+    updatedAt: started
+  } as const
+  const live: FakeLive[] = []
+  if (first) {
+    live.push(
+      {
+        ...base,
+        id: 'prototype-live-1',
+        terminalId: 'prototype-terminal-1',
+        provider: 'hatfield',
+        providerSessionId: '12',
+        title: 'Agent sessions and status server',
+        project: first.path,
+        worktree: first.path,
+        cwd: first.path,
+        activity: 'idle',
+        restoreAfterMs: 2_500
+      },
+      {
+        ...base,
+        id: 'prototype-live-2',
+        terminalId: 'prototype-terminal-2',
+        provider: 'claude',
+        providerSessionId: 'a3f91c2d-3691-4c2f-b54f-e4db8704bbc1',
+        title: 'Fix PTY history leak',
+        project: first.path,
+        worktree: `${first.path}-worktrees/issue-46`,
+        cwd: `${first.path}-worktrees/issue-46`,
+        activity: 'unknown',
+        restoreAfterMs: 1_200,
+        failure: {
+          reason: 'worktree missing',
+          detail: `The worktree ${first.path}-worktrees/issue-46 no longer exists.`,
+          fix: 'retry'
+        }
+      }
+    )
+  }
+  if (second) {
+    live.push(
+      {
+        ...base,
+        id: 'prototype-live-3',
+        terminalId: 'prototype-terminal-3',
+        provider: 'claude',
+        providerSessionId: '0aff2325-55c9-487a-abfe-69bb4349d6ce',
+        title: null,
+        project: second.path,
+        worktree: second.path,
+        cwd: second.path,
+        activity: 'working',
+        tool: 'Read',
+        restoreAfterMs: 4_000
+      },
+      {
+        ...base,
+        id: 'prototype-live-4',
+        terminalId: 'prototype-terminal-4',
+        provider: 'hatfield',
+        providerSessionId: '7',
+        title: 'Budget categories import',
+        project: second.path,
+        worktree: second.path,
+        cwd: second.path,
+        activity: 'unknown',
+        restoreAfterMs: 1_800,
+        failure: {
+          reason: 'executable not found',
+          detail: 'hatfield-safe, the Hatfield command in Settings, was not found on PATH.',
+          fix: 'settings'
+        }
+      }
+    )
+  }
+  return live
+}
+
+function fakeRecent(folder: WorkspaceFolder, index: number, now: number): RecentSession[] {
+  const next = seeded(index * 7_919 + folder.path.length)
+  // A busy project, a moderate one, then a trickle.
+  const count = [46, 9, 3, 0][index] ?? 2
+  const sessions: RecentSession[] = []
+  let closedAt = now - 20 * MINUTE
+  for (let item = 0; item < count; item++) {
+    const provider: AgentProvider = next() < 0.55 ? 'claude' : 'hatfield'
+    const id = provider === 'claude' ? `${hex(next)}-${hex(next).slice(0, 4)}` : String(40 - item)
+    sessions.push({
+      id: `prototype-recent-${index}-${item}`,
+      provider,
+      providerSessionId: id,
+      title: next() < 0.15 ? null : (titles[Math.floor(next() * titles.length)] ?? null),
+      branch: next() < 0.25 ? `issue-${Math.floor(next() * 60) + 1}` : null,
+      closedAt
+    })
+    closedAt -= Math.floor(next() * 14 * HOUR) + 10 * MINUTE
+  }
+  return sessions
+}
+
+type PrototypeState = {
+  started: number
+  restore: Record<string, RestoreState>
+  /** Recent sessions the user resumed, shown as live rows. */
+  resumed: Record<string, RecentSession & { project: string }>
+  removed: Record<string, true>
+  shownRecent: Record<string, number>
+  begin: (folders: WorkspaceFolder[]) => void
+  retry: (sessionId: string, folders: WorkspaceFolder[]) => void
+  resumeRecent: (session: RecentSession, project: string) => void
+  removeRecent: (id: string) => void
+  showMore: (project: string) => void
+}
+
+const timers = new Set<ReturnType<typeof setTimeout>>()
+
+export const usePrototypeStore = create<PrototypeState>((set, get) => ({
+  started: Date.now(),
+  restore: {},
+  resumed: {},
+  removed: {},
+  shownRecent: {},
+  begin: (folders) => {
+    if (Object.keys(get().restore).length > 0 || folders.length === 0) return
+    const live = fakeLive(folders, get().started)
+    set({ restore: Object.fromEntries(live.map((s) => [s.id, { state: 'resuming' } as const])) })
+    for (const session of live) settle(session.id, session.restoreAfterMs, session.failure)
+  },
+  retry: (sessionId, folders) => {
+    const session = fakeLive(folders, get().started).find((s) => s.id === sessionId)
+    if (!session) return
+    set((state) => ({ restore: { ...state.restore, [sessionId]: { state: 'resuming' } } }))
+    settle(sessionId, 1_500, session.failure)
+  },
+  resumeRecent: (session, project) => {
+    set((state) => ({
+      resumed: { ...state.resumed, [session.id]: { ...session, project } },
+      restore: { ...state.restore, [session.id]: { state: 'resuming' } }
+    }))
+    settle(session.id, 1_600)
+  },
+  removeRecent: (id) => set((state) => ({ removed: { ...state.removed, [id]: true } })),
+  showMore: (project) =>
+    set((state) => ({
+      shownRecent: {
+        ...state.shownRecent,
+        [project]: (state.shownRecent[project] ?? RECENT_FIRST_PAGE) + RECENT_PAGE
+      }
+    }))
+}))
+
+function settle(id: string, delay: number, failure?: RestoreFailure): void {
+  const timer = setTimeout(() => {
+    timers.delete(timer)
+    usePrototypeStore.setState((state) => ({
+      restore: {
+        ...state.restore,
+        [id]: failure ? { state: 'failed', failure } : { state: 'restored' }
+      }
+    }))
+  }, delay)
+  timers.add(timer)
+}
+
+/** Fake live sessions: the four restored at startup plus any resumed from Recent. */
+export function prototypeSessions(
+  folders: WorkspaceFolder[],
+  started: number,
+  resumed: PrototypeState['resumed']
+): AgentSession[] {
+  const fromRecent = Object.values(resumed).map((session): AgentSession => ({
+    id: session.id,
+    terminalId: `prototype-terminal-${session.id}`,
+    provider: session.provider,
+    providerSessionId: session.providerSessionId,
+    title: session.title,
+    project: session.project,
+    worktree: session.project,
+    cwd: session.project,
+    process: 'running',
+    activity: 'idle',
+    runningChildren: null,
+    runningScripts: null,
+    tool: null,
+    wait: null,
+    outcome: null,
+    updatedAt: Date.now()
+  }))
+  return [...fakeLive(folders, started), ...fromRecent]
+}
+
+/** The project's sessions closed in the last 14 days, newest first. */
+export function prototypeRecent(
+  folder: WorkspaceFolder,
+  folders: WorkspaceFolder[],
+  state: Pick<PrototypeState, 'started' | 'resumed' | 'removed'>
+): RecentSession[] {
+  const index = folders.filter((f) => !f.missing).findIndex((f) => f.path === folder.path)
+  if (index === -1) return []
+  const cutoff = state.started - RECENT_WINDOW_DAYS * DAY
+  return fakeRecent(folder, index, state.started).filter(
+    (session) =>
+      session.closedAt >= cutoff && !state.resumed[session.id] && !state.removed[session.id]
+  )
+}
+
+export function closedAgo(closedAt: number, now: number): string {
+  const elapsed = now - closedAt
+  if (elapsed < HOUR) return `${Math.max(1, Math.round(elapsed / MINUTE))}m`
+  if (elapsed < DAY) return `${Math.round(elapsed / HOUR)}h`
+  if (elapsed < 2 * DAY) return 'yesterday'
+  return `${Math.floor(elapsed / DAY)}d`
+}
+
+/** Opens the failed session's pane: in the real feature it is already in its restored place. */
+export function openFailedPane(session: AgentSession): void {
+  const store = useTerminalStore.getState()
+  const existing = store.tabs.find((tab) => tab.prototypeFailure === session.id)
+  if (existing) {
+    store.activateTab(existing.id)
+    return
+  }
+  const label = session.cwd.split('/').findLast(Boolean) ?? session.cwd
+  const id = `prototype-tab-${session.id}`
+  useTerminalStore.setState((state) => ({
+    tabs: [
+      ...state.tabs,
+      {
+        id,
+        label,
+        title: `${AGENT_PROVIDERS[session.provider]} · ${label}`,
+        cwd: session.cwd,
+        agent: {
+          provider: session.provider,
+          target: { project: session.project ?? session.cwd, cwd: session.cwd }
+        },
+        prototypeFailure: session.id
+      }
+    ],
+    activeTabId: id
+  }))
+}
