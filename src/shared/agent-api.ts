@@ -48,7 +48,9 @@ export type AgentNotification = {
   providerSessionId: string
   terminalId: string
   message:
-    | { kind: 'needs-input' | 'completed' | 'failed' }
+    | { kind: 'needs-input' | 'failed' }
+    /** `response` is the final assistant text the provider reported, up to 2,000 characters. */
+    | { kind: 'completed'; response: string | null }
     | { kind: 'explicit'; title: string; body: string }
 }
 export const AGENT_CHANNELS = {

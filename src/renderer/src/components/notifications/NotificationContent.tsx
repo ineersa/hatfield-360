@@ -34,7 +34,7 @@ export function NotificationContent({
             </time>
           ) : null}
         </div>
-        {body ? <p className="break-words">{body}</p> : null}
+        {body ? <p className="break-words whitespace-pre-line">{body}</p> : null}
         {action ? (
           <button
             type="button"

@@ -48,7 +48,7 @@ export class AgentNotificationPolicy {
       !attention &&
       this.#first(`completed:${turn.id}`)
     )
-      messages.push({ kind: 'completed' })
+      messages.push({ kind: 'completed', response: turn.response ?? null })
     return messages
   }
 }

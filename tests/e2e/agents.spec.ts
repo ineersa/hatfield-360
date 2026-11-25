@@ -729,7 +729,11 @@ test('agent notifications follow accepted transitions and open only the owning t
         await expect(panel).toHaveCount(0)
         await page.getByRole('button', { name: 'Files', exact: true }).click()
         await send('child-done')
-        await expect(page.getByRole('alert', { name: 'Agent turn completed' })).toBeVisible()
+        const completedToast = page.getByRole('alert', { name: 'Agent turn completed' })
+        await expect(completedToast).toBeVisible()
+        await expect(completedToast).toContainText('Reviewed <3> files.\nAll checks pass.', {
+          useInnerText: true
+        })
         await bell.click()
         await expect(completed).toHaveCount(1)
         await page.getByRole('button', { name: 'Agents', exact: true }).click()

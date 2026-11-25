@@ -29,6 +29,7 @@ export function receiveAgentNotification({
   const content = explicit
     ? { title: message.title || 'Agent message', severity: 'info' as const }
     : stateNotices[message.kind]
+  const detail = explicit ? message.body : message.kind === 'completed' ? message.response : null
   const showToast = shouldShowAgentToast(
     message.kind,
     ownerWindowFocusedAndVisible,
@@ -37,7 +38,7 @@ export function receiveAgentNotification({
   notify(
     {
       ...content,
-      body: explicit && message.body ? `${source}\n${message.body}` : source,
+      body: detail ? `${source}\n${detail}` : source,
       action: {
         label: 'Open terminal',
         run: () => {

@@ -39,12 +39,16 @@ type Turn = {
   id: string
   status: 'working' | 'completed' | 'failed' | 'cancelled' | 'unknown'
   trigger?: 'user' | 'schedule'
+  response?: string
 }
+const turnOptional: Record<string, Validator> = { trigger, response: text(2000) }
 const turn = (value: unknown): value is Turn =>
   record(value) &&
-  (Object.hasOwn(value, 'trigger')
-    ? shape({ id, status: turnStatus, trigger })(value)
-    : shape({ id, status: turnStatus })(value))
+  shape({
+    id,
+    status: turnStatus,
+    ...Object.fromEntries(Object.entries(turnOptional).filter(([key]) => Object.hasOwn(value, key)))
+  })(value)
 const epochMs = (value: unknown): value is number =>
   typeof value === 'number' && Number.isSafeInteger(value) && value >= 0
 type Schedule = AgentSchedule & { id: string }

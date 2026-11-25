@@ -132,7 +132,7 @@ describe.skipIf(process.platform === 'win32')('agent status socket', () => {
     ).toEqual([accepted])
   })
 
-  it('validates schedules and turn triggers, and replaces schedules with each snapshot', async () => {
+  it('validates schedules, turn triggers and responses, and replaces schedules with each snapshot', async () => {
     await server.start()
     const { event, start, send } = session(server)
     const loop = {
@@ -150,7 +150,9 @@ describe.skipIf(process.platform === 'win32')('agent status socket', () => {
       { schedules: [{ ...loop, recurring: 'yes' }] },
       { schedules: [loop, loop] },
       { schedules: Array.from({ length: 17 }, (_, index) => ({ ...loop, id: `job-${index}` })) },
-      { turn: { id: 'turn', status: 'working', trigger: 'cron' } }
+      { turn: { id: 'turn', status: 'working', trigger: 'cron' } },
+      { turn: { id: 'turn', status: 'completed', response: 'x'.repeat(2001) } },
+      { turn: { id: 'turn', status: 'completed', response: 42 } }
     ]
     expect(await send(...invalid.map((fields) => event(1, { ...start, ...fields })))).toEqual(
       invalid.map(() => ({ ok: false, error: 'invalid' }))
@@ -176,6 +178,13 @@ describe.skipIf(process.platform === 'win32')('agent status socket', () => {
     expect(current()?.schedules).toEqual([{ ...loop, nextRunAt: null }])
     expect(await send(event(3, start))).toEqual([accepted])
     expect(current()?.schedules).toBeNull()
+    const response = '🐕'.repeat(2000)
+    expect(
+      await send(
+        event(4, { ...start, turn: { id: 'turn', status: 'completed', trigger: 'user', response } })
+      )
+    ).toEqual([accepted])
+    expect(current()?.turn).toEqual({ id: 'turn', status: 'completed', trigger: 'user', response })
   })
 
   it('validates and replaces conversation titles without changing ordering or event identity', async () => {

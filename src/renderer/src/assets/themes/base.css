@@ -12,9 +12,9 @@
   --icon-button-size: calc(var(--app-font-size) * 28 / 13);
   --activity-button-size: calc(var(--app-font-size) * 36 / 13);
   --activity-bar-width: calc(var(--app-font-size) * 56 / 13);
-  /* Balloons, about 400px wide as in JetBrains IDEs, but never wider than the main area's span. */
+  /* Wider than JetBrains balloons to fit agent responses, but never wider than the main area. */
   --toast-width: min(
-    calc(var(--app-font-size) * 380 / 13),
+    calc(var(--app-font-size) * 500 / 13),
     calc(100vw - var(--activity-bar-width) - var(--tool-stripe-width) - 2 * var(--island-gap))
   );
   /* The right edge only holds the bell, so it is narrower than the activity bar. */

@@ -177,7 +177,11 @@ for await (const command of input) {
       case 'completed':
       case 'failed':
       case 'cancelled':
-        snapshot.turn = { ...snapshot.turn, status: command }
+        snapshot.turn = {
+          ...snapshot.turn,
+          status: command,
+          ...(command === 'completed' ? { response: 'Reviewed <3> files.\nAll checks pass.' } : {})
+        }
         snapshot.tool = null
         reply = await report()
         break
