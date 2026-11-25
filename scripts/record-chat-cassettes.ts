@@ -82,9 +82,12 @@ const SCRIPTS: Record<string, Script> = {
       throw new Error(`The turn ended ${end.stopReason}, not cancelled`)
   },
   map: async (chat, driver) => {
+    // Both arrive in one go: wait for them together.
+    const written = driver.next(is('map-written'))
+    const ended = turn(driver)
     chat.generateMap()
-    await driver.next(is('map-written'))
-    await turn(driver)
+    await written
+    await ended
   },
   playbook: async (chat, driver) => {
     chat.prompt('Save this to the playbook: run the tests with npm test.')
@@ -120,6 +123,7 @@ async function record(name: string, script: Script, claude: string): Promise<voi
     await ready
     await script(chat, driver)
     chat.end()
+    await chat.exited()
     const entries = (await readFile(log, 'utf8'))
       .split('\n')
       .filter(Boolean)

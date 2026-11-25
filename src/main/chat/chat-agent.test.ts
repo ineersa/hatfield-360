@@ -93,6 +93,44 @@ describe('ChatAgentSession against recorded Claude Code', () => {
     await chat.exited()
   })
 
+  it("saves what the user asks it to keep to the map file's playbook through its MCP tool", async () => {
+    const { chat, events } = replay(
+      'playbook',
+      (session, event) => {
+        if (event.kind === 'ready')
+          session.prompt('Save this to the playbook: run the tests with npm test.')
+      },
+      (event) => event.kind === 'turn-end'
+    )
+    const seen = await events
+    expect(seen.at(-1)).toMatchObject({ kind: 'turn-end', stopReason: 'end_turn' })
+    expect(seen).toContainEqual(expect.objectContaining({ kind: 'tool', status: 'completed' }))
+    expect(await readFile(mapPath, 'utf8')).toBe(
+      '<!-- playbook -->\n- Run the tests with npm test.\n<!-- /playbook -->\n'
+    )
+    chat.end()
+    await chat.exited()
+  })
+
+  it("writes the map turn's reply into the map file's workspace section", async () => {
+    const { chat, events } = replay(
+      'map',
+      (session, event) => {
+        if (event.kind === 'ready') session.generateMap()
+      },
+      (event) => event.kind === 'turn-end'
+    )
+    const seen = await events
+    expect(seen).toContainEqual(expect.objectContaining({ kind: 'map-written', file: mapPath }))
+    expect(seen.at(-1)).toMatchObject({ kind: 'turn-end', stopReason: 'end_turn' })
+    const map = await readFile(mapPath, 'utf8')
+    expect(map).toMatch(/^<!-- workspace -->\n#+ Workspace map\n/)
+    expect(map).toContain('`npm test`')
+    expect(map).toMatch(/<!-- \/workspace -->\n$/)
+    chat.end()
+    await chat.exited()
+  })
+
   it('reports a client message the cassette does not expect as an error and ends the chat', async () => {
     const { events } = replay(
       'answer',

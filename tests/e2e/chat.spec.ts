@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
-import { cp, realpath } from 'node:fs/promises'
+import { cp, readFile, realpath } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 import { editor, tab } from './editor-page'
 import { makeTempDir, saveScreenshot, withApp } from './launch-app'
@@ -102,6 +102,95 @@ test('the chat shows why the agent stopped when it fails', async () => {
         await expect(message).toBeDisabled()
       },
       { userDataDir: userData, env: replaying('answer') }
+    )
+  } finally {
+    await cleanup()
+  }
+})
+
+test('a permission request waits for the user, and Yes lets the tool run', async () => {
+  const [, userData, cleanup] = await recordedProject()
+  try {
+    await withApp(
+      async (_app, page) => {
+        await expect(page.getByRole('main')).toBeVisible()
+        await doubleShift(page)
+        const chat = panel(page)
+        await expect(chat.getByLabel('Model')).toHaveValue('haiku')
+        // Manual mode asks before every change.
+        await chat.getByLabel('Mode', { exact: true }).selectOption('default')
+        await expect(chat.getByLabel('Mode', { exact: true })).toHaveValue('default')
+        const message = chat.getByRole('textbox', { name: 'Message' })
+        await message.fill(
+          'Create the file notes.txt containing the word hello, with the Write tool.'
+        )
+        await message.press('Enter')
+        const request = chat.getByRole('region', { name: 'Permission request' })
+        await expect(request).toContainText('notes.txt')
+        await saveScreenshot(page, 'chat-permission')
+        await expect(request.getByRole('button')).toHaveText([
+          'Yes',
+          'Yes, allow all edits during this session',
+          'No'
+        ])
+        await request.getByRole('button', { name: 'Yes', exact: true }).click()
+        await expect(request.getByRole('button')).toHaveCount(0)
+        await expect(request).toContainText('Yes')
+        await expect(chat.getByLabel("Claude's reply")).toContainText('I created')
+        await expect(chat.getByRole('button', { name: 'Send (Enter)' })).toBeVisible()
+      },
+      { userDataDir: userData, env: replaying('permission') }
+    )
+  } finally {
+    await cleanup()
+  }
+})
+
+test('Stop cancels a running command and the chat takes the next message', async () => {
+  const [, userData, cleanup] = await recordedProject()
+  try {
+    await withApp(
+      async (_app, page) => {
+        await expect(page.getByRole('main')).toBeVisible()
+        await doubleShift(page)
+        const chat = panel(page)
+        await expect(chat.getByLabel('Model')).toHaveValue('haiku')
+        const message = chat.getByRole('textbox', { name: 'Message' })
+        await message.fill('Use Bash to run exactly this command: sleep 20; echo finished')
+        await message.press('Enter')
+        await expect(chat.getByRole('group', { name: /sleep 20/ })).toBeVisible()
+        await chat.getByRole('button', { name: 'Stop (Esc)' }).click()
+        await expect(chat.getByText('Stopped.')).toBeVisible()
+        await expect(chat.getByRole('group', { name: /sleep 20/ })).toContainText('Failed')
+        await expect(chat.getByRole('button', { name: 'Send (Enter)' })).toBeVisible()
+        await expect(message).toBeEnabled()
+      },
+      { userDataDir: userData, env: replaying('cancel') }
+    )
+  } finally {
+    await cleanup()
+  }
+})
+
+test('Generate Workspace Map writes the map file, which Edit Workspace Map opens', async () => {
+  const [, userData, cleanup] = await recordedProject()
+  try {
+    await withApp(
+      async (_app, page) => {
+        await expect(page.getByRole('main')).toBeVisible()
+        await doubleShift(page)
+        const chat = panel(page)
+        await expect(chat.getByLabel('Model')).toHaveValue('haiku')
+        await chat.getByRole('button', { name: 'Generate Workspace Map' }).click()
+        await expect(chat.getByText(/^Wrote the workspace map to /)).toBeVisible()
+        expect(
+          await readFile(join(userData, 'workspaces', 'default.workspace.md'), 'utf8')
+        ).toMatch(/^<!-- workspace -->\n#+ Workspace map\n/)
+        await chat.getByRole('button', { name: 'Edit Workspace Map' }).click()
+        await expect(tab(page, 'default.workspace.md')).toBeVisible()
+        await expect(editor(page).locator('.view-lines')).toContainText('Workspace map')
+      },
+      { userDataDir: userData, env: replaying('map') }
     )
   } finally {
     await cleanup()
