@@ -1283,6 +1283,100 @@ test('the workspace restores a plain shell after its manually launched agent exi
   }
 })
 
+test('quitting preserves a running manual agent and resumes it in the same pane', async () => {
+  test.skip(process.platform !== 'linux', 'Manual registration uses Linux process identity')
+  const { project, userDataDir, cleanup } = await seed()
+  try {
+    await writeFile(
+      join(userDataDir, 'settings.json'),
+      JSON.stringify({
+        'terminal.gpuAcceleration': false,
+        'agents.hatfield': {
+          executable: process.execPath,
+          args: [fixture, 'hatfield', '7', 'resume-proof']
+        }
+      })
+    )
+    const savedAgent = { provider: 'hatfield', providerSessionId: '7', project }
+    let originalPaneId: string | undefined
+    await withApp(
+      async (app, page) => {
+        const row = await launchManualPlacement(page, 'agent-project', project, '7')
+        await expect(row).toBeVisible()
+        const terminalId = await page.getByTestId('terminal-pane').getAttribute('data-terminal-id')
+        if (!terminalId) throw new Error('Expected the running agent terminal')
+        const checkpoint = await page.evaluate(async (id) => {
+          const { terminals, terminalGeneration } = await globalThis.desktop.getWorkspace()
+          const tab = terminals?.tabs[0]
+          if (!terminals || !tab || tab.layout.kind !== 'pane') {
+            throw new Error('Expected a saved shell pane')
+          }
+          const { kind, cwd, id: paneId } = tab.layout
+          const lateCheckpoint = {
+            ...terminals,
+            tabs: [{ ...tab, layout: { kind, cwd, id: paneId } }]
+          }
+          await globalThis.desktop.checkpointTerminals(terminalGeneration, {
+            ...lateCheckpoint,
+            tabs: [{ ...tab, layout: { kind, cwd, id: paneId, terminalId: id } }]
+          })
+          return { terminalGeneration, lateCheckpoint }
+        }, terminalId)
+        const beforeQuit = await page.evaluate(() => globalThis.desktop.getWorkspace())
+        const originalPane = beforeQuit.terminals?.tabs[0]?.layout
+        expect(originalPane).toMatchObject({ kind: 'pane', agent: savedAgent })
+        if (originalPane?.kind !== 'pane') throw new Error('Expected a saved agent pane')
+        originalPaneId = originalPane.id
+
+        // Pause the final quit after teardown so the late IPC can complete before the window closes.
+        await app.evaluate(
+          ({ app: electronApp }) =>
+            new Promise<void>((finished) => {
+              electronApp.once('before-quit', () => {
+                electronApp.once('before-quit', (event) => {
+                  event.preventDefault()
+                  finished()
+                })
+              })
+              electronApp.quit()
+            })
+        )
+        await page.evaluate(
+          ({ terminalGeneration, lateCheckpoint }) =>
+            globalThis.desktop.checkpointTerminals(terminalGeneration, lateCheckpoint),
+          checkpoint
+        )
+      },
+      { userDataDir }
+    )
+    const saved: unknown = JSON.parse(
+      await readFile(join(userDataDir, 'workspaces/default.hatfield-workspace'), 'utf8')
+    )
+    expect(saved).toMatchObject({
+      terminals: { tabs: [{ layout: { id: originalPaneId, agent: savedAgent } }] }
+    })
+    await withApp(
+      async (_app, page) => {
+        const pane = page
+          .getByRole('tabpanel', { name: 'agent-project' })
+          .getByTestId('terminal-pane')
+        await expect(pane).toHaveCount(1)
+        await expect(output(pane)).toContainText('Scenario ready: resume-proof')
+        await expect(
+          page.getByRole('button', {
+            name: /^Hatfield #7 · Resume proof [a-f0-9]{16} · Needs input$/
+          })
+        ).toBeVisible()
+        const restored = await page.evaluate(() => globalThis.desktop.getWorkspace())
+        expect(restored.terminals?.tabs[0]?.layout).toMatchObject({ id: originalPaneId })
+      },
+      { userDataDir }
+    )
+  } finally {
+    await cleanup()
+  }
+})
+
 async function placementWorkspace(userDataDir: string, project: string, folder?: string) {
   await writeFile(
     join(userDataDir, 'workspaces/default.hatfield-workspace'),

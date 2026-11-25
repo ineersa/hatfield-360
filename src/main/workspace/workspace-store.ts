@@ -114,6 +114,7 @@ async function loadWorkspaceFile(file: string): Promise<OpenWorkspace> {
 /** The workspace open in the window, the Recent list, and change notifications. */
 class WorkspaceStore {
   private terminalGeneration = 0
+  private terminalsFrozen = false
   private session: Promise<Session> | null = null
   private notice: Notice | null = null
   private noticeCount = 0
@@ -431,7 +432,8 @@ class WorkspaceStore {
     return undefined
   }
 
-  flush(): Promise<unknown> {
+  freezeTerminals(): Promise<unknown> {
+    this.terminalsFrozen = true
     return this.queue
   }
 
@@ -440,6 +442,7 @@ class WorkspaceStore {
     layout: TerminalLayout,
     ended: Set<string>
   ): Promise<void> {
+    if (this.terminalsFrozen) return Promise.resolve()
     const run = this.queue.then(async () => {
       const { workspace } = await this.ready()
       if (generation !== this.terminalGeneration) return
