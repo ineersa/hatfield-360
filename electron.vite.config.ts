@@ -4,7 +4,15 @@ import { defineConfig } from 'electron-vite'
 import { resolve } from 'node:path'
 
 export default defineConfig({
-  main: {},
+  main: {
+    // Bundled, so the chat's MCP server and the ACP SDK share one copy of the MCP package: loaded
+    // from node_modules, main's require() gets its CommonJS build and the SDK its ES module one.
+    build: {
+      externalizeDeps: {
+        exclude: ['@agentclientprotocol/sdk', '@modelcontextprotocol/server', 'zod']
+      }
+    }
+  },
   preload: {},
   renderer: {
     resolve: {

@@ -13,6 +13,7 @@ type ShellLayoutState = {
   activeView: ShellViewId
   panels: Record<ShellViewId, SidePanelLayout>
   notificationsWidth: number
+  chatWidth: number
   /** The saved layout has been applied; the shell waits for it so it doesn't jump after the first paint. */
   loaded: boolean
   /** The Settings page covers the main area until it is closed or a view is chosen. */
@@ -31,15 +32,22 @@ type ShellLayoutState = {
   hidePanel: (view: ShellViewId) => void
   setPanelWidth: (view: ShellViewId, width: number) => void
   setNotificationsWidth: (width: number) => void
+  setChatWidth: (width: number) => void
 }
 
 const clampWidth = (width: number): number =>
   Math.round(Math.min(SIDE_PANEL_WIDTH_RANGE.max, Math.max(SIDE_PANEL_WIDTH_RANGE.min, width)))
 
-const savedPart = ({ activeView, panels, notificationsWidth }: ShellLayout): ShellLayout => ({
+const savedPart = ({
   activeView,
   panels,
-  notificationsWidth
+  notificationsWidth,
+  chatWidth
+}: ShellLayout): ShellLayout => ({
+  activeView,
+  panels,
+  notificationsWidth,
+  chatWidth
 })
 
 export const useShellLayoutStore = create<ShellLayoutState>((set, get) => ({
@@ -55,7 +63,8 @@ export const useShellLayoutStore = create<ShellLayoutState>((set, get) => ({
         if (
           state.activeView === previous.activeView &&
           state.panels === previous.panels &&
-          state.notificationsWidth === previous.notificationsWidth
+          state.notificationsWidth === previous.notificationsWidth &&
+          state.chatWidth === previous.chatWidth
         )
           return
         window.desktop.saveShellLayout(savedPart(state)).catch((error: unknown) => {
@@ -110,5 +119,6 @@ export const useShellLayoutStore = create<ShellLayoutState>((set, get) => ({
       panels: { ...state.panels, [view]: { ...state.panels[view], width: clampWidth(width) } }
     }))
   },
-  setNotificationsWidth: (width) => set({ notificationsWidth: clampWidth(width) })
+  setNotificationsWidth: (width) => set({ notificationsWidth: clampWidth(width) }),
+  setChatWidth: (width) => set({ chatWidth: clampWidth(width) })
 }))

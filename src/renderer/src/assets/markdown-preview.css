@@ -115,3 +115,19 @@
   color: var(--muted-foreground);
   font-style: italic;
 }
+
+/* Chat replies: the same roles, set tighter for a narrow panel. */
+.chat-markdown {
+  line-height: 1.5;
+}
+
+.chat-markdown > * + * {
+  margin-top: 0.6em;
+}
+
+.chat-markdown :is(h1, h2, h3) {
+  font-size: 1.1em;
+  padding-bottom: 0;
+  border-bottom: 0;
+  margin-top: 1em;
+}

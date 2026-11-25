@@ -10,6 +10,7 @@ import { OpenFileWatchers } from '../files/open-file-watchers'
 import { resolveInsideRoots, resolveOutsideHome } from '../files/path-containment'
 import { keybindingsStore } from '../keybindings/keybindings-store'
 import { allLibraryRoots } from '../language-servers/language-server-registry'
+import { workspaceStore } from '../workspace/workspace-store'
 import { answerClose, setUnsaved } from '../window/unsaved-changes-guard'
 import { handleTrusted } from './trusted-ipc'
 
@@ -69,11 +70,13 @@ async function readOutside(path: string, refused: unknown): Promise<EditorFile> 
   return file.kind === 'text' || file.kind === 'large' ? { ...file, outside: true } : file
 }
 
-/**
- * keybindings.json, the one file outside the workspace the app's editor saves: only as itself in the
- * data folder, never through a link to some other file.
- */
-async function keybindingsFile(path: string): Promise<string | null> {
+/** Files outside the workspace the app's editor saves: keybindings.json and the workspace's chat map. */
+async function isAppFile(path: string): Promise<boolean> {
+  return path === keybindingsStore.file() || path === (await workspaceStore.instructionsFile())
+}
+
+/** An app file is opened only as itself, never through a link to some other file. */
+async function appFile(path: string): Promise<string | null> {
   const real = await realpath(path).catch(() => null)
   if (real === null) return null
   if (real !== join(await realpath(dirname(path)), basename(path))) {
@@ -84,12 +87,11 @@ async function keybindingsFile(path: string): Promise<string | null> {
 
 async function read(contents: WebContents, path: string): Promise<EditorFile> {
   const page = heldBy(contents)
-  const real =
-    path === keybindingsStore.file()
-      ? await keybindingsFile(path)
-      : await locateEditorFile(path, await rootPaths(), page.files.get(path)).catch(
-          (error: unknown) => readOutside(path, error)
-        )
+  const real = (await isAppFile(path))
+    ? await appFile(path)
+    : await locateEditorFile(path, await rootPaths(), page.files.get(path)).catch(
+        (error: unknown) => readOutside(path, error)
+      )
   if (real === null) return { kind: 'missing' }
   if (typeof real !== 'string') return real
   const file = await readEditorFile(real)

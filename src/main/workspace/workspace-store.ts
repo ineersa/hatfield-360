@@ -23,7 +23,8 @@ import {
   type WorkspaceEntry,
   WORKSPACE_FILE_EXTENSION,
   withWorkspaceExtension,
-  writeWorkspaceFile
+  writeWorkspaceFile,
+  defaultInstructionsFile
 } from './workspace-file'
 
 type ChangeListener = (view: WorkspaceView) => void
@@ -35,6 +36,7 @@ type OpenWorkspace = {
   folders: WorkspaceEntry[]
   problem: string | null
   terminals?: TerminalLayout
+  instructions?: string
 }
 
 type Session = { workspace: OpenWorkspace; state: AppState }
@@ -73,7 +75,8 @@ async function loadDefaultWorkspace(file: string): Promise<OpenWorkspace> {
     return {
       ...workspace,
       folders: read.folders,
-      ...(read.terminals ? { terminals: read.terminals } : {})
+      ...(read.terminals ? { terminals: read.terminals } : {}),
+      ...(read.instructions === undefined ? {} : { instructions: read.instructions })
     }
   if (read.status === 'newer') {
     // Leave the file untouched so the newer app version can still read it.
@@ -99,6 +102,7 @@ async function loadWorkspaceFile(file: string): Promise<OpenWorkspace> {
       isDefault: false,
       folders: read.folders,
       ...(read.terminals ? { terminals: read.terminals } : {}),
+      ...(read.instructions === undefined ? {} : { instructions: read.instructions }),
       problem: null
     }
   }
@@ -202,7 +206,7 @@ class WorkspaceStore {
       if (workspace.problem) throw new Error(workspace.problem)
       const folders = workspace.folders.filter((folder) => folder.path !== path)
       if (folders.length === workspace.folders.length) return false
-      await writeWorkspaceFile(workspace.file, folders, workspace.terminals)
+      await writeWorkspaceFile(workspace.file, { ...workspace, folders })
       workspace.folders = folders
       return true
     })
@@ -216,7 +220,7 @@ class WorkspaceStore {
       const folders = workspace.folders.map((folder) =>
         folder.path === path ? { path, kind } : folder
       )
-      await writeWorkspaceFile(workspace.file, folders, workspace.terminals)
+      await writeWorkspaceFile(workspace.file, { ...workspace, folders })
       workspace.folders = folders
       return true
     })
@@ -236,10 +240,12 @@ class WorkspaceStore {
       if (workspace.problem) throw new Error(workspace.problem)
       const target = withWorkspaceExtension(file)
       if (target === this.defaultFile()) throw new Error('Choose another place for the workspace.')
-      await writeWorkspaceFile(target, workspace.folders, workspace.terminals)
+      // The copy keeps using the same map file, rather than a new empty one beside it.
+      const instructions = workspace.instructions ?? defaultInstructionsFile(workspace.file)
+      await writeWorkspaceFile(target, { ...workspace, instructions })
       await this.switchTo(
         session,
-        { ...workspace, file: target, isDefault: false },
+        { ...workspace, file: target, isDefault: false, instructions },
         remembered(session.state, target),
         true
       )
@@ -304,6 +310,12 @@ class WorkspaceStore {
     if (!last) return undefined
     const parent = dirname(last.path)
     return (await isDirectory(parent)) ? parent : undefined
+  }
+
+  /** The open workspace's map file for the chat: the one it names, else `<name>.workspace.md` beside it. */
+  async instructionsFile(): Promise<string> {
+    const { workspace } = await this.ready()
+    return workspace.instructions ?? defaultInstructionsFile(workspace.file)
   }
 
   /** Hatfield's own workspaces folder: the default workspace and where Save As suggests saving. */
@@ -390,7 +402,7 @@ class WorkspaceStore {
           ...workspace.folders,
           { path: folder, kind: (await isRepositoryRoot(folder)) ? 'project' : 'folder' } as const
         ]
-    await writeWorkspaceFile(workspace.file, folders, workspace.terminals)
+    await writeWorkspaceFile(workspace.file, { ...workspace, folders })
     workspace.folders = folders
     return true
   }
@@ -468,7 +480,7 @@ class WorkspaceStore {
         tabs: layout.tabs.map((tab) => ({ ...tab, layout: retain(tab.layout) }))
       }
       if (JSON.stringify(workspace.terminals) === JSON.stringify(layout)) return
-      await writeWorkspaceFile(workspace.file, workspace.folders, layout)
+      await writeWorkspaceFile(workspace.file, { ...workspace, terminals: layout })
       workspace.terminals = layout
     })
     this.queue = run.catch(() => undefined)
