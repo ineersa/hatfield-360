@@ -53,11 +53,7 @@ Existing terminal actions must not type into or terminate an arbitrary editor,
 busy shell or agent. Safe new-pane placement and known launch directories take
 precedence over pretending to know shell idleness or a directory changed by `cd`.
 
-Persist conversation/profile/project/worktree and placement references for later
-restoration, not active PIDs or reusable launch credentials. Restore history and
-layout without automatically executing agents. Manual resume uses a supported
-provider resume ID and fresh launch credentials. Previously running processes
-must not appear live merely because their records survived a restart.
+The current workspace file saves terminal tabs, split layout, selection and pane-to-conversation mappings as they change. On reopen, ordinary panes get fresh shells. Agent panes use the provider's current Settings command with the saved conversation ID. A failed restore is reported without starting a substitute conversation.
 
 ## Honest information and limits
 
@@ -85,7 +81,7 @@ manually typed launch detection are outside v1.
 - [#25](https://github.com/ineersa/hatfield-360/issues/25): real Claude/Hatfield
   protocol producers and provider-specific lifecycle/identity validation.
 - [#37](https://github.com/ineersa/hatfield-360/issues/37): durable history,
-  restart restoration and explicit manual resume.
+  workspace autosave and automatic restart restoration.
 - [#38](https://github.com/ineersa/hatfield-360/issues/38): real Librarian search
   and source-session navigation/resume.
 

@@ -28,6 +28,8 @@ const desktopApi: DesktopApi = {
     return () => ipcRenderer.removeListener(AGENT_CHANNELS.changed, listener)
   },
   getAppInfo: () => ipcRenderer.invoke(IPC_CHANNELS.getAppInfo),
+  checkpointTerminals: (generation, layout) =>
+    ipcRenderer.invoke(WORKSPACE_CHANNELS.checkpointTerminals, generation, layout),
   getWorkspace: () => ipcRenderer.invoke(WORKSPACE_CHANNELS.get),
   addWorkspaceFolder: () => ipcRenderer.invoke(WORKSPACE_CHANNELS.addFolder),
   removeWorkspaceFolder: (path) => ipcRenderer.invoke(WORKSPACE_CHANNELS.removeFolder, path),

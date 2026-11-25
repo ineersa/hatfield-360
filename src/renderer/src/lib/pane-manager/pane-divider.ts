@@ -8,6 +8,7 @@ const DIVIDER_HIT_SIZE = 8
 export type DividerCallbacks = {
   /** Fits the terminals under a split side after its size changed. */
   refitPanesUnder: (el: HTMLElement) => void
+  onResize: () => void
 }
 
 const dividerCleanups = new WeakMap<HTMLElement, () => void>()
@@ -123,6 +124,7 @@ function attachDividerDrag(
     if (nextEl) callbacks.refitPanesUnder(nextEl)
     prevEl = null
     nextEl = null
+    if (commit && didMove) callbacks.onResize()
     didMove = false
   }
 
@@ -161,6 +163,7 @@ function attachDividerDrag(
     next.style.flex = '1 1 0%'
     callbacks.refitPanesUnder(previous)
     callbacks.refitPanesUnder(next)
+    callbacks.onResize()
   }
 
   divider.addEventListener('pointerdown', onPointerDown)

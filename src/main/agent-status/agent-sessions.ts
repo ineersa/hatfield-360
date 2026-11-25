@@ -18,14 +18,20 @@ import { agentStatusServer } from './status-server'
 
 const records = new Map<
   string,
-  { owner: WebContents; session: AgentSession; observedCwd: string | null }
+  { owner: WebContents; session: AgentSession; observedCwd: string | null; manual: boolean }
 >()
 const trackedOwners = new WeakSet<WebContents>()
 const manualHistory = new WeakMap<WebContents, string[]>()
-const launches = new Map<
-  string,
-  { owner: WebContents; session: AgentSession; policy: AgentNotificationPolicy; manual?: true }
->()
+type TrackedLaunch = {
+  owner: WebContents
+  session: AgentSession
+  policy: AgentNotificationPolicy
+  manual?: true
+  resumeBaseline?: boolean
+  expectedSessionId?: string
+  restoreError?: string
+}
+const launches = new Map<string, TrackedLaunch>()
 let revision = 0
 
 export function agentSnapshot(owner: WebContents): AgentSnapshot {
@@ -37,18 +43,25 @@ export function agentSnapshot(owner: WebContents): AgentSnapshot {
   }
 }
 
-function recordSession(
-  owner: WebContents,
-  session: AgentSession,
-  observedCwd: string | null = null
-) {
+export function resumeDirectory(session: AgentSession): string | null {
+  const record = records.get(session.id)
+  if (!record) return null
+  return record.manual ? record.observedCwd : session.cwd
+}
+
+function recordSession(owner: WebContents, session: AgentSession, observedCwd?: string | null) {
   if (!trackedOwners.has(owner)) {
     trackedOwners.add(owner)
     owner.once('destroyed', () => {
       for (const [id, record] of records) if (record.owner === owner) records.delete(id)
     })
   }
-  records.set(session.id, { owner, session, observedCwd })
+  records.set(session.id, {
+    owner,
+    session,
+    observedCwd: observedCwd ?? null,
+    manual: observedCwd !== undefined
+  })
 }
 
 function newSession(
@@ -223,8 +236,20 @@ export function trackAgentSessions(
       .find((entry) => entry.launchId === change.launchId)?.session
     const trusted = reported?.provider === session.provider ? reported : undefined
     if (change.kind === 'event') {
+      if (launch.expectedSessionId && change.event.kind === 'session.snapshot' && reported) {
+        if (!trusted || trusted.id !== launch.expectedSessionId) {
+          launch.restoreError = `Expected conversation ${launch.expectedSessionId}, but the agent reported ${reported.id}.`
+          launches.delete(change.launchId)
+          void terminalSessions.kill(owner, session.terminalId)
+          return
+        }
+        delete launch.expectedSessionId
+      }
       if (trusted && !owner.isDestroyed()) {
-        for (const message of policy.accept(change.event, trusted)) {
+        const messages = policy.accept(change.event, trusted)
+        const baseline = launch.resumeBaseline
+        if (change.event.kind === 'session.snapshot') launch.resumeBaseline = false
+        for (const message of baseline ? [] : messages) {
           notify(owner, {
             provider: session.provider,
             terminalId: session.terminalId,
@@ -262,7 +287,8 @@ export function trackAgentSessions(
     provider: AgentProvider,
     profile: AgentProfile,
     project: string | null,
-    request: { cwd: string; cols: number; rows: number }
+    request: { cwd: string; cols: number; rows: number },
+    expectedSessionId?: string
   ) => {
     if (process.platform === 'win32' && /\.(cmd|bat|ps1)[. ]*$/i.test(profile.executable)) {
       throw new Error(
@@ -276,7 +302,14 @@ export function trackAgentSessions(
       : undefined
     const session = newSession(terminalId, provider, request.cwd, project)
     const policy = new AgentNotificationPolicy()
-    if (credential) launches.set(credential.launchId, { owner, session, policy })
+    const tracked: TrackedLaunch = {
+      owner,
+      session,
+      policy,
+      resumeBaseline: expectedSessionId !== undefined,
+      ...(expectedSessionId === undefined ? {} : { expectedSessionId })
+    }
+    if (credential) launches.set(credential.launchId, tracked)
     const release = () => {
       if (!credential) return
       launches.delete(credential.launchId)
@@ -300,6 +333,7 @@ export function trackAgentSessions(
           release()
           session.process = 'exited'
           if (records.delete(session.id)) changed(owner)
+          return tracked.restoreError
         }
       })
       if (session.process !== 'exited') {

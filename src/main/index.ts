@@ -1,3 +1,4 @@
+import { workspaceStore } from './workspace/workspace-store'
 import { registerLanguageServerIpc } from './ipc/language-server-ipc'
 import { languageServerSessions } from './language-servers/language-server-sessions'
 import { registerAgentIpc } from './ipc/agent-ipc'
@@ -73,22 +74,28 @@ app.on('before-quit', (event) => {
   // Unsaved edits are saved or discarded first; a cancelled quit leaves everything running.
   if (quitWaitsForUnsavedChanges()) return
   quitting = true
-  void Promise.allSettled([
-    agentStatusServer.stop().catch((error: unknown) => {
-      console.error('Stopping agent status server failed:', error)
-    }),
-    windowStateStore
-      .flush()
-      .catch((error: unknown) => console.error('Saving window state failed:', error)),
-    filesSessionStore
-      .flush()
-      .catch((error: unknown) => console.error('Saving Files sessions failed:', error)),
-    terminalSessions.killAll(),
-    languageServerSessions.stopAll()
-  ]).finally(() => {
-    readyToQuit = true
-    app.quit()
-  })
+  // Teardown changes live agent mappings; finish accepted checkpoints before ending processes.
+  void workspaceStore
+    .freezeTerminals()
+    .then(() =>
+      Promise.allSettled([
+        agentStatusServer.stop().catch((error: unknown) => {
+          console.error('Stopping agent status server failed:', error)
+        }),
+        windowStateStore
+          .flush()
+          .catch((error: unknown) => console.error('Saving window state failed:', error)),
+        filesSessionStore
+          .flush()
+          .catch((error: unknown) => console.error('Saving Files sessions failed:', error)),
+        terminalSessions.killAll(),
+        languageServerSessions.stopAll()
+      ])
+    )
+    .finally(() => {
+      readyToQuit = true
+      app.quit()
+    })
 })
 
 app.on('window-all-closed', () => {

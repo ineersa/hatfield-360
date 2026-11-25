@@ -1,3 +1,4 @@
+import type { PaneLeaf, PaneLayout, TerminalLayout } from '../../shared/terminal-workspace-api'
 import { app } from 'electron'
 import { readdir, rename, stat } from 'node:fs/promises'
 import { basename, dirname, join, resolve } from 'node:path'
@@ -33,6 +34,7 @@ type OpenWorkspace = {
   /** By absolute path, in the user's order. */
   folders: WorkspaceEntry[]
   problem: string | null
+  terminals?: TerminalLayout
 }
 
 type Session = { workspace: OpenWorkspace; state: AppState }
@@ -67,7 +69,12 @@ const folderName = (path: string): string => basename(path) || path
 async function loadDefaultWorkspace(file: string): Promise<OpenWorkspace> {
   const read = await readWorkspaceFile(file)
   const workspace: OpenWorkspace = { file, isDefault: true, folders: [], problem: null }
-  if (read.status === 'ok') return { ...workspace, folders: read.folders }
+  if (read.status === 'ok')
+    return {
+      ...workspace,
+      folders: read.folders,
+      ...(read.terminals ? { terminals: read.terminals } : {})
+    }
   if (read.status === 'newer') {
     // Leave the file untouched so the newer app version can still read it.
     return {
@@ -87,7 +94,13 @@ async function loadDefaultWorkspace(file: string): Promise<OpenWorkspace> {
 async function loadWorkspaceFile(file: string): Promise<OpenWorkspace> {
   const read = await readWorkspaceFile(file)
   if (read.status === 'ok') {
-    return { file, isDefault: false, folders: read.folders, problem: null }
+    return {
+      file,
+      isDefault: false,
+      folders: read.folders,
+      ...(read.terminals ? { terminals: read.terminals } : {}),
+      problem: null
+    }
   }
   const reason =
     read.status === 'missing'
@@ -100,6 +113,8 @@ async function loadWorkspaceFile(file: string): Promise<OpenWorkspace> {
 
 /** The workspace open in the window, the Recent list, and change notifications. */
 class WorkspaceStore {
+  private terminalGeneration = 0
+  private terminalsFrozen = false
   private session: Promise<Session> | null = null
   private notice: Notice | null = null
   private noticeCount = 0
@@ -115,6 +130,7 @@ class WorkspaceStore {
 
   async view(): Promise<WorkspaceView> {
     const { workspace, state } = await this.ready()
+    const terminalGeneration = this.terminalGeneration
     const folders: WorkspaceFolder[] = await Promise.all(
       workspace.folders.map(async ({ path, kind }) => ({
         path,
@@ -165,6 +181,8 @@ class WorkspaceStore {
       name: workspace.isDefault ? DEFAULT_WORKSPACE_NAME : workspaceFileName(workspace.file),
       file: workspace.isDefault ? null : workspace.file,
       folders,
+      terminalGeneration,
+      ...(workspace.terminals ? { terminals: workspace.terminals } : {}),
       problem: workspace.problem,
       notice: this.notice,
       recent
@@ -184,7 +202,7 @@ class WorkspaceStore {
       if (workspace.problem) throw new Error(workspace.problem)
       const folders = workspace.folders.filter((folder) => folder.path !== path)
       if (folders.length === workspace.folders.length) return false
-      await writeWorkspaceFile(workspace.file, folders)
+      await writeWorkspaceFile(workspace.file, folders, workspace.terminals)
       workspace.folders = folders
       return true
     })
@@ -198,7 +216,7 @@ class WorkspaceStore {
       const folders = workspace.folders.map((folder) =>
         folder.path === path ? { path, kind } : folder
       )
-      await writeWorkspaceFile(workspace.file, folders)
+      await writeWorkspaceFile(workspace.file, folders, workspace.terminals)
       workspace.folders = folders
       return true
     })
@@ -218,11 +236,12 @@ class WorkspaceStore {
       if (workspace.problem) throw new Error(workspace.problem)
       const target = withWorkspaceExtension(file)
       if (target === this.defaultFile()) throw new Error('Choose another place for the workspace.')
-      await writeWorkspaceFile(target, workspace.folders)
+      await writeWorkspaceFile(target, workspace.folders, workspace.terminals)
       await this.switchTo(
         session,
-        { file: target, isDefault: false, folders: workspace.folders, problem: null },
-        remembered(session.state, target)
+        { ...workspace, file: target, isDefault: false },
+        remembered(session.state, target),
+        true
       )
     })
   }
@@ -336,9 +355,11 @@ class WorkspaceStore {
   private async switchTo(
     session: Session,
     workspace: OpenWorkspace,
-    state: AppState
+    state: AppState,
+    keepTerminals = false
   ): Promise<void> {
     await this.saveState(session, state)
+    if (!keepTerminals) this.terminalGeneration += 1
     session.workspace = workspace
   }
 
@@ -369,7 +390,7 @@ class WorkspaceStore {
           ...workspace.folders,
           { path: folder, kind: (await isRepositoryRoot(folder)) ? 'project' : 'folder' } as const
         ]
-    await writeWorkspaceFile(workspace.file, folders)
+    await writeWorkspaceFile(workspace.file, folders, workspace.terminals)
     workspace.folders = folders
     return true
   }
@@ -393,6 +414,65 @@ class WorkspaceStore {
       workspace: await loadDefaultWorkspace(this.defaultFile()),
       state: { ...state, current: null }
     }
+  }
+
+  async savedPane(generation: number, paneId: string): Promise<PaneLeaf | undefined> {
+    const { workspace } = await this.ready()
+    if (generation !== this.terminalGeneration) return undefined
+    const find = (node: PaneLayout): PaneLeaf | undefined =>
+      node.kind === 'pane'
+        ? node.id === paneId
+          ? node
+          : undefined
+        : (find(node.first) ?? find(node.second))
+    for (const tab of workspace.terminals?.tabs ?? []) {
+      const pane = find(tab.layout)
+      if (pane) return pane
+    }
+    return undefined
+  }
+
+  freezeTerminals(): Promise<unknown> {
+    this.terminalsFrozen = true
+    return this.queue
+  }
+
+  checkpointTerminals(
+    generation: number,
+    layout: TerminalLayout,
+    ended: Set<string>
+  ): Promise<void> {
+    if (this.terminalsFrozen) return Promise.resolve()
+    const run = this.queue.then(async () => {
+      const { workspace } = await this.ready()
+      if (generation !== this.terminalGeneration) return
+      if (!workspace.terminals && layout.tabs.length === 0) return
+      if (workspace.problem) throw new Error(workspace.problem)
+      const previous = new Map<string, PaneLeaf>()
+      const remember = (node: PaneLayout): void => {
+        if (node.kind === 'pane') previous.set(node.id, node)
+        else {
+          remember(node.first)
+          remember(node.second)
+        }
+      }
+      for (const tab of workspace.terminals?.tabs ?? []) remember(tab.layout)
+      const retain = (node: PaneLayout): PaneLayout =>
+        node.kind === 'split'
+          ? { ...node, first: retain(node.first), second: retain(node.second) }
+          : ended.has(node.id)
+            ? (previous.get(node.id) ?? node)
+            : node
+      layout = {
+        ...layout,
+        tabs: layout.tabs.map((tab) => ({ ...tab, layout: retain(tab.layout) }))
+      }
+      if (JSON.stringify(workspace.terminals) === JSON.stringify(layout)) return
+      await writeWorkspaceFile(workspace.file, workspace.folders, layout)
+      workspace.terminals = layout
+    })
+    this.queue = run.catch(() => undefined)
+    return run
   }
 
   private change<T>(apply: (session: Session) => Promise<T>): Promise<T> {

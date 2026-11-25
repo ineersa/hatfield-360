@@ -1,3 +1,4 @@
+import { notify } from '@/state/notification-store'
 import type { AgentLaunch } from '../../../../shared/agent-api'
 import type { ManagedPane } from '@/lib/pane-manager/pane-manager-types'
 import { listenToSession } from '@/lib/terminal-output-router'
@@ -35,7 +36,8 @@ export function startPaneShell(
   cwd: string | null,
   onShellEnded: () => void,
   agent?: AgentLaunch,
-  onStarted?: () => void
+  onStarted?: () => void,
+  restoring = false
 ): PaneShell {
   const { terminal } = pane
   let sessionId: string | null = null
@@ -65,9 +67,12 @@ export function startPaneShell(
     requestAnimationFrame(() => {
       if (disposed) return
       const { cols, rows } = terminal
-      const spawn = agent
-        ? window.desktop.launchAgent({ ...agent, cols, rows })
-        : window.desktop.spawnTerminal({ ...(cwd ? { cwd } : {}), cols, rows })
+      const spawn =
+        restoring && agent && !cwd
+          ? Promise.reject(new Error('The saved terminal folder is unavailable.'))
+          : agent
+            ? window.desktop.launchAgent({ ...agent, cols, rows })
+            : window.desktop.spawnTerminal({ ...(cwd ? { cwd } : {}), cols, rows })
       spawn
         .then((session) => {
           if (disposed) {
@@ -88,8 +93,16 @@ export function startPaneShell(
               }),
             exit: (exit) => {
               exited = true
-              if (!exit.signal && (!agent || exit.exitCode === 0)) onShellEnded()
-              else showExited(pane, exit)
+              if (!exit.error && !exit.signal && (!agent || exit.exitCode === 0)) onShellEnded()
+              else {
+                showExited(pane, exit)
+                if (restoring && agent)
+                  notify({
+                    severity: 'error',
+                    title: 'Could not restore agent',
+                    body: exit.error ?? `The agent exited with code ${exit.exitCode}.`
+                  })
+              }
             }
           })
           for (const data of typedBeforeStart.splice(0)) {
@@ -103,7 +116,14 @@ export function startPaneShell(
           }
         })
         .catch((error: unknown) => {
+          if (disposed) return
           exited = true
+          if (restoring)
+            notify({
+              severity: 'error',
+              title: 'Could not restore terminal',
+              body: mainErrorMessage(error)
+            })
           terminal.write(
             `\x1b[31mThe ${agent ? 'agent' : 'shell'} couldn't start: ${mainErrorMessage(error)}\x1b[0m\r\n`
           )

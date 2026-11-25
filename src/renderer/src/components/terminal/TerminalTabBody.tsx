@@ -1,3 +1,6 @@
+import { checkpointTab, currentTerminalGeneration } from '@/state/terminal-workspace'
+import type { PaneLeaf } from '../../../../shared/terminal-workspace-api'
+import type { ManagedPane } from '@/lib/pane-manager/pane-manager-types'
 import { notify } from '@/state/notification-store'
 import { mainErrorMessage } from '@/lib/main-error-message'
 import type { AgentLaunch } from '../../../../shared/agent-api'
@@ -50,44 +53,90 @@ export function TerminalTabBody({
     if (!element) return undefined
     const shells = new Map<number, PaneShell>()
     const closeTab = useTerminalStore.getState().closeTab
-    const publishActivePane = () =>
+    const owner = tab.generation ?? currentTerminalGeneration()
+    const leaves = new Map<string, PaneLeaf>()
+    const checkpoint = () => {
+      const layout = panes.layout((container) => {
+        const id = container.dataset.layoutId ?? crypto.randomUUID()
+        const leaf = leaves.get(id) ?? { kind: 'pane', id, cwd: tab.cwd }
+        return {
+          ...leaf,
+          ...(container.dataset.terminalId ? { terminalId: container.dataset.terminalId } : {})
+        }
+      })
+      if (layout)
+        checkpointTab(owner, {
+          id: tab.id,
+          label: tab.label,
+          cwd: tab.cwd,
+          activePane: panes.getActivePane()?.container.dataset.layoutId ?? null,
+          layout
+        })
+    }
+    const publishActivePane = () => {
       useTerminalStore
         .getState()
         .setActivePane(tab.id, panes.getActivePane()?.container.dataset.terminalId ?? null)
+      checkpoint()
+    }
     let nextLaunch = tab.agent
-    const panes = new PaneManager(element, {
-      terminalOptions: currentTerminalOptions,
-      gpuAcceleration: () => useSettingsStore.getState().values['terminal.gpuAcceleration'],
-      onActivePaneChange: publishActivePane,
-      onPaneCreated: (pane) => {
-        const agent = nextLaunch
-        nextLaunch = undefined
-        bindClipboardKeys(pane.terminal)
-        shells.set(
-          pane.id,
-          startPaneShell(pane, tab.cwd, () => panes.closePane(pane.id), agent, publishActivePane)
+    const create = (pane: ManagedPane, saved?: PaneLeaf) => {
+      const leaf = saved ?? { kind: 'pane', id: crypto.randomUUID(), cwd: tab.cwd }
+      pane.container.dataset.layoutId = leaf.id
+      leaves.set(leaf.id, leaf)
+      const agent: AgentLaunch | undefined =
+        saved?.agent && owner !== undefined
+          ? {
+              provider: saved.agent.provider,
+              target: { restore: { generation: owner, paneId: leaf.id } }
+            }
+          : nextLaunch
+      nextLaunch = undefined
+      bindClipboardKeys(pane.terminal)
+      shells.set(
+        pane.id,
+        startPaneShell(
+          pane,
+          leaf.cwd,
+          () => panes.closePane(pane.id),
+          agent,
+          publishActivePane,
+          Boolean(saved)
         )
+      )
+      checkpoint()
+    }
+    const panes = new PaneManager(
+      element,
+      {
+        terminalOptions: currentTerminalOptions,
+        gpuAcceleration: () => useSettingsStore.getState().values['terminal.gpuAcceleration'],
+        onActivePaneChange: publishActivePane,
+        onPaneCreated: create,
+        onPaneClosed: (paneId) => {
+          shells.get(paneId)?.dispose()
+          shells.delete(paneId)
+          if (panes.getPanes().length === 0) closeTab(tab.id)
+          else checkpoint()
+        },
+        closePaneTitle: `Close Pane (${terminalShortcutLabel(useKeymapStore.getState().shell, 'close-pane')})`,
+        onLinkClick: (event, url) => {
+          // Ctrl/Cmd+click, as in VS Code, so selecting text across a link doesn't open it.
+          if (!event.ctrlKey && !event.metaKey) return
+          void window.desktop.openWebLink(url).catch((error: unknown) =>
+            notify({
+              severity: 'error',
+              title: 'Could not open terminal link',
+              body: mainErrorMessage(error)
+            })
+          )
+        }
       },
-      onPaneClosed: (paneId) => {
-        shells.get(paneId)?.dispose()
-        shells.delete(paneId)
-        if (panes.getPanes().length === 0) closeTab(tab.id)
-      },
-      closePaneTitle: `Close Pane (${terminalShortcutLabel(useKeymapStore.getState().shell, 'close-pane')})`,
-      onLinkClick: (event, url) => {
-        // Ctrl/Cmd+click, as in VS Code, so selecting text across a link doesn't open it.
-        if (!event.ctrlKey && !event.metaKey) return
-        void window.desktop.openWebLink(url).catch((error: unknown) =>
-          notify({
-            severity: 'error',
-            title: 'Could not open terminal link',
-            body: mainErrorMessage(error)
-          })
-        )
-      }
-    })
+      checkpoint
+    )
     manager.current = panes
-    panes.createInitialPane()
+    if (tab.saved) panes.restore(tab.saved.layout, tab.saved.activePane, create)
+    else panes.createInitialPane()
     const findTerminal = (id: string) =>
       panes.getPanes().find((item) => item.container.dataset.terminalId === id)
     terminalTabControllers.set(tab.id, {
@@ -134,7 +183,7 @@ export function TerminalTabBody({
       panes.destroy()
       manager.current = null
     }
-  }, [tab.id, tab.cwd, tab.agent])
+  }, [tab])
 
   useEffect(() => {
     manager.current?.setTerminalOptions({ fontFamily, fontSize, lineHeight })

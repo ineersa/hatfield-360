@@ -1,3 +1,5 @@
+import type { TerminalLayout } from '../../shared/terminal-workspace-api'
+import { parseTerminalLayout } from './terminal-layout'
 import { isPlainObject } from '../../shared/plain-object'
 import type { WorkspaceFolderKind } from '../../shared/workspace-api'
 
@@ -6,6 +8,7 @@ const WORKSPACE_DOCUMENT_VERSION = 1
 
 export type WorkspaceDocument = {
   version: typeof WORKSPACE_DOCUMENT_VERSION
+  terminals?: TerminalLayout
   folders: { path: string; kind: WorkspaceFolderKind }[]
 }
 
@@ -43,10 +46,12 @@ export function parseWorkspaceDocument(text: string): ParsedWorkspaceDocument {
     if (!read.has(folder.path))
       read.set(folder.path, folder.kind === 'folder' ? 'folder' : 'project')
   }
+  const terminals = parseTerminalLayout(data.terminals, false, true)
   return {
     status: 'ok',
     document: {
       version: WORKSPACE_DOCUMENT_VERSION,
+      ...(terminals ? { terminals } : {}),
       folders: [...read].map(([path, kind]) => ({ path, kind }))
     }
   }

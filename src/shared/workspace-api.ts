@@ -1,3 +1,4 @@
+import type { TerminalLayout } from './terminal-workspace-api'
 import type { Notice } from './notice'
 
 /** A project shows in the Projects panel and the file tree; a plain folder only in the file tree. */
@@ -33,6 +34,8 @@ export type WorkspaceView = {
   /** The open workspace file, or null for the default workspace. */
   file: string | null
   folders: WorkspaceFolder[]
+  terminalGeneration: number
+  terminals?: TerminalLayout
   /** Set when the workspace file can't be used (e.g. written by a newer app version); changes are refused. */
   problem: string | null
   /** Why the last workspace action started outside the window failed (File menu, reopening at launch). */
@@ -49,10 +52,12 @@ export const WORKSPACE_CHANNELS = {
   openFile: 'workspace:open-file',
   openRecent: 'workspace:open-recent',
   removeRecent: 'workspace:remove-recent',
-  changed: 'workspace:changed'
+  changed: 'workspace:changed',
+  checkpointTerminals: 'workspace:checkpoint-terminals'
 } as const
 
 export type WorkspaceApi = {
+  checkpointTerminals: (generation: number, layout: TerminalLayout) => Promise<void>
   getWorkspace: () => Promise<WorkspaceView>
   /** Opens the native folder picker in main and adds the chosen folder. */
   addWorkspaceFolder: () => Promise<void>

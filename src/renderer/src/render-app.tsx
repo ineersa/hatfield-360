@@ -1,3 +1,7 @@
+import { connectTerminalWorkspace } from './state/terminal-workspace'
+import { useWorkspaceStore } from './state/workspace-store'
+import { notify } from './state/notification-store'
+import { mainErrorMessage } from './lib/main-error-message'
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { receiveAgentNotification } from './state/agent-notifications'
@@ -16,7 +20,18 @@ if (!root) {
 const stopAgentNotifications = window.desktop.subscribeAgentNotifications(receiveAgentNotification)
 if (import.meta.hot) import.meta.hot.dispose(stopAgentNotifications)
 
-void loadBundledFonts().then(() =>
+connectTerminalWorkspace()
+const workspace = window.desktop
+  .getWorkspace()
+  .then(useWorkspaceStore.getState().apply)
+  .catch((error: unknown) => {
+    notify({
+      severity: 'error',
+      title: 'Could not restore workspace',
+      body: mainErrorMessage(error)
+    })
+  })
+void Promise.all([loadBundledFonts(), workspace]).then(() =>
   createRoot(root).render(
     <StrictMode>
       <App />

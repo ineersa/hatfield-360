@@ -3,7 +3,7 @@ type TerminalSpawnRequest = { cwd?: string; cols: number; rows: number }
 
 export type TerminalSession = { id: string; pid: number; shell: string }
 
-export type TerminalExit = { id: string; exitCode: number; signal: number | null }
+export type TerminalExit = { id: string; exitCode: number; signal: number | null; error?: string }
 
 /** Terminal menu items and shortcuts, run by the renderer against the focused terminal. */
 export const TERMINAL_COMMANDS = [

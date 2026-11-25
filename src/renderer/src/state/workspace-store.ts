@@ -1,3 +1,4 @@
+import { hydrateTerminals } from './terminal-workspace'
 import { create } from 'zustand'
 import { mainErrorMessage } from '@/lib/main-error-message'
 import { followNotice, notify } from '@/state/notification-store'
@@ -11,6 +12,7 @@ type WorkspaceState = {
   workspace: WorkspaceView | null
   /** Loads the workspace and follows changes made in main (File menu, other windows); returns the unsubscribe. */
   connect: () => () => void
+  apply: (workspace: WorkspaceView) => void
   addFolder: () => Promise<void>
   removeFolder: (path: string) => Promise<void>
   setFolderKind: (path: string, kind: WorkspaceFolderKind) => Promise<void>
@@ -32,11 +34,13 @@ async function run(action: () => Promise<void>): Promise<void> {
 
 export const useWorkspaceStore = create<WorkspaceState>((set) => {
   const apply = (workspace: WorkspaceView): void => {
+    hydrateTerminals(workspace)
     set({ workspace })
     showNotice(workspace.notice)
   }
   return {
     workspace: null,
+    apply,
     connect: () => {
       const unsubscribe = window.desktop.subscribeWorkspace(apply)
       void run(async () => apply(await window.desktop.getWorkspace()))

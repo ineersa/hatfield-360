@@ -1,3 +1,4 @@
+import type { SavedTerminalTab } from '../../../shared/terminal-workspace-api'
 import { AGENT_PROVIDERS, type AgentLaunch } from '../../../shared/agent-api'
 import { create } from 'zustand'
 import { useShellLayoutStore } from './shell-layout-store'
@@ -11,6 +12,8 @@ export type TerminalTab = {
   /** The folder new shells in this tab start in; null for the home folder. */
   cwd: string | null
   agent?: AgentLaunch
+  saved?: SavedTerminalTab
+  generation?: number
 }
 
 type TerminalState = {
@@ -26,8 +29,6 @@ type TerminalState = {
   cycleTab: (step: 1 | -1) => void
 }
 
-let nextTabNumber = 1
-
 function folderName(path: string): string {
   return path.split(/[\\/]/).findLast((part) => part.length > 0) ?? path
 }
@@ -41,7 +42,7 @@ export const useTerminalStore = create<TerminalState>((set, get) => ({
   openTerminal: (cwd, agent) => {
     const label = cwd ? folderName(cwd) : 'Terminal'
     const tab: TerminalTab = {
-      id: `terminal-tab-${nextTabNumber++}`,
+      id: crypto.randomUUID(),
       label,
       title: agent ? `${AGENT_PROVIDERS[agent.provider]} · ${label}` : label,
       cwd,

@@ -1,3 +1,4 @@
+import type { TerminalLayout } from '../../shared/terminal-workspace-api'
 import { readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import type { WorkspaceFolderKind } from '../../shared/workspace-api'
@@ -22,7 +23,7 @@ export function withWorkspaceExtension(file: string): string {
 export type WorkspaceEntry = { path: string; kind: WorkspaceFolderKind }
 
 export type ReadWorkspaceFile =
-  | { status: 'ok'; folders: WorkspaceEntry[] }
+  | { status: 'ok'; folders: WorkspaceEntry[]; terminals?: TerminalLayout }
   | { status: 'missing' }
   | { status: 'corrupt'; reason: string }
   | { status: 'newer'; version: number }
@@ -47,12 +48,21 @@ export async function readWorkspaceFile(file: string): Promise<ReadWorkspaceFile
     const absolute = fromStoredFolderPath(path, file)
     if (!folders.has(absolute)) folders.set(absolute, kind)
   }
-  return { status: 'ok', folders: [...folders].map(([path, kind]) => ({ path, kind })) }
+  return {
+    status: 'ok',
+    ...(parsed.document.terminals ? { terminals: parsed.document.terminals } : {}),
+    folders: [...folders].map(([path, kind]) => ({ path, kind }))
+  }
 }
 
-export function writeWorkspaceFile(file: string, folders: WorkspaceEntry[]): Promise<void> {
+export function writeWorkspaceFile(
+  file: string,
+  folders: WorkspaceEntry[],
+  terminals?: TerminalLayout
+): Promise<void> {
   const document = {
     ...EMPTY_WORKSPACE_DOCUMENT,
+    ...(terminals?.tabs.length ? { terminals } : {}),
     folders: folders.map(({ path, kind }) => ({ path: toStoredFolderPath(path, file), kind }))
   }
   return writeFileAtomic(file, serializeWorkspaceDocument(document))

@@ -1,3 +1,7 @@
+import type { PaneLayout } from '../../shared/terminal-workspace-api'
+import { agentSnapshot, resumeDirectory } from '../agent-status/agent-sessions'
+import { terminalSessions } from '../terminal/terminal-sessions'
+import { parseTerminalLayout } from '../workspace/terminal-layout'
 import { BrowserWindow } from 'electron'
 import { isPlainObject } from '../../shared/plain-object'
 import { type RecentTarget, WORKSPACE_CHANNELS } from '../../shared/workspace-api'
@@ -21,6 +25,43 @@ function parseRecentTarget(value: unknown): RecentTarget {
 }
 
 export function registerWorkspaceIpc(): void {
+  handleTrusted(WORKSPACE_CHANNELS.checkpointTerminals, (event, generation, value) => {
+    const layout = parseTerminalLayout(value, true)
+    if (!layout || typeof generation !== 'number' || !Number.isSafeInteger(generation))
+      throw new Error('Invalid terminal layout.')
+    const sessions = agentSnapshot(event.sender).sessions
+    const ended = new Set<string>()
+    const save = (node: PaneLayout): PaneLayout => {
+      if (node.kind === 'split')
+        return { ...node, first: save(node.first), second: save(node.second) }
+      const { terminalId, ...leaf } = node
+      const placement = terminalId ? terminalSessions.directory(event.sender, terminalId) : null
+      const session =
+        placement &&
+        sessions.findLast((item) => item.terminalId === terminalId && item.process === 'running')
+      if (terminalId && !placement) ended.add(leaf.id)
+      if (!session) {
+        if (terminalId && terminalSessions.manualPlacement(terminalId)) delete leaf.agent
+        return { ...leaf, cwd: placement?.cwd ?? leaf.cwd }
+      }
+      if (leaf.agent && session.providerSessionId === null) return leaf
+      const { provider, providerSessionId, title, project } = session
+      return {
+        ...leaf,
+        cwd: resumeDirectory(session),
+        agent: { provider, providerSessionId, title, project }
+      }
+    }
+    return workspaceStore.checkpointTerminals(
+      generation,
+      {
+        ...layout,
+        tabs: layout.tabs.map((tab) => ({ ...tab, layout: save(tab.layout) }))
+      },
+      ended
+    )
+  })
+
   handleTrusted(WORKSPACE_CHANNELS.get, () => workspaceStore.view())
 
   handleTrusted(WORKSPACE_CHANNELS.addFolder, (event) =>
