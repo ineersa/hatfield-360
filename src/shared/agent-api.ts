@@ -8,6 +8,13 @@ type AgentTarget =
   | { sourceTerminalId: string }
   | { restore: { generation: number; paneId: string } }
 export type AgentLaunch = { provider: AgentProvider; target: AgentTarget }
+export type AgentSchedule = {
+  /** Plain text, such as "Every 5 minutes" or a cron expression. */
+  label: string
+  recurring: boolean
+  /** Epoch milliseconds, or null when the provider can't predict it. */
+  nextRunAt: number | null
+}
 export type AgentSession = {
   id: string
   terminalId: string
@@ -24,6 +31,10 @@ export type AgentSession = {
   tool: string | null
   wait: 'permission' | 'question' | 'external-input' | null
   outcome: 'completed' | 'failed' | 'cancelled' | 'unknown' | null
+  /** Null when the provider doesn't report schedules. */
+  schedules: AgentSchedule[] | null
+  /** What started the latest reported turn. */
+  trigger: 'user' | 'schedule' | null
   updatedAt: number
 }
 export type AgentSnapshot = {

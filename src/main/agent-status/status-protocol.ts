@@ -1,3 +1,5 @@
+import type { AgentSchedule } from '../../shared/agent-api'
+
 type Validator = (value: unknown) => boolean
 
 type Validated<T> = {
@@ -31,17 +33,41 @@ const nullable =
 const count = (value: unknown): value is number =>
   typeof value === 'number' && Number.isInteger(value) && value >= 0 && value <= 1024
 const provider = oneOf('hatfield', 'claude')
+const turnStatus = oneOf('working', 'completed', 'failed', 'cancelled', 'unknown')
+const trigger = oneOf('user', 'schedule')
+type Turn = {
+  id: string
+  status: 'working' | 'completed' | 'failed' | 'cancelled' | 'unknown'
+  trigger?: 'user' | 'schedule'
+}
+const turn = (value: unknown): value is Turn =>
+  record(value) &&
+  (Object.hasOwn(value, 'trigger')
+    ? shape({ id, status: turnStatus, trigger })(value)
+    : shape({ id, status: turnStatus })(value))
+const epochMs = (value: unknown): value is number =>
+  typeof value === 'number' && Number.isSafeInteger(value) && value >= 0
+type Schedule = AgentSchedule & { id: string }
+const schedule = shape({
+  id,
+  label: text(64),
+  recurring: (value: unknown): value is boolean => typeof value === 'boolean',
+  nextRunAt: nullable(epochMs)
+})
+const schedules = (value: unknown): value is Schedule[] =>
+  Array.isArray(value) &&
+  value.length <= 16 &&
+  value.every((entry) => schedule(entry)) &&
+  new Set(value.map((entry: Schedule) => entry.id)).size === value.length
 const snapshotFields = {
   provider,
-  turn: nullable(
-    shape({ id, status: oneOf('working', 'completed', 'failed', 'cancelled', 'unknown') })
-  ),
+  turn: nullable(turn),
   attention: nullable(shape({ id, reason: oneOf('permission', 'question', 'external-input') })),
   activeSubagents: nullable(count),
   backgroundScripts: nullable(count),
   tool: nullable(text(128))
 }
-export type SessionTelemetry = Validated<typeof snapshotFields>
+export type SessionTelemetry = Validated<typeof snapshotFields> & { schedules: Schedule[] | null }
 const events = {
   'session.snapshot': snapshotFields,
   'session.ended': {},
@@ -59,7 +85,9 @@ type Kind = keyof typeof events
 type Envelope = Validated<typeof envelope> & { version: 1; at?: string }
 type Request = {
   [K in Kind]: Envelope & { kind: K } & Validated<(typeof events)[K]> &
-    (K extends 'session.snapshot' ? { title?: string | null } : unknown)
+    (K extends 'session.snapshot'
+      ? { title?: string | null; schedules?: Schedule[] | null }
+      : unknown)
 }[Kind]
 export type StatusEvent = { [K in Kind]: Omit<Extract<Request, { kind: K }>, 'token'> }[Kind]
 const bootstrapToken = (value: unknown): value is string =>
@@ -121,7 +149,9 @@ function validRequest(value: Record<string, unknown>): value is Request {
   const required: Record<string, Validator> = { ...envelope, ...events[value.kind] }
   const optional: Record<string, Validator> = {
     at: text(64),
-    ...(value.kind === 'session.snapshot' ? { title: nullable(text(1024)) } : {})
+    ...(value.kind === 'session.snapshot'
+      ? { title: nullable(text(1024)), schedules: nullable(schedules) }
+      : {})
   }
   if (
     !Object.entries(required).every(

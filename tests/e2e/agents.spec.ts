@@ -676,9 +676,11 @@ function expectPublicSnapshot(snapshot: AgentSnapshot): void {
       'providerSessionId',
       'runningChildren',
       'runningScripts',
+      'schedules',
       'terminalId',
       'title',
       'tool',
+      'trigger',
       'updatedAt',
       'wait',
       'worktree'
@@ -786,6 +788,72 @@ test('agent notifications follow accepted transitions and open only the owning t
           0
         )
         await expect(panel.getByRole('listitem', { name: 'Agent turn failed' })).toHaveCount(1)
+      },
+      { userDataDir }
+    )
+  } finally {
+    await cleanup()
+  }
+})
+
+test('scheduled runs show on the row and finish without a completion notice', async () => {
+  test.skip(process.platform === 'win32', 'The agent reporting transport is Unix only')
+  const { userDataDir, cleanup } = await seed()
+  try {
+    await withApp(
+      async (_app, page) => {
+        await launch(page, 'Hatfield')
+        const pane = page.getByRole('tabpanel', { name: 'Hatfield' }).getByTestId('terminal-pane')
+        await startFocusedScenario(page, pane)
+        await page.getByRole('button', { name: 'Notifications', exact: true }).click()
+        const panel = page.getByRole('complementary', { name: 'Notifications panel' })
+        const completed = panel.getByRole('listitem', { name: 'Agent turn completed' })
+        const needsInput = panel.getByRole('listitem', { name: 'Agent needs input' })
+        const row = page.getByRole('button', { name: /^Hatfield (?:#|·)/ })
+        const schedules = row.getByRole('img', { name: 'Schedules' })
+
+        await command(page, pane, 'schedule')
+        await expect(row).toHaveAccessibleName(/ · Working$/)
+        await expect(schedules).toBeVisible()
+        await command(page, pane, 'completed')
+        await expect(completed).toHaveCount(1)
+        await expect(row).toHaveAccessibleName(/ · Scheduled · next .*\d\d:\d\d/)
+        await expect(row).toHaveAttribute(
+          'aria-description',
+          /Scheduled · Last foreground response: completed · Schedule: Every 5 minutes, repeats, next /
+        )
+        await expect(schedules).toHaveCount(0)
+
+        await command(page, pane, 'scheduled-run')
+        await expect(row).toHaveAccessibleName(/ · Working$/)
+        await expect(schedules).toBeVisible()
+        await command(page, pane, 'completed')
+        await expect(row).toHaveAttribute('aria-description', /Last scheduled run: completed/)
+        // Notices arrive in order, so the next one proves the scheduled completion stayed silent.
+        await command(page, pane, 'scheduled-run')
+        await command(page, pane, 'wait')
+        await expect(needsInput).toHaveCount(1)
+        await expect(completed).toHaveCount(1)
+
+        await command(page, pane, 'resolve')
+        await command(page, pane, 'failed')
+        await expect(panel.getByRole('listitem', { name: 'Agent turn failed' })).toHaveCount(1)
+        await expect(row).toHaveAccessibleName(/ · Scheduled · next /)
+        await expect(row).toHaveAttribute('aria-description', /Last scheduled run: failed/)
+        await page.getByRole('button', { name: 'Idle', exact: true }).click()
+        await expect(row).toBeVisible()
+        await page.getByRole('button', { name: 'Idle', exact: true }).click()
+
+        await command(page, pane, 'schedule-another')
+        await expect(schedules).toBeVisible()
+        await expect(row.getByText('2', { exact: true })).toBeVisible()
+        await expect(row).toHaveAttribute(
+          'aria-description',
+          /Schedule: 0 2 \* \* \*, repeats, next run unknown/
+        )
+        await command(page, pane, 'unschedule')
+        await expect(row).toHaveAccessibleName(/ · Stopped$/)
+        await expect(schedules).toHaveCount(0)
       },
       { userDataDir }
     )

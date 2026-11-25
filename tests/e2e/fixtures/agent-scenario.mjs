@@ -181,6 +181,28 @@ for await (const command of input) {
         snapshot.tool = null
         reply = await report()
         break
+      case 'schedule':
+        snapshot.schedules = [
+          { id: 'loop', label: 'Every 5 minutes', recurring: true, nextRunAt: Date.now() + 300_000 }
+        ]
+        reply = await report()
+        break
+      case 'schedule-another':
+        snapshot.schedules = [
+          ...(snapshot.schedules ?? []),
+          { id: 'nightly', label: '0 2 * * *', recurring: true, nextRunAt: null }
+        ]
+        reply = await report()
+        break
+      case 'unschedule':
+        snapshot.schedules = []
+        reply = await report()
+        break
+      case 'scheduled-run':
+        snapshot.turn = { id: `turn-${sequence + 1}`, status: 'working', trigger: 'schedule' }
+        snapshot.attention = null
+        reply = await report()
+        break
       case 'message':
         reply = await emit('notification', {
           title: 'Review available',
@@ -198,7 +220,7 @@ for await (const command of input) {
         break
       default:
         print(
-          'Commands: start, again, tool, wait, resolve, child, child-working, children-unknown, child-done, completed, failed, cancelled, message, duplicate, stale, report-failure-on-hangup, quit'
+          'Commands: start, again, schedule, schedule-another, unschedule, scheduled-run, tool, wait, resolve, child, child-working, children-unknown, child-done, completed, failed, cancelled, message, duplicate, stale, report-failure-on-hangup, quit'
         )
     }
     if (reply) print(`ACK ${command}: ${reply}`)

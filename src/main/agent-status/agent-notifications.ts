@@ -43,6 +43,7 @@ export class AgentNotificationPolicy {
       messages.push({ kind: 'failed' })
     if (
       turn?.status === 'completed' &&
+      turn.trigger !== 'schedule' &&
       activeSubagents === 0 &&
       !attention &&
       this.#first(`completed:${turn.id}`)
