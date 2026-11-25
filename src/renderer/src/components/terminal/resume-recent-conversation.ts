@@ -16,14 +16,7 @@ export function resumeRecentConversation(
   for (const session of sessions) {
     if (session.process !== 'running' || !session.providerSessionId) continue
     reported.add(session.terminalId)
-    if (
-      conversationKey({
-        ...session,
-        cwd: session.resumeCwd === undefined ? session.cwd : session.resumeCwd
-      }) === key &&
-      selectTerminal(session.terminalId)
-    )
-      return
+    if (conversationKey(session) === key && selectTerminal(session.terminalId)) return
   }
   const store = useTerminalStore.getState()
   for (const tab of store.tabs) {

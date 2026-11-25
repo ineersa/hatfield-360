@@ -100,6 +100,14 @@ if (marker === 'resume-proof') {
   snapshot.attention = { id: 'resume-input', reason: 'external-input' }
   await report()
 }
+if (marker === 'catalog-resume') {
+  const [flag, requested, ...extra] = process.argv.slice(5)
+  if (flag !== '--resume' || !/^[a-f0-9-]{36}$/.test(requested ?? '') || extra.length)
+    throw new Error('Expected exactly --resume followed by one Claude session ID')
+  sessionId = requested === initialSessionId ? 'ffffffff-ffff-4fff-8fff-ffffffffffff' : requested
+  snapshot.title = `Catalog resume ${requested.slice(-3)}`
+  await report()
+}
 const input = createInterface({ input: process.stdin, terminal: false })
 for await (const command of input) {
   try {

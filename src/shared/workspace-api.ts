@@ -1,4 +1,3 @@
-import type { RecentConversation } from './recent-conversation'
 import type { TerminalLayout } from './terminal-workspace-api'
 import type { Notice } from './notice'
 
@@ -37,7 +36,6 @@ export type WorkspaceView = {
   folders: WorkspaceFolder[]
   terminalGeneration: number
   terminals?: TerminalLayout
-  recentConversations?: RecentConversation[]
   /** Set when the workspace file can't be used (e.g. written by a newer app version); changes are refused. */
   problem: string | null
   /** Why the last workspace action started outside the window failed (File menu, reopening at launch). */
@@ -55,12 +53,10 @@ export const WORKSPACE_CHANNELS = {
   openRecent: 'workspace:open-recent',
   removeRecent: 'workspace:remove-recent',
   changed: 'workspace:changed',
-  removeConversation: 'workspace:remove-conversation',
   checkpointTerminals: 'workspace:checkpoint-terminals'
 } as const
 
 export type WorkspaceApi = {
-  removeRecentConversation: (generation: number, key: string) => Promise<void>
   checkpointTerminals: (generation: number, layout: TerminalLayout) => Promise<void>
   getWorkspace: () => Promise<WorkspaceView>
   /** Opens the native folder picker in main and adds the chosen folder. */

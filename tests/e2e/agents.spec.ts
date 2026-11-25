@@ -674,7 +674,6 @@ function expectPublicSnapshot(snapshot: AgentSnapshot): void {
       'project',
       'provider',
       'providerSessionId',
-      'resumeCwd',
       'runningChildren',
       'runningScripts',
       'terminalId',

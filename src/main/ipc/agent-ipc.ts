@@ -1,3 +1,5 @@
+import { conversationKey } from '../../shared/recent-conversation'
+import { listClaudeCatalog } from '../workspace/claude-catalog'
 import { basename } from 'node:path'
 import { BrowserWindow } from 'electron'
 import { AGENT_CHANNELS, type AgentNotification } from '../../shared/agent-api'
@@ -11,6 +13,20 @@ import { workspaceStore } from '../workspace/workspace-store'
 import { existingDirectory } from './terminal-ipc'
 import { handleTrusted } from './trusted-ipc'
 
+async function recentCatalog(generation: unknown, sessionId?: string) {
+  const workspace = await workspaceStore.view()
+  if (generation !== workspace.terminalGeneration) throw new Error('The workspace has changed.')
+  const sessions = await listClaudeCatalog(
+    workspace.folders,
+    worktreeStore.view(),
+    Date.now(),
+    sessionId
+  )
+  if (generation !== (await workspaceStore.view()).terminalGeneration)
+    throw new Error('The workspace has changed.')
+  return sessions
+}
+
 export function registerAgentIpc(): void {
   const launch = trackAgentSessions(
     (owner) => owner.send(AGENT_CHANNELS.changed, agentSnapshot(owner)),
@@ -23,6 +39,7 @@ export function registerAgentIpc(): void {
     }
   )
   handleTrusted(AGENT_CHANNELS.get, (event) => agentSnapshot(event.sender))
+  handleTrusted(AGENT_CHANNELS.recent, (_event, generation) => recentCatalog(generation))
   handleTrusted(AGENT_CHANNELS.launch, async (event, value) => {
     if (
       !isPlainObject(value) ||
@@ -51,9 +68,13 @@ export function registerAgentIpc(): void {
         if (pane?.agent) saved = { cwd: pane.cwd, agent: pane.agent }
       } else if (isPlainObject(target.recent)) {
         const { generation, key } = target.recent
-        if (typeof generation !== 'number' || typeof key !== 'string' || key.length > 26000)
+        if (typeof generation !== 'number' || typeof key !== 'string' || key.length > 100)
           throw new Error('Invalid Recent conversation.')
-        const entry = await workspaceStore.recentConversation(generation, key)
+        const id = /^\["claude","([\da-f-]{36})",null\]$/u.exec(key)?.[1]
+        if (!id || provider !== 'claude') throw new Error('Invalid Recent conversation.')
+        const entry = (await recentCatalog(generation, id)).find(
+          (session) => conversationKey(session) === key
+        )
         if (entry) saved = { cwd: entry.cwd, agent: entry }
       }
       const id = saved?.agent.providerSessionId
@@ -83,6 +104,12 @@ export function registerAgentIpc(): void {
         throw new Error(
           'Remove conversation, prompt or folder overrides from the agent profile in Settings.'
         )
+      const directory = await existingDirectory(saved.cwd)
+      if (
+        isPlainObject(target.recent) &&
+        target.recent.generation !== (await workspaceStore.view()).terminalGeneration
+      )
+        throw new Error('The workspace has changed.')
       return launch(
         event.sender,
         provider,
@@ -94,7 +121,7 @@ export function registerAgentIpc(): void {
           ]
         },
         saved.agent.project,
-        { ...size, cwd: await existingDirectory(saved.cwd) },
+        { ...size, cwd: directory },
         id
       )
     }

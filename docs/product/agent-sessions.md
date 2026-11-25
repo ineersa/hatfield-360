@@ -29,13 +29,15 @@ When empty, the section stays visible with a compact "No requests" state.
 Stopped responses use the error colour; process exits remove the row instead.
 Clicking a live session also selects its actual tab/pane.
 
-Below each project's live sessions, a folded **Recent N** group lists closed
-app-tracked conversations from the last 14 days, newest first. Rows show the
-provider, reported title, differing branch and relative close time. Five rows
-are shown initially; **Show N more** adds pages of 20. Resume opens a new tab,
-Resume in Split uses the active tab, and an already open conversation selects
-its existing pane. Remove from Recent deletes only desktop history, never the
-provider's conversation. History survives restart but does not auto-launch.
+Below each project's live sessions, a folded **Recent N** group lists existing
+Claude Code sessions from the provider's local catalog, scoped to workspace
+projects and known worktrees. Rows show the provider title, differing branch
+and time since last activity. The last 14 days are shown newest first, with
+five rows initially and pages of 20. Resume opens a new tab, Resume in Split
+uses the active tab, and an already open session selects its existing pane.
+Copy session ID is read-only, as is the catalog: there is no desktop history
+tracking or deletion. Existing sessions appear on first load and never
+auto-launch. Hatfield history awaits [agent-core #730](https://github.com/ineersa/agent-core/issues/730).
 The approved prototype is retained in `docs/design/issue-37-prototype/`.
 
 Search is a project-scoped Librarian popup above the mounted terminal workspace,

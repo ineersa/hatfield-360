@@ -8,7 +8,7 @@ export type RecentConversation = Pick<AgentSession, 'provider' | 'project' | 'ti
   providerSessionId: string
   cwd: string | null
   branch: string | null
-  closedAt: number
+  lastModified: number
 }
 
 export function conversationKey({ provider, providerSessionId, cwd }: Identity): string | null {

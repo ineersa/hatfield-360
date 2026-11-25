@@ -1,3 +1,4 @@
+import { useRecentSessionStore } from '@/state/recent-session-store'
 import { RecentSessions } from './RecentSessions'
 import {
   RECENT_CONVERSATION_MS,
@@ -289,13 +290,37 @@ export function WorkspacePanel(): React.JSX.Element {
   const folders = allFolders.filter((folder) => folder.kind === 'project')
   const { sessions, error } = useAgentSessions()
   const [now, setNow] = useState(Date.now)
-  useEffect(() => {
-    const timer = setInterval(() => setNow(Date.now()), 60_000)
-    return () => clearInterval(timer)
-  }, [])
   const generation = workspace?.terminalGeneration ?? 0
-  const recent = (workspace?.recentConversations ?? []).filter(
-    (entry) => entry.closedAt > now - RECENT_CONVERSATION_MS
+  const catalog = useRecentSessionStore((state) => state.catalog)
+  const load = useRecentSessionStore((state) => state.load)
+  const projects = useWorktreeStore((state) => state.projects)
+  const catalogScope = JSON.stringify(
+    allFolders
+      .filter((folder) => folder.kind === 'project')
+      .map(({ path, missing }) => [
+        path,
+        missing,
+        projects[path]?.status === 'git'
+          ? projects[path].worktrees.map(({ path: treePath, prunable }) => [treePath, prunable])
+          : []
+      ])
+  )
+  useEffect(() => {
+    if (catalogScope === '[]') return undefined
+    let cancel = load(generation)
+    const timer = setInterval(() => {
+      setNow(Date.now())
+      cancel()
+      cancel = load(generation)
+    }, 60_000)
+    return () => {
+      clearInterval(timer)
+      cancel()
+    }
+  }, [generation, catalogScope, load])
+  const currentCatalog = catalog?.generation === generation && folders.length > 0 ? catalog : null
+  const recent = (currentCatalog?.sessions ?? []).filter(
+    (entry) => entry.lastModified > now - RECENT_CONVERSATION_MS
   )
   const otherRecent = recent.filter(
     (entry) => !folders.some((folder) => !folder.missing && folder.path === entry.project)
@@ -338,6 +363,17 @@ export function WorkspacePanel(): React.JSX.Element {
         </p>
       ) : null}
       {problem ? <WorkspaceProblemBanner problem={problem} /> : null}
+      {folders.length > 0 &&
+      (!currentCatalog || (currentCatalog.loading && currentCatalog.sessions.length === 0)) ? (
+        <p role="status" className="type-hint px-4 text-muted-foreground">
+          Loading Claude sessions…
+        </p>
+      ) : null}
+      {currentCatalog?.error ? (
+        <p role="status" className="type-hint px-4 text-error">
+          Could not load Claude sessions: {currentCatalog.error}
+        </p>
+      ) : null}
       <AgentAttention sessions={sessions} folders={folders} />
       {workspace &&
       folders.length === 0 &&

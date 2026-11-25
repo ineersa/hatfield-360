@@ -1,6 +1,5 @@
 import type { PaneLayout } from '../../shared/terminal-workspace-api'
 import { agentSnapshot, resumeDirectory } from '../agent-status/agent-sessions'
-import { worktreeStore } from '../git/worktree-store'
 import { terminalSessions } from '../terminal/terminal-sessions'
 import { parseTerminalLayout } from '../workspace/terminal-layout'
 import { BrowserWindow } from 'electron'
@@ -31,7 +30,6 @@ export function registerWorkspaceIpc(): void {
     if (!layout || typeof generation !== 'number' || !Number.isSafeInteger(generation))
       throw new Error('Invalid terminal layout.')
     const sessions = agentSnapshot(event.sender).sessions
-    const projects = worktreeStore.view()
     const ended = new Set<string>()
     const save = (node: PaneLayout): PaneLayout => {
       if (node.kind === 'split')
@@ -48,16 +46,10 @@ export function registerWorkspaceIpc(): void {
       }
       if (leaf.agent && session.providerSessionId === null) return leaf
       const { provider, providerSessionId, title, project } = session
-      const cwd = resumeDirectory(session)
-      const git = projects.find((entry) => entry.folder === project)
-      const branch =
-        git?.status === 'git'
-          ? (git.worktrees.find((tree) => tree.path === (session.worktree ?? cwd))?.branch ?? null)
-          : null
       return {
         ...leaf,
-        cwd,
-        agent: { provider, providerSessionId, title, project, branch }
+        cwd: resumeDirectory(session),
+        agent: { provider, providerSessionId, title, project }
       }
     }
     return workspaceStore.checkpointTerminals(
@@ -68,17 +60,6 @@ export function registerWorkspaceIpc(): void {
       },
       ended
     )
-  })
-
-  handleTrusted(WORKSPACE_CHANNELS.removeConversation, (_event, generation, key) => {
-    if (
-      typeof generation !== 'number' ||
-      !Number.isSafeInteger(generation) ||
-      typeof key !== 'string' ||
-      key.length > 26000
-    )
-      throw new Error('Invalid Recent conversation.')
-    return workspaceStore.removeConversation(generation, key)
   })
 
   handleTrusted(WORKSPACE_CHANNELS.get, () => workspaceStore.view())

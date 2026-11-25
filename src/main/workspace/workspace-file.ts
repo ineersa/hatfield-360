@@ -1,4 +1,3 @@
-import type { RecentConversation } from '../../shared/recent-conversation'
 import type { TerminalLayout } from '../../shared/terminal-workspace-api'
 import { readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
@@ -24,12 +23,7 @@ export function withWorkspaceExtension(file: string): string {
 export type WorkspaceEntry = { path: string; kind: WorkspaceFolderKind }
 
 export type ReadWorkspaceFile =
-  | {
-      status: 'ok'
-      folders: WorkspaceEntry[]
-      terminals?: TerminalLayout
-      recentConversations?: RecentConversation[]
-    }
+  | { status: 'ok'; folders: WorkspaceEntry[]; terminals?: TerminalLayout }
   | { status: 'missing' }
   | { status: 'corrupt'; reason: string }
   | { status: 'newer'; version: number }
@@ -56,9 +50,6 @@ export async function readWorkspaceFile(file: string): Promise<ReadWorkspaceFile
   }
   return {
     status: 'ok',
-    ...(parsed.document.recentConversations
-      ? { recentConversations: parsed.document.recentConversations }
-      : {}),
     ...(parsed.document.terminals ? { terminals: parsed.document.terminals } : {}),
     folders: [...folders].map(([path, kind]) => ({ path, kind }))
   }
@@ -67,12 +58,10 @@ export async function readWorkspaceFile(file: string): Promise<ReadWorkspaceFile
 export function writeWorkspaceFile(
   file: string,
   folders: WorkspaceEntry[],
-  terminals?: TerminalLayout,
-  recentConversations?: RecentConversation[]
+  terminals?: TerminalLayout
 ): Promise<void> {
   const document = {
     ...EMPTY_WORKSPACE_DOCUMENT,
-    ...(recentConversations?.length ? { recentConversations } : {}),
     ...(terminals?.tabs.length ? { terminals } : {}),
     folders: folders.map(({ path, kind }) => ({ path: toStoredFolderPath(path, file), kind }))
   }

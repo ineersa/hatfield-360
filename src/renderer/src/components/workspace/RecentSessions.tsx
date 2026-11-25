@@ -1,11 +1,10 @@
-import { ChevronRight, Columns2, Copy, GitBranch, Play, Search, Trash2 } from 'lucide-react'
+import { ChevronRight, Columns2, Copy, GitBranch, Play, Search } from 'lucide-react'
 import { useId, useState } from 'react'
 import { AgentProviderIcon } from '@/components/icons/AgentProviderIcon'
 import {
   ContextMenu,
   ContextMenuContent,
   ContextMenuItem,
-  ContextMenuSeparator,
   ContextMenuTrigger
 } from '@/components/ui/context-menu'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
@@ -24,8 +23,8 @@ import { mainErrorMessage } from '@/lib/main-error-message'
 const DAY = 24 * 60 * 60 * 1000
 const RECENT_PAGE = 20
 
-function closedAgo(closedAt: number, now: number): string {
-  const elapsed = now - closedAt
+function activityAgo(lastModified: number, now: number): string {
+  const elapsed = now - lastModified
   if (elapsed < DAY / 24) return `${Math.max(1, Math.round(elapsed / 60000))}m`
   if (elapsed < DAY) return `${Math.round(elapsed / (DAY / 24))}h`
   if (elapsed < 2 * DAY) return 'yesterday'
@@ -59,10 +58,6 @@ function RecentRow({
   const { title, displayName, providerIdentity: identity } = agentSessionIdentity(session)
   const name = title ?? displayName
   const resume = () => resumeRecentConversation(session, generation, false, live)
-  const remove = () => {
-    const key = conversationKey(session)
-    if (key) void window.desktop.removeRecentConversation(generation, key).catch(reportError)
-  }
   return (
     <li>
       <ContextMenu>
@@ -89,7 +84,7 @@ function RecentRow({
                   </span>
                 ) : null}
                 <span className="type-hint shrink-0 tabular-nums group-hover:hidden">
-                  {closedAgo(session.closedAt, now)}
+                  {activityAgo(session.lastModified, now)}
                 </span>
                 <Play className="hidden size-3.5 shrink-0 group-hover:block" aria-hidden />
               </button>
@@ -97,8 +92,8 @@ function RecentRow({
           </ContextMenuTrigger>
           <TooltipContent className="max-w-72 break-words">
             {session.title ? `${session.title} · ` : ''}
-            {identity} · closed {closedAgo(session.closedAt, now)}
-            {closedAgo(session.closedAt, now).endsWith('y') ? '' : ' ago'}
+            {identity} · last active {activityAgo(session.lastModified, now)}
+            {activityAgo(session.lastModified, now).endsWith('y') ? '' : ' ago'}
           </TooltipContent>
         </Tooltip>
         <ContextMenuContent>
@@ -121,11 +116,6 @@ function RecentRow({
           >
             <Copy aria-hidden />
             Copy session ID
-          </ContextMenuItem>
-          <ContextMenuSeparator />
-          <ContextMenuItem onSelect={remove}>
-            <Trash2 aria-hidden />
-            Remove from Recent
           </ContextMenuItem>
         </ContextMenuContent>
       </ContextMenu>
@@ -151,7 +141,7 @@ export function RecentSessions({
   const [expanded, setExpanded] = useState(false)
   const listId = useId()
   const [shown, setShown] = useState(5)
-  const recent = sessions.filter((session) => session.closedAt > now - RECENT_CONVERSATION_MS)
+  const recent = sessions.filter((session) => session.lastModified > now - RECENT_CONVERSATION_MS)
   if (recent.length === 0) return null
   const visible = recent.slice(0, shown)
   const remaining = recent.length - visible.length

@@ -44,7 +44,9 @@ export function agentSnapshot(owner: WebContents): AgentSnapshot {
 }
 
 export function resumeDirectory(session: AgentSession): string | null {
-  return session.resumeCwd === undefined ? session.cwd : session.resumeCwd
+  const record = records.get(session.id)
+  if (!record) return null
+  return record.manual ? record.observedCwd : session.cwd
 }
 
 function recordSession(owner: WebContents, session: AgentSession, observedCwd?: string | null) {
@@ -187,7 +189,6 @@ export function trackAgentSessions(
         policy: new AgentNotificationPolicy(),
         manual: true
       })
-      session.resumeCwd = change.cwd
       recordSession(owner, session, change.cwd)
       changed(owner)
       if (change.cwd !== null) void refreshPlacements()
@@ -294,14 +295,12 @@ export function trackAgentSessions(
         'Windows agent profiles require a native .exe. In Settings, choose node.exe with the script path in its arguments instead of a command or PowerShell shim.'
       )
     }
-    const resumeCwd = await realpath(request.cwd).catch(() => null)
     const terminalId = randomUUID()
     const endpoint = await agentStatusServer.start().catch(() => undefined)
     const credential = endpoint
       ? agentStatusServer.registerLaunch({ terminalId, cwd: request.cwd })
       : undefined
     const session = newSession(terminalId, provider, request.cwd, project)
-    session.resumeCwd = resumeCwd
     const policy = new AgentNotificationPolicy()
     const tracked: TrackedLaunch = {
       owner,

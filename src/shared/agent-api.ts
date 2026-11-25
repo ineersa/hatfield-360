@@ -1,3 +1,4 @@
+import type { RecentConversation } from './recent-conversation'
 import type { TerminalSession } from './terminal-api'
 
 export const AGENT_PROVIDERS = { hatfield: 'Hatfield', claude: 'Claude' } as const
@@ -18,7 +19,6 @@ export type AgentSession = {
   project: string | null
   worktree: string | null
   cwd: string
-  resumeCwd?: string | null
   process: 'running' | 'exited' | 'unknown'
   activity: 'working' | 'idle' | 'unknown'
   runningChildren: number | null
@@ -44,12 +44,14 @@ export type AgentNotification = {
 }
 export const AGENT_CHANNELS = {
   launch: 'agent:launch',
+  recent: 'agent:recent',
   get: 'agent:get',
   changed: 'agent:changed',
   notification: 'agent:notification'
 } as const
 export type AgentApi = {
   launchAgent: (request: AgentLaunch & { cols: number; rows: number }) => Promise<TerminalSession>
+  getRecentConversations: (generation: number) => Promise<RecentConversation[]>
   getAgentSessions: () => Promise<AgentSnapshot>
   subscribeAgentNotifications: (callback: (notice: AgentNotification) => void) => () => void
   subscribeAgentSessions: (callback: (snapshot: AgentSnapshot) => void) => () => void

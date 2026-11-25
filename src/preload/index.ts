@@ -16,6 +16,7 @@ import { type ProjectWorktrees, WORKTREE_CHANNELS } from '../shared/worktree-api
 
 const desktopApi: DesktopApi = {
   launchAgent: (request) => ipcRenderer.invoke(AGENT_CHANNELS.launch, request),
+  getRecentConversations: (generation) => ipcRenderer.invoke(AGENT_CHANNELS.recent, generation),
   getAgentSessions: () => ipcRenderer.invoke(AGENT_CHANNELS.get),
   subscribeAgentNotifications: (callback) => {
     const listener = (_event: unknown, notice: AgentNotification): void => callback(notice)
@@ -28,8 +29,6 @@ const desktopApi: DesktopApi = {
     return () => ipcRenderer.removeListener(AGENT_CHANNELS.changed, listener)
   },
   getAppInfo: () => ipcRenderer.invoke(IPC_CHANNELS.getAppInfo),
-  removeRecentConversation: (generation, key) =>
-    ipcRenderer.invoke(WORKSPACE_CHANNELS.removeConversation, generation, key),
   checkpointTerminals: (generation, layout) =>
     ipcRenderer.invoke(WORKSPACE_CHANNELS.checkpointTerminals, generation, layout),
   getWorkspace: () => ipcRenderer.invoke(WORKSPACE_CHANNELS.get),
