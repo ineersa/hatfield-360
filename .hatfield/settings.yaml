@@ -3,6 +3,7 @@ extensions:
         - Ineersa\HatfieldExt\ObservationalMemory\ObservationalMemoryExtension
         - Ineersa\HatfieldExt\TaskWorkflow\TaskWorkflowExtension
         - Ineersa\HatfieldExt\Hatfield360\Hatfield360Extension
+        - Ineersa\CodingAgent\Extension\Builtin\Scheduling\SchedulingExtension
     settings:
         task_workflow:
             repository: ineersa/hatfield-360
