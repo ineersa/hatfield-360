@@ -184,7 +184,7 @@ describe('parseSettings', () => {
       }`,
       DEFAULT_SETTINGS
     )
-    expect(bad.values['memory.librarianUrl']).toBe('')
+    expect(bad.values['memory.librarianUrl']).toBe('http://127.0.0.1:8093/_mcp')
     expect(bad.values['memory.librarianTokenVariable']).toBe('')
     expect(bad.values['memory.librarianTimeoutSeconds']).toBe(30)
     expect(bad.problems).toEqual([

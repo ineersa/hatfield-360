@@ -73,7 +73,8 @@ export const DEFAULT_SETTINGS: Settings = {
   'agents.claude': { executable: 'claude', args: [] },
   'chat.model': 'haiku',
   'chat.effort': 'medium',
-  'memory.librarianUrl': '',
+  // Librarian's standard local endpoint; empty turns memory search off.
+  'memory.librarianUrl': 'http://127.0.0.1:8093/_mcp',
   'memory.librarianTimeoutSeconds': 30,
   'memory.librarianTokenVariable': '',
   'notifications.agentSounds': true,

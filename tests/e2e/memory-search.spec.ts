@@ -41,7 +41,7 @@ async function closedPort(): Promise<number> {
 }
 
 test('Search Memory opens over a focused terminal, keeps its keys from the shell and explains a missing Librarian', async () => {
-  const { userDataDir, cleanup } = await seed({})
+  const { userDataDir, cleanup } = await seed({ 'memory.librarianUrl': '' })
   try {
     await withApp(
       async (_app, page) => {
