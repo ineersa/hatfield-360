@@ -1,4 +1,4 @@
-import { useRecentSessionStore } from '@/state/recent-session-store'
+import { recentCatalogScope, useRecentSessionStore } from '@/state/recent-session-store'
 import { RecentSessions } from './RecentSessions'
 import {
   RECENT_CONVERSATION_MS,
@@ -23,6 +23,7 @@ import {
   FolderX,
   GitBranch,
   Lock,
+  Search,
   Trash2
 } from 'lucide-react'
 import { RootFolderIcon } from '@/components/icons/RootFolderIcon'
@@ -35,7 +36,11 @@ import {
   usePointerTooltip
 } from '@/components/ui/tooltip'
 import { cn } from '@/lib/class-names'
-import { Fragment, useEffect, useId, useState } from 'react'
+import { appShortcutLabel } from '@/lib/keymap-match'
+import { useKeymapStore } from '@/state/keymap-store'
+import { useMemorySearchStore } from '@/state/memory-search-store'
+import { focusMemorySearch } from '@/components/memory/MemorySearchDialog'
+import { Fragment, useEffect, useId, useRef, useState } from 'react'
 import { OpenTerminalMenuContent } from '@/components/terminal/OpenTerminalMenuContent'
 import {
   OpenFolderEmptyState,
@@ -167,6 +172,7 @@ function ProjectContents({
         </li>
       )}
       <RecentSessions
+        project={folder.path}
         name={folder.name}
         projectBranch={
           project?.status === 'git'
@@ -204,6 +210,7 @@ function ProjectRow({
   const project = useWorktreeStore((state) => state.projects[folder.path])
   const collapsed = useWorktreeStore((state) => state.collapsed[folder.path] === true)
   const toggleCollapsed = useWorktreeStore((state) => state.toggleCollapsed)
+  const row = useRef<HTMLLIElement>(null)
   const checkout =
     project?.status === 'git' ? project.worktrees.find((worktree) => worktree.project) : undefined
   const foldable = !folder.missing && (hasChildRows(project) || hasSessions)
@@ -213,9 +220,10 @@ function ProjectRow({
         <ContextMenuTrigger asChild>
           <TooltipTrigger asChild onPointerMove={pathTip.track}>
             <li
+              ref={row}
               tabIndex={0}
               aria-label={folder.missing ? `${folder.name} (missing)` : folder.name}
-              className="flex h-project-row cursor-default items-center gap-1.5 rounded-component pr-2.5 pl-1 outline-none select-none hover:bg-row-hover focus-visible:bg-selection-inactive data-[state=open]:bg-selection-inactive"
+              className="group flex h-project-row cursor-default items-center gap-1.5 rounded-component pr-2.5 pl-1 outline-none select-none hover:bg-row-hover focus-visible:bg-selection-inactive data-[state=open]:bg-selection-inactive"
               onClick={() => {
                 if (foldable) toggleCollapsed(folder.path)
               }}
@@ -258,13 +266,42 @@ function ProjectRow({
               ) : null}
               {folder.missing ? (
                 <span className="type-hint ml-auto shrink-0 text-error">missing</span>
-              ) : null}
+              ) : (
+                <button
+                  type="button"
+                  aria-label={`Search memory in ${folder.name}`}
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    useMemorySearchStore.getState().open(folder.path)
+                  }}
+                  className="ml-auto flex size-5 shrink-0 items-center justify-center rounded-button text-muted-foreground opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 hover:text-foreground focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                >
+                  <Search className="size-4" aria-hidden />
+                </button>
+              )}
             </li>
           </TooltipTrigger>
         </ContextMenuTrigger>
         <TooltipContent {...pathTip.placement}>{folder.path}</TooltipContent>
       </Tooltip>
-      <OpenTerminalMenuContent cwd={folder.path} project={folder.path} disabled={folder.missing}>
+      <OpenTerminalMenuContent
+        cwd={folder.path}
+        project={folder.path}
+        disabled={folder.missing}
+        onCloseAutoFocus={(event) => {
+          // Search Memory's input keeps the keys; the row gets them back when it closes.
+          if (useMemorySearchStore.getState().project === null) return
+          event.preventDefault()
+          focusMemorySearch()
+        }}
+      >
+        <ContextMenuItem
+          disabled={folder.missing}
+          onSelect={() => useMemorySearchStore.getState().open(folder.path, row.current)}
+        >
+          <Search aria-hidden />
+          Search Memory…
+        </ContextMenuItem>
         <ContextMenuItem onSelect={() => void setFolderKind(folder.path, 'folder')}>
           <FolderMinus aria-hidden />
           Hide from Projects
@@ -285,6 +322,7 @@ const filterClass =
 export function WorkspacePanel(): React.JSX.Element {
   const workspace = useWorkspaceStore((state) => state.workspace)
   const addFolder = useWorkspaceStore((state) => state.addFolder)
+  const keymap = useKeymapStore((state) => state.shell)
 
   const allFolders = workspace?.folders ?? []
   const folders = allFolders.filter((folder) => folder.kind === 'project')
@@ -294,17 +332,7 @@ export function WorkspacePanel(): React.JSX.Element {
   const catalog = useRecentSessionStore((state) => state.catalog)
   const load = useRecentSessionStore((state) => state.load)
   const projects = useWorktreeStore((state) => state.projects)
-  const catalogScope = JSON.stringify(
-    allFolders
-      .filter((folder) => folder.kind === 'project')
-      .map(({ path, missing }) => [
-        path,
-        missing,
-        projects[path]?.status === 'git'
-          ? projects[path].worktrees.map(({ path: treePath, prunable }) => [treePath, prunable])
-          : []
-      ])
-  )
+  const catalogScope = recentCatalogScope(allFolders, projects)
   useEffect(() => {
     let stopped = false
     let timer: ReturnType<typeof setTimeout> | undefined
@@ -345,6 +373,24 @@ export function WorkspacePanel(): React.JSX.Element {
     <>
       <div className="flex h-panel-header shrink-0 items-center gap-1 pt-1 pr-2 pl-4">
         <h2 className="type-panel-title flex-1 truncate">Agents</h2>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              aria-label="Search Memory"
+              onClick={() => useMemorySearchStore.getState().open()}
+              className="flex size-icon-button items-center justify-center rounded-button text-muted-foreground hover:bg-hover hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+            >
+              <Search className="size-4.5" strokeWidth={1.75} aria-hidden />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">
+            Search Memory{' '}
+            <span className="ml-1 text-tooltip-muted-foreground">
+              {appShortcutLabel(keymap, 'search-memory')}
+            </span>
+          </TooltipContent>
+        </Tooltip>
         <Tooltip>
           <TooltipTrigger asChild>
             <button
@@ -456,6 +502,7 @@ export function WorkspacePanel(): React.JSX.Element {
                 {!scope && (
                   <RecentSessions
                     key={generation}
+                    project={null}
                     name="Other terminals"
                     projectBranch={null}
                     generation={generation}

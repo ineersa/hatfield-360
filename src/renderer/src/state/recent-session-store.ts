@@ -1,6 +1,26 @@
 import { create } from 'zustand'
 import type { RecentCatalog } from '../../../shared/recent-conversation'
+import type { WorkspaceView } from '../../../shared/workspace-api'
+import type { ProjectWorktrees } from '../../../shared/worktree-api'
 import { mainErrorMessage } from '@/lib/main-error-message'
+
+/** What the catalog covers: the workspace's projects and their worktrees. It reloads when this changes. */
+export function recentCatalogScope(
+  folders: WorkspaceView['folders'],
+  projects: Record<string, ProjectWorktrees>
+): string {
+  return JSON.stringify(
+    folders
+      .filter((folder) => folder.kind === 'project')
+      .map(({ path, missing }) => [
+        path,
+        missing,
+        projects[path]?.status === 'git'
+          ? projects[path].worktrees.map(({ path: treePath, prunable }) => [treePath, prunable])
+          : []
+      ])
+  )
+}
 
 type CatalogState = {
   catalog: (RecentCatalog & { key: string; loading: boolean }) | null

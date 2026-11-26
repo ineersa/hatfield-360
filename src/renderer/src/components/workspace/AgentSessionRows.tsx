@@ -134,6 +134,14 @@ export function matchesStatus(session: AgentSession, filter: SessionFilter): boo
   }
 }
 
+/** The status a session row shows, or null while activity isn't reported. */
+export function sessionState(session: AgentSession): keyof typeof statuses | null {
+  if (isStopped(session)) return 'stopped'
+  if (session.wait) return 'attention'
+  if (session.activity === 'unknown') return null
+  return session.activity === 'idle' && isScheduled(session) ? 'scheduled' : session.activity
+}
+
 function activeTerminalId(state: ReturnType<typeof useTerminalStore.getState>): string | null {
   return state.activeTabId ? (state.paneByTab[state.activeTabId] ?? null) : null
 }
@@ -170,15 +178,7 @@ export function AgentSessionRows({ sessions }: { sessions: AgentSession[] }): Re
         const { title, displayName, providerIdentity } = agentSessionIdentity(session)
         // The hatfield number is the row's handle, not its content, so it reads quieter than the title.
         const prefix = title && displayName !== title ? displayName.slice(0, -title.length) : null
-        const state = isStopped(session)
-          ? 'stopped'
-          : session.wait
-            ? 'attention'
-            : session.activity === 'unknown'
-              ? null
-              : session.activity === 'idle' && isScheduled(session)
-                ? 'scheduled'
-                : session.activity
+        const state = sessionState(session)
         const status = state ? statuses[state] : null
         const next = state === 'scheduled' ? nextRun(session) : null
         const label = next === null ? status?.label : `${status?.label} · next ${runTime(next)}`

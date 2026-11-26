@@ -208,6 +208,10 @@ export function TerminalTabBody({
         }
       },
       focus: () => panes.getActivePane()?.terminal.focus(),
+      activeCwd: () => {
+        const id = panes.getActivePane()?.container.dataset.layoutId
+        return (id === undefined ? undefined : leaves.get(id)?.cwd) ?? tab.cwd
+      },
       isShown: () => isShown.current
     })
     return () => {

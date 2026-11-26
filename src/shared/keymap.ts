@@ -497,7 +497,8 @@ export const APP_COMMANDS = [
   'go-to-file',
   'go-to-class',
   'go-to-symbol',
-  'new-chat'
+  'new-chat',
+  'search-memory'
 ] as const
 export type AppCommand = (typeof APP_COMMANDS)[number]
 
@@ -589,7 +590,14 @@ const APP_KEYMAP: Record<AppCommand, ShellAction> = {
     other: 'Ctrl+Alt+Shift+N'
   },
   // Taken from a focused terminal too, where Ctrl+\ would otherwise send SIGQUIT.
-  'new-chat': { id: 'hatfield.chat.new', label: 'New Chat', mac: 'Command+\\', other: 'Ctrl+\\' }
+  'new-chat': { id: 'hatfield.chat.new', label: 'New Chat', mac: 'Command+\\', other: 'Ctrl+\\' },
+  // Like a command palette; it opens from a focused terminal too, which never receives the key.
+  'search-memory': {
+    id: 'hatfield.memory.search',
+    label: 'Search Memory',
+    mac: 'Command+K',
+    other: 'Ctrl+K'
+  }
 }
 
 const pick = (keys: Keys, platform: string): string | null =>

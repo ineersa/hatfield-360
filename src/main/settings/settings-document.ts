@@ -12,6 +12,7 @@ import {
   DEFAULT_SETTINGS,
   FONT_SIZE_RANGE,
   ICON_THEMES,
+  LIBRARIAN_TIMEOUT_RANGE,
   LINE_HEIGHT_RANGE,
   type NumberRange,
   type SettingKey,
@@ -102,11 +103,53 @@ function agentOptionId(value: unknown): Checked<string> {
     : { problem: 'must be a model or effort id, such as "haiku" or "medium"' }
 }
 
+/** An absolute HTTP(S) endpoint without credentials, query or fragment, or empty for none. */
+function librarianUrl(value: unknown): Checked<string> {
+  if (typeof value !== 'string') return { problem: 'must be a URL or empty' }
+  const url = value.trim()
+  if (url === '') return { value: url }
+  const problem = {
+    problem: 'must be an absolute http(s) URL without credentials, query or fragment'
+  }
+  if (
+    url.length > 2048 ||
+    Array.from(url).some((character) => character <= ' ' || character === '\x7f') ||
+    !URL.canParse(url)
+  )
+    return problem
+  const parsed = new URL(url)
+  if (
+    (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') ||
+    parsed.username ||
+    parsed.password ||
+    parsed.search ||
+    parsed.hash ||
+    url.includes('?') ||
+    url.includes('#')
+  )
+    return problem
+  return { value: url }
+}
+
+function environmentVariable(value: unknown): Checked<string> {
+  return typeof value === 'string' && /^(?:[A-Za-z_]\w{0,127})?$/.test(value)
+    ? { value }
+    : { problem: 'must be an environment variable name, such as "LIBRARIAN_TOKEN", or empty' }
+}
+
 const CHECKS: { [K in SettingKey]: (value: unknown) => Checked<Settings[K]> } = {
   'agents.hatfield': agentProfile,
   'agents.claude': agentProfile,
   'chat.model': agentOptionId,
   'chat.effort': agentOptionId,
+  'memory.librarianUrl': librarianUrl,
+  'memory.librarianTimeoutSeconds': (value) => {
+    const checked = inRange(LIBRARIAN_TIMEOUT_RANGE)(value)
+    return 'value' in checked && !Number.isInteger(checked.value)
+      ? { problem: 'must be a whole number of seconds' }
+      : checked
+  },
+  'memory.librarianTokenVariable': environmentVariable,
   'notifications.agentSounds': flag,
   'notifications.completedSound': agentSound,
   'notifications.needsInputSound': agentSound,

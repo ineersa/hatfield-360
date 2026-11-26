@@ -69,7 +69,10 @@ export function NotificationsPanel(): React.JSX.Element {
           ) : null}
         </div>
         {notifications.length > 0 ? (
-          <ul aria-label="Notifications" className="min-h-0 flex-1 overflow-y-auto">
+          <ul
+            aria-label="Notifications"
+            className="min-h-0 flex-1 overflow-y-auto [scrollbar-width:thin]"
+          >
             {notifications.map((notification) => (
               <NotificationItem key={notification.id} notification={notification} />
             ))}

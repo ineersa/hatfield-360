@@ -5,6 +5,7 @@ import type { FilesSessionApi } from './files-session-api'
 import type { FileTreeApi } from './file-tree-api'
 import type { KeybindingsApi } from './keybindings-api'
 import type { LanguageServerApi } from './language-server-api'
+import type { MemorySearchApi } from './memory-search-api'
 import type { SearchApi } from './search-api'
 import type { SearchEverywhereApi } from './search-everywhere-api'
 import type { SettingsApi } from './settings-api'
@@ -29,6 +30,7 @@ export const IPC_CHANNELS = {
 export type DesktopApi = WorkspaceApi &
   ChatAgentApi &
   AgentApi &
+  MemorySearchApi &
   SettingsApi &
   KeybindingsApi &
   ShellLayoutApi &
