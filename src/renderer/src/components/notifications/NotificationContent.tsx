@@ -29,7 +29,7 @@ export function NotificationContent({
     <div className="flex items-start gap-2.5">
       <SeverityIcon severity={severity} className="mt-0.5" />
       <div className="flex min-w-0 flex-1 flex-col gap-1">
-        <div className="flex items-baseline gap-2">
+        <div className="flex items-center gap-2">
           <p id={titleId} className="type-section-title min-w-0 flex-1 truncate">
             {title}
           </p>
@@ -38,12 +38,21 @@ export function NotificationContent({
               {new Date(time).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}
             </time>
           ) : null}
+          <button
+            type="button"
+            aria-label={closeLabel}
+            onClick={onClose}
+            className={DISMISS_BUTTON_CLASS}
+          >
+            <X className="size-4" aria-hidden />
+          </button>
         </div>
         {body || markdown ? (
           <div
             className={cn(
               'flex min-w-0 flex-col gap-1 break-words',
-              scrollBody && 'max-h-toast-body overflow-y-auto'
+              // The scrollbar sits in the toast's right padding instead of narrowing the text.
+              scrollBody && '-mr-3 max-h-toast-body overflow-y-auto pr-1 [scrollbar-width:thin]'
             )}
           >
             {body ? <p className="whitespace-pre-wrap">{body}</p> : null}
@@ -60,14 +69,6 @@ export function NotificationContent({
           </button>
         ) : null}
       </div>
-      <button
-        type="button"
-        aria-label={closeLabel}
-        onClick={onClose}
-        className={DISMISS_BUTTON_CLASS}
-      >
-        <X className="size-4" aria-hidden />
-      </button>
     </div>
   )
 }
