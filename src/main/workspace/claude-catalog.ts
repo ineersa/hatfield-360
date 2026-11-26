@@ -1,4 +1,5 @@
 import { isAbsolute } from 'node:path'
+import { catalogScopes } from './catalog-scopes'
 import { getSessionInfo, listSessions } from '@anthropic-ai/claude-agent-sdk'
 import { RECENT_CONVERSATION_MS, type RecentConversation } from '../../shared/recent-conversation'
 import type { WorkspaceView } from '../../shared/workspace-api'
@@ -10,16 +11,7 @@ export async function listClaudeCatalog(
   now = Date.now(),
   sessionId?: string
 ): Promise<RecentConversation[]> {
-  const scopes = new Map<string, string>()
-  for (const folder of folders) {
-    if (folder.missing || folder.kind !== 'project') continue
-    scopes.set(folder.path, folder.path)
-    const project = projects.find((entry) => entry.folder === folder.path)
-    if (project?.status !== 'git') continue
-    for (const tree of project.worktrees) {
-      if (!tree.prunable && !scopes.has(tree.path)) scopes.set(tree.path, folder.path)
-    }
-  }
+  const scopes = catalogScopes(folders, projects)
   const entries = new Map<string, RecentConversation>()
   for (const [dir, project] of scopes) {
     for (const summary of await listSessions({

@@ -363,17 +363,6 @@ export function WorkspacePanel(): React.JSX.Element {
         </p>
       ) : null}
       {problem ? <WorkspaceProblemBanner problem={problem} /> : null}
-      {folders.length > 0 &&
-      (!currentCatalog || (currentCatalog.loading && currentCatalog.sessions.length === 0)) ? (
-        <p role="status" className="type-hint px-4 text-muted-foreground">
-          Loading Claude sessions…
-        </p>
-      ) : null}
-      {currentCatalog?.error ? (
-        <p role="status" className="type-hint px-4 text-error">
-          Could not load Claude sessions: {currentCatalog.error}
-        </p>
-      ) : null}
       <AgentAttention sessions={sessions} folders={folders} />
       {workspace &&
       folders.length === 0 &&
@@ -475,6 +464,17 @@ export function WorkspacePanel(): React.JSX.Element {
               </ul>
             </div>
           )}
+          {folders.length > 0 &&
+          (!currentCatalog || (currentCatalog.loading && currentCatalog.sessions.length === 0)) ? (
+            <p role="status" className="type-hint px-4 text-muted-foreground">
+              Loading recent sessions…
+            </p>
+          ) : null}
+          {currentCatalog?.error ? (
+            <p role="status" className="type-hint px-4 text-error">
+              {currentCatalog.error}
+            </p>
+          ) : null}
         </div>
       )}
     </>

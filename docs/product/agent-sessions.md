@@ -30,14 +30,19 @@ Stopped responses use the error colour; process exits remove the row instead.
 Clicking a live session also selects its actual tab/pane.
 
 Below each project's live sessions, a folded **Recent N** group lists existing
-Claude Code sessions from the provider's local catalog, scoped to workspace
+Claude Code and Hatfield sessions from their provider catalogs, scoped to workspace
 projects and known worktrees. Rows show the provider title, differing branch
 and time since last activity. The last 14 days are shown newest first, with
 five rows initially and pages of 20. Resume opens a new tab, Resume in Split
 uses the active tab, and an already open session selects its existing pane.
 Copy session ID is read-only, as is the catalog: there is no desktop history
 tracking or deletion. Existing sessions appear on first load and never
-auto-launch. Hatfield history awaits [agent-core #730](https://github.com/ineersa/agent-core/issues/730).
+auto-launch. Claude uses the official SDK; Hatfield uses `hatfield session:list --json`
+from PATH, following its pagination and retaining its resume scope separately from
+the recorded session cwd. Listing does not use the Settings launch wrapper: wrappers
+such as `hatfield-safe` invoke `hatfield agent`, not catalog subcommands. Resuming
+still uses the current Settings command. A provider catalog failure is displayed
+without hiding the other provider's sessions.
 The approved prototype is retained in `docs/design/issue-37-prototype/`.
 
 Search is a project-scoped Librarian popup above the mounted terminal workspace,

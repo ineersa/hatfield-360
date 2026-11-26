@@ -33,11 +33,12 @@ export function resumeRecentConversation(
     }
   }
   const agent: AgentLaunch = { provider: entry.provider, target: { recent: { generation, key } } }
+  const cwd = entry.resumeCwd ?? entry.cwd
   if (
     split &&
     store.activeTabId &&
-    terminalTabControllers.get(store.activeTabId)?.splitConversation(agent, entry.cwd)
+    terminalTabControllers.get(store.activeTabId)?.splitConversation(agent, cwd)
   )
     return
-  store.openTerminal(entry.cwd, agent)
+  store.openTerminal(cwd, agent)
 }

@@ -1,4 +1,4 @@
-import type { RecentConversation } from './recent-conversation'
+import type { RecentCatalog } from './recent-conversation'
 import type { TerminalSession } from './terminal-api'
 
 export const AGENT_PROVIDERS = { hatfield: 'Hatfield', claude: 'Claude' } as const
@@ -51,7 +51,7 @@ export const AGENT_CHANNELS = {
 } as const
 export type AgentApi = {
   launchAgent: (request: AgentLaunch & { cols: number; rows: number }) => Promise<TerminalSession>
-  getRecentConversations: (generation: number) => Promise<RecentConversation[]>
+  getRecentConversations: (generation: number) => Promise<RecentCatalog>
   getAgentSessions: () => Promise<AgentSnapshot>
   subscribeAgentNotifications: (callback: (notice: AgentNotification) => void) => () => void
   subscribeAgentSessions: (callback: (snapshot: AgentSnapshot) => void) => () => void

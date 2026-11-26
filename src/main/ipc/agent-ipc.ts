@@ -1,8 +1,9 @@
-import { conversationKey } from '../../shared/recent-conversation'
+import { conversationKey, type RecentCatalog } from '../../shared/recent-conversation'
 import { listClaudeCatalog } from '../workspace/claude-catalog'
+import { listHatfieldCatalog } from '../workspace/hatfield-catalog'
 import { basename } from 'node:path'
 import { BrowserWindow } from 'electron'
-import { AGENT_CHANNELS, type AgentNotification } from '../../shared/agent-api'
+import { AGENT_CHANNELS, type AgentNotification, type AgentProvider } from '../../shared/agent-api'
 import { isPlainObject } from '../../shared/plain-object'
 import { agentSnapshot, trackAgentSessions } from '../agent-status/agent-sessions'
 import { worktreeStore } from '../git/worktree-store'
@@ -13,18 +14,37 @@ import { workspaceStore } from '../workspace/workspace-store'
 import { existingDirectory } from './terminal-ipc'
 import { handleTrusted } from './trusted-ipc'
 
-async function recentCatalog(generation: unknown, sessionId?: string) {
+async function recentCatalog(
+  generation: unknown,
+  provider?: AgentProvider,
+  sessionId?: string
+): Promise<RecentCatalog> {
   const workspace = await workspaceStore.view()
   if (generation !== workspace.terminalGeneration) throw new Error('The workspace has changed.')
-  const sessions = await listClaudeCatalog(
-    workspace.folders,
-    worktreeStore.view(),
-    Date.now(),
-    sessionId
-  )
+  const projects = worktreeStore.view()
+  const now = Date.now()
+  const [claude, hatfield] = await Promise.all([
+    provider === 'hatfield'
+      ? Promise.resolve({ sessions: [], errors: [] })
+      : listClaudeCatalog(workspace.folders, projects, now, sessionId).then(
+          (sessions): RecentCatalog => ({ sessions, errors: [] }),
+          (): RecentCatalog => ({
+            sessions: [],
+            errors: ['Claude: could not read the session catalog.']
+          })
+        ),
+    provider === 'claude'
+      ? Promise.resolve({ sessions: [], errors: [] })
+      : listHatfieldCatalog(workspace.folders, projects, now)
+  ])
   if (generation !== (await workspaceStore.view()).terminalGeneration)
     throw new Error('The workspace has changed.')
-  return sessions
+  return {
+    sessions: [...claude.sessions, ...hatfield.sessions].toSorted(
+      (a, b) => b.lastModified - a.lastModified
+    ),
+    errors: [...claude.errors, ...hatfield.errors]
+  }
 }
 
 export function registerAgentIpc(): void {
@@ -68,14 +88,20 @@ export function registerAgentIpc(): void {
         if (pane?.agent) saved = { cwd: pane.cwd, agent: pane.agent }
       } else if (isPlainObject(target.recent)) {
         const { generation, key } = target.recent
-        if (typeof generation !== 'number' || typeof key !== 'string' || key.length > 100)
+        if (typeof generation !== 'number' || typeof key !== 'string' || key.length > 26000)
           throw new Error('Invalid Recent conversation.')
-        const id = /^\["claude","([\da-f-]{36})",null\]$/u.exec(key)?.[1]
-        if (!id || provider !== 'claude') throw new Error('Invalid Recent conversation.')
-        const entry = (await recentCatalog(generation, id)).find(
-          (session) => conversationKey(session) === key
+        const identity: unknown = JSON.parse(key)
+        if (
+          !Array.isArray(identity) ||
+          identity.length !== 3 ||
+          identity[0] !== provider ||
+          typeof identity[1] !== 'string'
         )
-        if (entry) saved = { cwd: entry.cwd, agent: entry }
+          throw new Error('Invalid Recent conversation.')
+        const catalog = await recentCatalog(generation, provider, identity[1])
+        const entry = catalog.sessions.find((session) => conversationKey(session) === key)
+        if (!entry && catalog.errors.length) throw new Error(catalog.errors.join(' '))
+        if (entry) saved = { cwd: entry.resumeCwd ?? entry.cwd, agent: entry }
       }
       const id = saved?.agent.providerSessionId
       if (

@@ -25,8 +25,11 @@ export const useRecentSessionStore = create<CatalogState>((set) => ({
       }
     }))
     void window.desktop.getRecentConversations(generation).then(
-      (sessions) => {
-        if (!cancelled) set({ catalog: { generation, sessions, error: null, loading: false } })
+      ({ sessions, errors }) => {
+        if (!cancelled)
+          set({
+            catalog: { generation, sessions, error: errors.join(' ') || null, loading: false }
+          })
       },
       (error: unknown) => {
         if (!cancelled)
