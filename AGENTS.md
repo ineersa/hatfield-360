@@ -47,6 +47,7 @@ Process boundary rules, enforced by lint (`.oxlintrc.json` overrides plus `confi
 - Register handlers with `handleTrusted` (`src/main/ipc/trusted-ipc.ts`); lint rejects any other `ipcMain` / `webContents.ipc` access. It rejects calls from frames other than the app's own page and hands the handler `unknown` arguments, which main must validate: the renderer is untrusted.
 - The window never navigates or opens new windows. External links need an explicit IPC capability that validates the URL before `shell.openExternal`.
 - Keep the main process responsive: no sync fs/child_process calls on hot paths.
+- **Agent commands always come from Settings.** Every provider invocation (launch, resume, split, catalog or other CLI operation) must preserve the configured executable and argument prefix and use the existing agent shell-command path. Never hardcode a provider executable or fall back to a bare `hatfield`/`claude` command. Profiles may be sandbox wrappers or `php /path/to/hatfield.phar`.
 
 # Repo Rules
 

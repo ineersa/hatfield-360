@@ -1,45 +1,50 @@
 import { create } from 'zustand'
-import type { RecentConversation } from '../../../shared/recent-conversation'
+import type { RecentCatalog } from '../../../shared/recent-conversation'
 import { mainErrorMessage } from '@/lib/main-error-message'
 
 type CatalogState = {
-  catalog: {
-    generation: number
-    sessions: RecentConversation[]
-    error: string | null
-    loading: boolean
-  } | null
-  load: (generation: number) => () => void
+  catalog: (RecentCatalog & { key: string; loading: boolean }) | null
+  load: (generation: number, scope: string) => Promise<void>
 }
 
-export const useRecentSessionStore = create<CatalogState>((set) => ({
-  catalog: null,
-  load: (generation) => {
-    let cancelled = false
-    set((state) => ({
-      catalog: {
-        generation,
-        sessions: state.catalog?.generation === generation ? state.catalog.sessions : [],
-        error: null,
-        loading: true
-      }
-    }))
-    void window.desktop.getRecentConversations(generation).then(
-      ({ sessions, errors }) => {
-        if (!cancelled)
-          set({
-            catalog: { generation, sessions, error: errors.join(' ') || null, loading: false }
-          })
-      },
-      (error: unknown) => {
-        if (!cancelled)
-          set({
-            catalog: { generation, sessions: [], error: mainErrorMessage(error), loading: false }
-          })
-      }
-    )
-    return () => {
-      cancelled = true
+export const useRecentSessionStore = create<CatalogState>((set, get) => {
+  let active: { key: string; done: Promise<void> } | undefined
+  let wanted = ''
+
+  function load(generation: number, scope: string): Promise<void> {
+    const key = JSON.stringify([generation, scope])
+    wanted = key
+    if (scope === '[]') {
+      set({ catalog: null })
+      return Promise.resolve()
     }
+    if (active) {
+      if (active.key === key) return active.done
+      return active.done.then(async () => {
+        if (wanted === key) await load(generation, scope)
+      })
+    }
+    const previous = get().catalog
+    const initial = {
+      key,
+      sessions: previous?.key === key ? previous.sessions : [],
+      scopeAliases: previous?.key === key ? previous.scopeAliases : new Map<string, string>(),
+      errors: [],
+      loading: true
+    }
+    const publish = (result: RecentCatalog): void => {
+      if (wanted === key) set({ catalog: { ...result, key, loading: false } })
+    }
+    const done = window.desktop
+      .getRecentConversations(generation)
+      .then(publish, (error: unknown) => publish({ ...initial, errors: [mainErrorMessage(error)] }))
+      .finally(() => {
+        active = undefined
+      })
+    active = { key, done }
+    set({ catalog: initial })
+    return done
   }
-}))
+
+  return { catalog: null, load }
+})

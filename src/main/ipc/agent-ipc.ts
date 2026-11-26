@@ -23,19 +23,20 @@ async function recentCatalog(
   if (generation !== workspace.terminalGeneration) throw new Error('The workspace has changed.')
   const projects = worktreeStore.view()
   const now = Date.now()
+  const settings = await settingsStore.view()
   const [claude, hatfield] = await Promise.all([
     provider === 'hatfield'
       ? Promise.resolve({ sessions: [], errors: [] })
       : listClaudeCatalog(workspace.folders, projects, now, sessionId).then(
-          (sessions): RecentCatalog => ({ sessions, errors: [] }),
-          (): RecentCatalog => ({
+          (sessions) => ({ sessions, errors: [] }),
+          () => ({
             sessions: [],
             errors: ['Claude: could not read the session catalog.']
           })
         ),
     provider === 'claude'
-      ? Promise.resolve({ sessions: [], errors: [] })
-      : listHatfieldCatalog(workspace.folders, projects, now)
+      ? Promise.resolve({ sessions: [], errors: [], scopeAliases: new Map<string, string>() })
+      : listHatfieldCatalog(workspace.folders, projects, settings.values['agents.hatfield'], now)
   ])
   if (generation !== (await workspaceStore.view()).terminalGeneration)
     throw new Error('The workspace has changed.')
@@ -43,7 +44,8 @@ async function recentCatalog(
     sessions: [...claude.sessions, ...hatfield.sessions].toSorted(
       (a, b) => b.lastModified - a.lastModified
     ),
-    errors: [...claude.errors, ...hatfield.errors]
+    errors: [...claude.errors, ...hatfield.errors],
+    scopeAliases: hatfield.scopeAliases
   }
 }
 

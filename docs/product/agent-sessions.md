@@ -37,11 +37,13 @@ five rows initially and pages of 20. Resume opens a new tab, Resume in Split
 uses the active tab, and an already open session selects its existing pane.
 Copy session ID is read-only, as is the catalog: there is no desktop history
 tracking or deletion. Existing sessions appear on first load and never
-auto-launch. Claude uses the official SDK; Hatfield uses `hatfield session:list --json`
-from PATH, following its pagination and retaining its resume scope separately from
-the recorded session cwd. Listing does not use the Settings launch wrapper: wrappers
-such as `hatfield-safe` invoke `hatfield agent`, not catalog subcommands. Resuming
-still uses the current Settings command. A provider catalog failure is displayed
+auto-launch. Claude reads metadata through the official SDK without launching a CLI.
+Hatfield appends `session:list --json` to its Settings executable and argument prefix,
+using the same shell-command path as launches and resumes. Wrappers must forward
+subcommands rather than force `agent`; `php /path/to/hatfield.phar` profiles work the
+same way. Never invoke a hardcoded provider command or use a bare-command fallback.
+The catalog follows pagination and retains resume scope separately from recorded cwd.
+A missing Hatfield session table means an empty catalog. Other provider failures are displayed
 without hiding the other provider's sessions.
 The approved prototype is retained in `docs/design/issue-37-prototype/`.
 

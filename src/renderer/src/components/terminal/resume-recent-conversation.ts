@@ -1,4 +1,9 @@
-import { conversationKey, type RecentConversation } from '../../../../shared/recent-conversation'
+import { useRecentSessionStore } from '@/state/recent-session-store'
+import {
+  conversationKey,
+  matchingConversationKeys,
+  type RecentConversation
+} from '../../../../shared/recent-conversation'
 import type { AgentLaunch, AgentSession } from '../../../../shared/agent-api'
 import { useTerminalStore } from '@/state/terminal-store'
 import { useShellLayoutStore } from '@/state/shell-layout-store'
@@ -12,11 +17,14 @@ export function resumeRecentConversation(
 ): void {
   const key = conversationKey(entry)
   if (!key) return
+  const aliases = useRecentSessionStore.getState().catalog?.scopeAliases
+  const keys = aliases ? matchingConversationKeys(entry, aliases) : new Set([key])
   const reported = new Set<string>()
   for (const session of sessions) {
     if (session.process !== 'running' || !session.providerSessionId) continue
     reported.add(session.terminalId)
-    if (conversationKey(session) === key && selectTerminal(session.terminalId)) return
+    const liveKey = conversationKey(session)
+    if (liveKey !== null && keys.has(liveKey) && selectTerminal(session.terminalId)) return
   }
   const store = useTerminalStore.getState()
   for (const tab of store.tabs) {
@@ -24,8 +32,8 @@ export function resumeRecentConversation(
     const target = tab.agent?.target
     if (
       controller
-        ? controller.selectPendingConversation(key, reported)
-        : target && 'recent' in target && target.recent.key === key
+        ? controller.selectPendingConversation(keys, reported)
+        : target && 'recent' in target && keys.has(target.recent.key)
     ) {
       store.activateTab(tab.id)
       useShellLayoutStore.getState().showAgents()

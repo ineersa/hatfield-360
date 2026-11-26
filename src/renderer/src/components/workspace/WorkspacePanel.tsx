@@ -306,19 +306,22 @@ export function WorkspacePanel(): React.JSX.Element {
       ])
   )
   useEffect(() => {
-    if (catalogScope === '[]') return undefined
-    let cancel = load(generation)
-    const timer = setInterval(() => {
+    let stopped = false
+    let timer: ReturnType<typeof setTimeout> | undefined
+    async function refresh(): Promise<void> {
       setNow(Date.now())
-      cancel()
-      cancel = load(generation)
-    }, 60_000)
+      await load(generation, catalogScope)
+      if (!stopped && catalogScope !== '[]') timer = setTimeout(() => void refresh(), 60_000)
+    }
+    void refresh()
     return () => {
-      clearInterval(timer)
-      cancel()
+      stopped = true
+      clearTimeout(timer)
     }
   }, [generation, catalogScope, load])
-  const currentCatalog = catalog?.generation === generation && folders.length > 0 ? catalog : null
+  const currentCatalog =
+    catalog?.key === JSON.stringify([generation, catalogScope]) ? catalog : null
+  const catalogError = currentCatalog?.errors.join(' ')
   const recent = (currentCatalog?.sessions ?? []).filter(
     (entry) => entry.lastModified > now - RECENT_CONVERSATION_MS
   )
@@ -470,9 +473,9 @@ export function WorkspacePanel(): React.JSX.Element {
               Loading recent sessions…
             </p>
           ) : null}
-          {currentCatalog?.error ? (
+          {catalogError ? (
             <p role="status" className="type-hint px-4 text-error">
-              {currentCatalog.error}
+              {catalogError}
             </p>
           ) : null}
         </div>

@@ -170,12 +170,13 @@ export function TerminalTabBody({
         panes.setActivePane(pane.id, isShown.current)
         return true
       },
-      selectPendingConversation: (key, reported) => {
+      selectPendingConversation: (keys, reported) => {
         const pane = panes
           .getPanes()
           .find(
             ({ container: { dataset } }) =>
-              dataset.pendingConversation === key &&
+              dataset.pendingConversation !== undefined &&
+              keys.has(dataset.pendingConversation) &&
               !dataset.exited &&
               (!dataset.terminalId || !reported.has(dataset.terminalId))
           )

@@ -1,6 +1,14 @@
+import { mkdtemp, realpath, rm, symlink } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { parseHatfieldCatalog } from './hatfield-catalog'
-import { conversationKey } from '../../shared/recent-conversation'
+import {
+  hatfieldCatalogCommand,
+  isMissingHatfieldCatalog,
+  listHatfieldCatalog,
+  parseHatfieldCatalog
+} from './hatfield-catalog'
+import { conversationKey, matchingConversationKeys } from '../../shared/recent-conversation'
 
 const now = Date.parse('2026-11-26T00:00:00Z')
 
@@ -25,6 +33,31 @@ const response = {
 }
 
 describe('Hatfield catalog response', () => {
+  it('treats only the missing session table as an empty catalog', () => {
+    expect(
+      isMissingHatfieldCatalog(
+        Object.assign(new Error('Command failed'), {
+          stderr: 'SQLSTATE[HY000]: General error: 1 no such table: hatfield_session'
+        })
+      )
+    ).toBe(true)
+    expect(
+      isMissingHatfieldCatalog(
+        Object.assign(new Error('Command failed'), {
+          stderr: 'SQLSTATE[HY000]: General error: 1 no such table: other_table'
+        })
+      )
+    ).toBe(false)
+    expect(
+      isMissingHatfieldCatalog(
+        Object.assign(new Error('Command failed'), {
+          stderr: 'SQLSTATE[HY000]: database is locked'
+        })
+      )
+    ).toBe(false)
+    expect(isMissingHatfieldCatalog(new Error('spawn hatfield ENOENT'))).toBe(false)
+  })
+
   it('keeps resume scope distinct from recorded cwd and expires old sessions', () => {
     const result = parseHatfieldCatalog(response, '/projects/app', now)
     expect(result).toEqual({
@@ -69,4 +102,78 @@ describe('Hatfield catalog response', () => {
       )
     ).toThrow('Invalid session:list activity timestamp.')
   })
+})
+
+it('appends listing arguments to the configured PHP phar prefix inside the agent shell', () => {
+  expect(
+    hatfieldCatalogCommand(
+      { executable: 'php', args: ['/Applications/Hatfield Tools/hatfield.phar'] },
+      '/projects/app',
+      '2026-11-12T00:00:00.000Z',
+      200,
+      { file: '/bin/zsh', args: ['-l'] }
+    )
+  ).toEqual({
+    file: '/bin/zsh',
+    args: [
+      '-l',
+      '-ic',
+      'cd -- "$1" && shift && exec -- "$@"',
+      'hatfield-360',
+      '/projects/app',
+      'php',
+      '/Applications/Hatfield Tools/hatfield.phar',
+      'session:list',
+      '--json',
+      '--cwd',
+      '/projects/app',
+      '--since',
+      '2026-11-12T00:00:00.000Z',
+      '--limit',
+      '200',
+      '--offset',
+      '200'
+    ]
+  })
+})
+
+it('matches canonical and symlinked Hatfield keys without merging distinct numeric ID scopes', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'hatfield-scope-'))
+  try {
+    const alias = join(root, 'linked')
+    await symlink(root, alias)
+    const canonical = await realpath(alias)
+    const identity = { provider: 'hatfield', providerSessionId: '42', cwd: canonical } as const
+    const keys = matchingConversationKeys(identity, new Map([[alias, canonical]]))
+    expect([...keys]).toEqual([
+      JSON.stringify(['hatfield', '42', canonical]),
+      JSON.stringify(['hatfield', '42', alias])
+    ])
+    expect(keys.has(JSON.stringify(['hatfield', '42', join(root, 'other')]))).toBe(false)
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
+})
+
+it('reports each missing catalog directory separately without starting the configured command', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'hatfield-missing-'))
+  try {
+    const result = await listHatfieldCatalog(
+      ['removed-worktree', 'moved-project'].map((name) => ({
+        name,
+        path: join(root, name),
+        kind: 'project',
+        missing: false
+      })),
+      [],
+      { executable: 'php', args: ['/unused/hatfield.phar'] },
+      now
+    )
+    expect(result.errors).toEqual([
+      'Hatfield: the removed-worktree catalog folder is unavailable.',
+      'Hatfield: the moved-project catalog folder is unavailable.'
+    ])
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
 })

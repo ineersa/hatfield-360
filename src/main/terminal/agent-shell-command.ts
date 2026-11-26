@@ -4,14 +4,17 @@ import { defaultShell, type ShellCommand } from './default-shell'
 
 export class UnsupportedAgentShell extends Error {}
 
-export function agentShellCommand(profile: AgentProfile, cwd: string): ShellCommand {
+export function agentShellCommand(
+  profile: AgentProfile,
+  cwd: string,
+  shell = defaultShell(process.env, process.platform)
+): ShellCommand {
   const { executable, args } = profile
   if (process.platform === 'win32') {
     const file =
       !isAbsolute(executable) && /[\\/]/.test(executable) ? resolve(cwd, executable) : executable
     return { file, args }
   }
-  const shell = defaultShell(process.env, process.platform)
   switch (basename(shell.file)) {
     case 'bash':
     case 'zsh':

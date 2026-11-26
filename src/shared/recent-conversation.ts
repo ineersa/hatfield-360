@@ -17,18 +17,42 @@ export type RecentConversation = Pick<AgentSession, 'provider' | 'project' | 'ti
   lastModified: number
 }
 
-export type RecentCatalog = { sessions: RecentConversation[]; errors: string[] }
+export type RecentCatalog = {
+  sessions: RecentConversation[]
+  errors: string[]
+  scopeAliases: Map<string, string>
+}
 
-export function conversationKey({
-  provider,
-  providerSessionId,
-  cwd,
-  resumeCwd
-}: Identity): string | null {
+export function conversationKey(
+  { provider, providerSessionId, cwd, resumeCwd }: Identity,
+  scopeAliases?: ReadonlyMap<string, string>
+): string | null {
   if (!providerSessionId) return null
+  const scope = resumeCwd ?? cwd
   return JSON.stringify([
     provider,
     provider === 'claude' ? providerSessionId.toLowerCase() : providerSessionId,
-    provider === 'hatfield' ? (resumeCwd ?? cwd) : null
+    provider === 'hatfield' && scope !== null ? (scopeAliases?.get(scope) ?? scope) : null
   ])
+}
+
+export function matchingConversationKeys(
+  identity: Identity,
+  scopeAliases: ReadonlyMap<string, string>
+): Set<string> {
+  const keys = new Set<string>()
+  const key = conversationKey(identity, scopeAliases)
+  if (key === null) return keys
+  keys.add(key)
+  if (identity.provider === 'hatfield') {
+    const scope = identity.resumeCwd ?? identity.cwd
+    const canonical = scope === null ? null : (scopeAliases.get(scope) ?? scope)
+    for (const [alias, destination] of scopeAliases) {
+      if (destination === canonical) {
+        const aliasKey = conversationKey({ ...identity, resumeCwd: alias })
+        if (aliasKey !== null) keys.add(aliasKey)
+      }
+    }
+  }
+  return keys
 }
