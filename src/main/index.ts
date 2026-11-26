@@ -13,6 +13,7 @@ import { registerEditorIpc } from './ipc/editor-ipc'
 import { registerFilesSessionIpc } from './ipc/files-session-ipc'
 import { registerFileTreeIpc } from './ipc/file-tree-ipc'
 import { registerKeybindingsIpc } from './ipc/keybindings-ipc'
+import { registerMemorySearchIpc } from './ipc/memory-search-ipc'
 import { registerSearchIpc } from './ipc/search-ipc'
 import { registerSettingsIpc } from './ipc/settings-ipc'
 import { registerShellLayoutIpc } from './ipc/shell-layout-ipc'
@@ -51,6 +52,7 @@ void app.whenReady().then(async () => {
   registerTerminalIpc()
   registerWebLinkIpc()
   registerAgentIpc()
+  registerMemorySearchIpc()
   registerChatAgentIpc()
   registerLanguageServerIpc()
   installAppMenu()

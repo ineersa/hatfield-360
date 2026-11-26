@@ -13,6 +13,12 @@ export type Settings = {
   'chat.model': string
   /** The workspace chat's reasoning effort for a new chat: the last one chosen in the panel. */
   'chat.effort': string
+  /** Librarian's full HTTP(S) MCP endpoint for memory search; empty turns memory search off. */
+  'memory.librarianUrl': string
+  /** How long one memory search or recall may take, in seconds. */
+  'memory.librarianTimeoutSeconds': number
+  /** The environment variable holding Librarian's bearer token; empty for an anonymous server. */
+  'memory.librarianTokenVariable': string
   'notifications.agentSounds': boolean
   'notifications.completedSound': AgentSound
   'notifications.needsInputSound': AgentSound
@@ -56,6 +62,8 @@ export const FONT_SIZE_RANGE: NumberRange = { min: 8, max: 32, step: 1 }
 
 export const LINE_HEIGHT_RANGE: NumberRange = { min: 1, max: 2, step: 0.1 }
 
+export const LIBRARIAN_TIMEOUT_RANGE: NumberRange = { min: 1, max: 300, step: 1 }
+
 // The app bundles JetBrains Mono Variable, so the default looks the same whatever fonts are installed.
 const MONOSPACE_FONTS =
   "'JetBrains Mono Variable', 'JetBrains Mono', 'Cascadia Code', 'SF Mono', Menlo, Consolas, 'DejaVu Sans Mono', monospace"
@@ -65,6 +73,9 @@ export const DEFAULT_SETTINGS: Settings = {
   'agents.claude': { executable: 'claude', args: [] },
   'chat.model': 'haiku',
   'chat.effort': 'medium',
+  'memory.librarianUrl': '',
+  'memory.librarianTimeoutSeconds': 30,
+  'memory.librarianTokenVariable': '',
   'notifications.agentSounds': true,
   'notifications.completedSound': 'chime',
   'notifications.needsInputSound': 'double-ring',

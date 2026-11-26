@@ -162,6 +162,41 @@ describe('parseSettings', () => {
     })
   })
 
+  it('accepts a Librarian endpoint and token variable, and rejects credentials, queries and non-HTTP URLs', () => {
+    const good = parseSettings(
+      `{
+        "memory.librarianUrl": " https://librarian.internal:8093/_mcp ",
+        "memory.librarianTokenVariable": "LIBRARIAN_TOKEN",
+        "memory.librarianTimeoutSeconds": 10
+      }`,
+      DEFAULT_SETTINGS
+    )
+    expect(good.problems).toEqual([])
+    expect(good.values['memory.librarianUrl']).toBe('https://librarian.internal:8093/_mcp')
+    expect(good.values['memory.librarianTokenVariable']).toBe('LIBRARIAN_TOKEN')
+    expect(good.values['memory.librarianTimeoutSeconds']).toBe(10)
+
+    const bad = parseSettings(
+      `{
+        "memory.librarianUrl": "http://user:secret@127.0.0.1:8093/_mcp?project=x",
+        "memory.librarianTokenVariable": "env:LIBRARIAN_TOKEN",
+        "memory.librarianTimeoutSeconds": 2.5
+      }`,
+      DEFAULT_SETTINGS
+    )
+    expect(bad.values['memory.librarianUrl']).toBe('')
+    expect(bad.values['memory.librarianTokenVariable']).toBe('')
+    expect(bad.values['memory.librarianTimeoutSeconds']).toBe(30)
+    expect(bad.problems).toEqual([
+      '"memory.librarianUrl" must be an absolute http(s) URL without credentials, query or fragment.',
+      '"memory.librarianTokenVariable" must be an environment variable name, such as "LIBRARIAN_TOKEN", or empty.',
+      '"memory.librarianTimeoutSeconds" must be a whole number of seconds.'
+    ])
+    expect(
+      parseSettings('{ "memory.librarianUrl": "ftp://host/_mcp" }', DEFAULT_SETTINGS).problems
+    ).toHaveLength(1)
+  })
+
   it('locks page edits when a key is set twice, using the last value like JSON does', () => {
     expect(
       parseSettings('{ "app.fontSize": 16, "editor.fontSize": 15, "app.fontSize": 20 }', lastGood)

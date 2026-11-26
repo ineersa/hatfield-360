@@ -15,6 +15,7 @@ import {
   type IconTheme
 } from '../../../../shared/settings-api'
 import { ColorThemeSettings } from './ColorThemeSettings'
+import { MemorySearchSettings } from './MemorySearchSettings'
 import { FONT_PICKER_ATTRIBUTE, FontPicker } from './FontPicker'
 import { NumberStepper } from './NumberStepper'
 import { ResetButton } from './ResetButton'
@@ -352,6 +353,7 @@ export function SettingsPage(): React.JSX.Element {
             <AgentSoundPreviews />
           </div>
           <AgentLaunchSettings />
+          <MemorySearchSettings />
         </div>
       </div>
     </div>

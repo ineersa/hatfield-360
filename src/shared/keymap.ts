@@ -492,7 +492,8 @@ export const APP_COMMANDS = [
   'copy-absolute-path',
   'copy-relative-path',
   'select-opened-file',
-  'find-in-files'
+  'find-in-files',
+  'search-memory'
 ] as const
 export type AppCommand = (typeof APP_COMMANDS)[number]
 
@@ -557,6 +558,13 @@ const APP_KEYMAP: Record<AppCommand, ShellAction> = {
     label: 'Find in Files',
     mac: 'Command+Shift+F',
     other: 'Ctrl+Shift+F'
+  },
+  // Like a command palette; it opens from a focused terminal too, which never receives the key.
+  'search-memory': {
+    id: 'hatfield.memory.search',
+    label: 'Search Memory',
+    mac: 'Command+K',
+    other: 'Ctrl+K'
   }
 }
 
