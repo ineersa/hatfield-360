@@ -82,6 +82,13 @@
   --info: #d2f53c;
   --info-background: #450073;
   --info-border: #e6e6e6;
+  /* Changed files: FILESTATUS_* of editor/high-contrast.json, adjusted where needed to read at 4.5:1 on island and inactive selection. */
+  --vcs-modified: #4ff0ff;
+  --vcs-added: #62cc47;
+  --vcs-deleted: #f19f6f; /* #ed864a lightened for 4.5:1 */
+  --vcs-renamed: #4ff0ff;
+  --vcs-untracked: #e3a29a; /* #d1675a lightened for 4.5:1 */
+  --vcs-conflicted: #ff9494; /* #ff6666 lightened for 4.5:1 */
   --scrollbar-thumb: #a6a6a6;
   --scrollbar-thumb-hover: #e6e6e6;
   --island-radius: 0px;

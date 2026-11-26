@@ -7,6 +7,8 @@ import {
 } from 'lucide-react'
 import type { ComponentType } from 'react'
 import { FilesPanel } from '@/components/files/FilesPanel'
+import { GitMainEmpty } from '@/components/git/GitMainEmpty'
+import { GitPanel } from '@/components/git/GitPanel'
 import { SearchPanel } from '@/components/search/SearchPanel'
 import { TerminalEmptyState } from '@/components/terminal/TerminalEmptyState'
 import { WorkspacePanel } from '@/components/workspace/WorkspacePanel'
@@ -20,10 +22,8 @@ export type ShellView = {
   mainPlaceholder: string
   /** Replaces the placeholder text when the view has something to start with. */
   MainEmpty?: ComponentType
-} & (
-  | { Panel: ComponentType; panelTitle?: never; panelPlaceholder?: never }
-  | { Panel?: never; panelTitle: string; panelPlaceholder: string }
-)
+  Panel: ComponentType
+}
 
 export const SHELL_VIEWS: readonly ShellView[] = [
   {
@@ -54,11 +54,10 @@ export const SHELL_VIEWS: readonly ShellView[] = [
   {
     id: 'git',
     label: 'Git',
-    description: 'Changes, commit and diff',
+    description: 'Changes, commit, and review in hunk',
     Icon: GitCommitHorizontal,
-    panelTitle: 'Commit',
-    panelPlaceholder:
-      'Changed files, the commit message and Commit / Commit and Push will appear here.',
-    mainPlaceholder: 'The diff of the selected change will appear here.'
+    Panel: GitPanel,
+    MainEmpty: GitMainEmpty,
+    mainPlaceholder: 'hunk Review and Log tabs open here.'
   }
 ]

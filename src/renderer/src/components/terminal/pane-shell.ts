@@ -2,7 +2,7 @@ import { notify } from '@/state/notification-store'
 import type { AgentLaunch } from '../../../../shared/agent-api'
 import type { ManagedPane } from '@/lib/pane-manager/pane-manager-types'
 import { listenToSession } from '@/lib/terminal-output-router'
-import type { TerminalExit } from '../../../../shared/terminal-api'
+import type { TerminalExit, TerminalSession } from '../../../../shared/terminal-api'
 import { mainErrorMessage } from '@/lib/main-error-message'
 
 /** A shell resizes once the size settles, not on every frame of a window or divider drag. */
@@ -25,20 +25,29 @@ function showExited(pane: ManagedPane, exit: TerminalExit): void {
   pane.terminal.options.cursorBlink = false
 }
 
+type TerminalSize = { cols: number; rows: number }
+
+/** How a pane's program starts and what its ending means. */
+type PaneProgram = {
+  /** Starts it at the pane's first size; resolves with the session and the size it runs at. */
+  start: (size: TerminalSize) => Promise<{ session: TerminalSession; size: TerminalSize }>
+  /** Named in the line a failed start writes: "The shell couldn't start: …". */
+  name: string
+  /** Whether a clean exit with a nonzero code ends the pane too, as a shell's does. */
+  endsOnAnyExitCode: boolean
+  /** It ended itself: the pane closes. */
+  onEnded: () => void
+  onStarted?: () => void
+  /** It ended with an error, a signal, or a code that keeps the pane open. */
+  onFailedExit?: (exit: TerminalExit) => void
+  onStartFailed?: (error: unknown) => void
+}
+
 /**
- * Starts a shell for the pane once its terminal has its first size, and wires keys, output and
- * resizes. A shell that ends itself (`exit`, Ctrl+D) calls `onShellEnded`, whatever its exit code:
- * bash exits with its last command's status. One killed by a signal keeps its pane, with a badge,
- * so its last output can be read, as does an agent that exits with a nonzero code.
+ * Runs a program in the pane once its terminal has its first size, and wires keys, output and
+ * resizes. One killed by a signal keeps its pane, with a badge, so its last output can be read.
  */
-export function startPaneShell(
-  pane: ManagedPane,
-  cwd: string | null,
-  onShellEnded: () => void,
-  agent?: AgentLaunch,
-  onStarted?: () => void,
-  restoring = false
-): PaneShell {
+export function startPaneProgram(pane: ManagedPane, program: PaneProgram): PaneShell {
   const { terminal } = pane
   let sessionId: string | null = null
   let exited = false
@@ -62,19 +71,13 @@ export function startPaneShell(
     }, RESIZE_SETTLE_MS)
   })
 
-  // Two frames: the pane's first fit runs on the next one, so the shell starts at the real size.
+  // Two frames: the pane's first fit runs on the next one, so the program starts at the real size.
   requestAnimationFrame(() =>
     requestAnimationFrame(() => {
       if (disposed) return
-      const { cols, rows } = terminal
-      const spawn =
-        restoring && agent && !cwd
-          ? Promise.reject(new Error('The saved terminal folder is unavailable.'))
-          : agent
-            ? window.desktop.launchAgent({ ...agent, cols, rows })
-            : window.desktop.spawnTerminal({ ...(cwd ? { cwd } : {}), cols, rows })
-      spawn
-        .then((session) => {
+      program
+        .start({ cols: terminal.cols, rows: terminal.rows })
+        .then(({ session, size }) => {
           if (disposed) {
             void window.desktop.killTerminal(session.id)
             return
@@ -82,7 +85,7 @@ export function startPaneShell(
           sessionId = session.id
           pane.container.dataset.terminalId = session.id
           pane.container.dataset.pid = String(session.pid)
-          onStarted?.()
+          program.onStarted?.()
           stopListening = listenToSession(session.id, {
             // Acknowledged once xterm has parsed it, so main reads the shell only as fast as it draws.
             data: (data) =>
@@ -93,23 +96,19 @@ export function startPaneShell(
               }),
             exit: (exit) => {
               exited = true
-              if (!exit.error && !exit.signal && (!agent || exit.exitCode === 0)) onShellEnded()
+              if (!exit.error && !exit.signal && (program.endsOnAnyExitCode || exit.exitCode === 0))
+                program.onEnded()
               else {
                 showExited(pane, exit)
-                if (restoring && agent)
-                  notify({
-                    severity: 'error',
-                    title: 'Could not restore agent',
-                    body: exit.error ?? `The agent exited with code ${exit.exitCode}.`
-                  })
+                program.onFailedExit?.(exit)
               }
             }
           })
           for (const data of typedBeforeStart.splice(0)) {
             void window.desktop.writeTerminal(session.id, data).catch(() => undefined)
           }
-          // The pane may have been resized while the shell was starting.
-          if (terminal.cols !== cols || terminal.rows !== rows) {
+          // The pane may have been resized while the program was starting.
+          if (terminal.cols !== size.cols || terminal.rows !== size.rows) {
             void window.desktop
               .resizeTerminal(session.id, terminal.cols, terminal.rows)
               .catch(() => undefined)
@@ -119,14 +118,9 @@ export function startPaneShell(
           if (disposed) return
           exited = true
           pane.container.dataset.exited = 'true'
-          if (restoring)
-            notify({
-              severity: 'error',
-              title: 'Could not restore terminal',
-              body: mainErrorMessage(error)
-            })
+          program.onStartFailed?.(error)
           terminal.write(
-            `\x1b[31mThe ${agent ? 'agent' : 'shell'} couldn't start: ${mainErrorMessage(error)}\x1b[0m\r\n`
+            `\x1b[31mThe ${program.name} couldn't start: ${mainErrorMessage(error)}\x1b[0m\r\n`
           )
         })
     })
@@ -142,4 +136,49 @@ export function startPaneShell(
       if (sessionId) void window.desktop.killTerminal(sessionId).catch(() => undefined)
     }
   }
+}
+
+/**
+ * Starts a shell, or an agent, for the pane. A shell that ends itself (`exit`, Ctrl+D) closes it,
+ * whatever its exit code: bash exits with its last command's status. An agent that exits with a
+ * nonzero code keeps its pane, with a badge, so its last output can be read.
+ */
+export function startPaneShell(
+  pane: ManagedPane,
+  cwd: string | null,
+  onShellEnded: () => void,
+  agent?: AgentLaunch,
+  onStarted?: () => void,
+  restoring = false
+): PaneShell {
+  return startPaneProgram(pane, {
+    start: async (size) => ({
+      session: await (restoring && agent && !cwd
+        ? Promise.reject(new Error('The saved terminal folder is unavailable.'))
+        : agent
+          ? window.desktop.launchAgent({ ...agent, ...size })
+          : window.desktop.spawnTerminal({ ...(cwd ? { cwd } : {}), ...size })),
+      size
+    }),
+    name: agent ? 'agent' : 'shell',
+    endsOnAnyExitCode: !agent,
+    onEnded: onShellEnded,
+    ...(onStarted ? { onStarted } : {}),
+    onFailedExit: (exit) => {
+      if (restoring && agent)
+        notify({
+          severity: 'error',
+          title: 'Could not restore agent',
+          body: exit.error ?? `The agent exited with code ${exit.exitCode}.`
+        })
+    },
+    onStartFailed: (error) => {
+      if (restoring)
+        notify({
+          severity: 'error',
+          title: 'Could not restore terminal',
+          body: mainErrorMessage(error)
+        })
+    }
+  })
 }

@@ -81,6 +81,13 @@
   --info: #c6a0f6;
   --info-background: #233558;
   --info-border: #2e4d89;
+  /* Changed files: FILESTATUS_* of editor/catppuccin-macchiato.json, adjusted where needed to read at 4.5:1 on island and inactive selection. */
+  --vcs-modified: #8aadf4;
+  --vcs-added: #a6da95;
+  --vcs-deleted: #a9adbe; /* #5b6078 lightened for 4.5:1 */
+  --vcs-renamed: #64bbbb; /* #3a8484 lightened for 4.5:1 */
+  --vcs-untracked: #e19c79;
+  --vcs-conflicted: #f5a97f;
   --scrollbar-thumb: #363a4f;
   --scrollbar-thumb-hover: #494d64;
   --island-radius: 10px;

@@ -7,6 +7,7 @@ import { UnsavedChangesDialog } from '@/components/editor/UnsavedChangesDialog'
 import { SettingsPage } from '@/components/settings/SettingsPage'
 import { useAppFont } from '@/components/settings/use-app-font'
 import { useColorThemes } from '@/components/settings/use-color-themes'
+import { HunkTabs } from '@/components/git/HunkTabs'
 import { NotificationsBar } from '@/components/notifications/NotificationsBar'
 import { NotificationsPanel } from '@/components/notifications/NotificationsPanel'
 import { Toaster } from '@/components/notifications/Toaster'
@@ -18,6 +19,7 @@ import { WelcomeScreen } from '@/components/workspace/WelcomeScreen'
 import { useChatStore } from '@/state/chat-store'
 import { connectFilesSession } from '@/state/files-session'
 import { useEditorTabStore } from '@/state/editor-tab-store'
+import { useHunkTabStore } from '@/state/hunk-tab-store'
 import { useKeymapStore } from '@/state/keymap-store'
 import { useNotificationStore } from '@/state/notification-store'
 import { useSettingsStore } from '@/state/settings-store'
@@ -53,6 +55,8 @@ export function AppShell(): React.JSX.Element {
   const layoutLoaded = useShellLayoutStore((state) => state.loaded)
   const hasTerminals = useTerminalStore((state) => state.tabs.length > 0)
   const hasEditorTabs = useEditorTabStore((state) => state.tabs.length > 0)
+  const hasHunkTabs = useHunkTabStore((state) => state.tabs.length > 0)
+  const hunkMissing = useHunkTabStore((state) => state.missing)
   const notificationsOpen = useNotificationStore((state) => state.panelOpen)
   const chatOpen = useChatStore((state) => state.open)
 
@@ -89,6 +93,8 @@ export function AppShell(): React.JSX.Element {
   // Editor tabs stay mounted the same way, keeping unsaved edits, undo history and scroll positions;
   // they stay on screen when the workspace's last folder goes, so unsaved ones can still be saved.
   const showEditor = hasEditorTabs && !settingsOpen && (view.id === 'files' || view.id === 'search')
+  // hunk tabs stay mounted the same way; a failed launch shows how to install hunk in their place.
+  const showHunkTabs = hasHunkTabs && !settingsOpen && view.id === 'git' && !hunkMissing
 
   return (
     <TooltipProvider>
@@ -118,16 +124,7 @@ export function AppShell(): React.JSX.Element {
                   }}
                   className="flex shrink-0 flex-col overflow-hidden rounded-island bg-island"
                 >
-                  {view.Panel ? (
-                    <view.Panel />
-                  ) : (
-                    <>
-                      <h2 className="type-panel-title flex h-panel-header shrink-0 items-center px-4">
-                        {view.panelTitle}
-                      </h2>
-                      <p className="type-description px-4">{view.panelPlaceholder}</p>
-                    </>
-                  )}
+                  <view.Panel />
                 </aside>
                 <SidePanelResizeHandle
                   label={`Resize ${view.label} panel`}
@@ -146,7 +143,8 @@ export function AppShell(): React.JSX.Element {
               {hasTerminals ? <TerminalTabs hidden={!showTerminals} /> : null}
               <UnsavedChangesDialog />
               {hasEditorTabs ? <LazyEditorTabs hidden={!showEditor} /> : null}
-              {showTerminals || showEditor ? null : settingsOpen ? (
+              {hasHunkTabs ? <HunkTabs hidden={!showHunkTabs} /> : null}
+              {showTerminals || showEditor || showHunkTabs ? null : settingsOpen ? (
                 <SettingsPage />
               ) : workspaceEmpty ? (
                 <WelcomeScreen />

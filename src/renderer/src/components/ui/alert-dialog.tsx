@@ -1,17 +1,7 @@
 import * as React from 'react'
 import { AlertDialog as AlertDialogPrimitive } from 'radix-ui'
 import { cn } from '@/lib/class-names'
-
-const BUTTON =
-  'type-button flex h-control items-center rounded-button px-3.5 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none'
-
-/** The default choice: the accent fill, as JetBrains draws a dialog's default button. */
-const PRIMARY_BUTTON = cn(BUTTON, 'bg-primary text-primary-foreground hover:bg-primary/90')
-
-const SECONDARY_BUTTON = cn(
-  BUTTON,
-  'border border-button-border bg-button text-button-foreground hover:bg-hover'
-)
+import { PRIMARY_BUTTON, SECONDARY_BUTTON } from './action-button-classes'
 
 function AlertDialog(props: React.ComponentProps<typeof AlertDialogPrimitive.Root>) {
   return <AlertDialogPrimitive.Root data-slot="alert-dialog" {...props} />

@@ -81,6 +81,13 @@
   --info: #cba6f7;
   --info-background: #233558;
   --info-border: #2e4d89;
+  /* Changed files: FILESTATUS_* of editor/catppuccin-mocha.json, adjusted where needed to read at 4.5:1 on island and inactive selection. */
+  --vcs-modified: #89b4fa;
+  --vcs-added: #a6e3a1;
+  --vcs-deleted: #a1a4b5; /* #585b70 lightened for 4.5:1 */
+  --vcs-renamed: #4fb2b2; /* #3a8484 lightened for 4.5:1 */
+  --vcs-untracked: #e4a47f;
+  --vcs-conflicted: #fab387;
   --scrollbar-thumb: #313244;
   --scrollbar-thumb-hover: #45475a;
   --island-radius: 10px;

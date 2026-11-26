@@ -83,6 +83,13 @@
   --info: #2f5eb9;
   --info-background: #f7f8ff;
   --info-border: #bdd3ff;
+  /* Changed files: FILESTATUS_* of editor/light.json, adjusted where needed to read at 4.5:1 on island and inactive selection. */
+  --vcs-modified: #0033b3;
+  --vcs-added: #067816; /* #067d17 darkened for 4.5:1 */
+  --vcs-deleted: #636673; /* #6c707e darkened for 4.5:1 */
+  --vcs-renamed: #0033b3;
+  --vcs-untracked: #b23247;
+  --vcs-conflicted: #cc192a; /* #de1b2e darkened for 4.5:1 */
   --scrollbar-thumb: #00000033;
   --scrollbar-thumb-hover: #00000080;
   --island-radius: 10px;

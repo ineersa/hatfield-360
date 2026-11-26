@@ -81,6 +81,13 @@
   --info: #589df6;
   --info-background: #393b40;
   --info-border: #43454a;
+  /* Changed files: FILESTATUS_* of editor/darcula.json, adjusted where needed to read at 4.5:1 on island and inactive selection. */
+  --vcs-modified: #a4c0d6; /* #6897bb lightened for 4.5:1 */
+  --vcs-added: #a0c597; /* #629755 lightened for 4.5:1 */
+  --vcs-deleted: #bbbbbb; /* #6c6c6c lightened for 4.5:1 */
+  --vcs-renamed: #80c7c7; /* #3a8484 lightened for 4.5:1 */
+  --vcs-untracked: #e6ada6; /* #d1675a lightened for 4.5:1 */
+  --vcs-conflicted: #e6ada8; /* #d5756c lightened for 4.5:1 */
   --scrollbar-thumb: #80808059;
   --scrollbar-thumb-hover: #8080808c;
   --island-radius: 10px;

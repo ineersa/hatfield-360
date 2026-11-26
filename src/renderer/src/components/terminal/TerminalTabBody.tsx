@@ -2,31 +2,22 @@ import { checkpointTab, currentTerminalGeneration } from '@/state/terminal-works
 import { conversationKey } from '../../../../shared/recent-conversation'
 import type { PaneLeaf } from '../../../../shared/terminal-workspace-api'
 import type { ManagedPane } from '@/lib/pane-manager/pane-manager-types'
-import { notify } from '@/state/notification-store'
-import { mainErrorMessage } from '@/lib/main-error-message'
 import type { AgentLaunch } from '../../../../shared/agent-api'
-import type { ITerminalOptions } from '@xterm/xterm'
 import { useEffect, useRef } from 'react'
 import { PaneManager } from '@/lib/pane-manager/pane-manager'
 import { terminalShortcutLabel } from '@/lib/keymap-match'
 import { useKeymapStore } from '@/state/keymap-store'
-import { terminalTheme } from '@/lib/terminal-theme'
-import { useSettingsStore } from '@/state/settings-store'
 import { useTerminalStore, type TerminalTab } from '@/state/terminal-store'
 import { startPaneShell, type PaneShell } from './pane-shell'
+import {
+  currentGpuAcceleration,
+  currentTerminalOptions,
+  useTerminalAppearance
+} from './terminal-appearance'
 import { bindClipboardKeys } from './terminal-clipboard'
 import { TerminalContextMenu } from './TerminalContextMenu'
+import { openTerminalLink } from './terminal-link'
 import { terminalTabControllers } from './terminal-tab-controllers'
-
-function currentTerminalOptions(): ITerminalOptions {
-  const { values } = useSettingsStore.getState()
-  return {
-    fontFamily: values['terminal.fontFamily'],
-    fontSize: values['terminal.fontSize'],
-    lineHeight: values['terminal.lineHeight'],
-    theme: terminalTheme(values['terminal.colorTheme'])
-  }
-}
 
 /** One tab's split panes; mounted while the tab is open, so its shells live while it is hidden. */
 export function TerminalTabBody({
@@ -43,11 +34,6 @@ export function TerminalTabBody({
   const root = useRef<HTMLDivElement>(null)
   const isShown = useRef(shown)
   const manager = useRef<PaneManager | null>(null)
-  const fontFamily = useSettingsStore((state) => state.values['terminal.fontFamily'])
-  const fontSize = useSettingsStore((state) => state.values['terminal.fontSize'])
-  const lineHeight = useSettingsStore((state) => state.values['terminal.lineHeight'])
-  const gpuAcceleration = useSettingsStore((state) => state.values['terminal.gpuAcceleration'])
-  const colorTheme = useSettingsStore((state) => state.values['terminal.colorTheme'])
 
   useEffect(() => {
     const element = root.current
@@ -118,7 +104,7 @@ export function TerminalTabBody({
       element,
       {
         terminalOptions: currentTerminalOptions,
-        gpuAcceleration: () => useSettingsStore.getState().values['terminal.gpuAcceleration'],
+        gpuAcceleration: currentGpuAcceleration,
         onActivePaneChange: publishActivePane,
         onPaneCreated: create,
         onPaneClosed: (paneId) => {
@@ -128,17 +114,7 @@ export function TerminalTabBody({
           else checkpoint()
         },
         closePaneTitle: `Close Pane (${terminalShortcutLabel(useKeymapStore.getState().shell, 'close-pane')})`,
-        onLinkClick: (event, url) => {
-          // Ctrl/Cmd+click, as in VS Code, so selecting text across a link doesn't open it.
-          if (!event.ctrlKey && !event.metaKey) return
-          void window.desktop.openWebLink(url).catch((error: unknown) =>
-            notify({
-              severity: 'error',
-              title: 'Could not open terminal link',
-              body: mainErrorMessage(error)
-            })
-          )
-        }
+        onLinkClick: openTerminalLink
       },
       checkpoint
     )
@@ -223,17 +199,7 @@ export function TerminalTabBody({
     }
   }, [tab])
 
-  useEffect(() => {
-    manager.current?.setTerminalOptions({ fontFamily, fontSize, lineHeight })
-  }, [fontFamily, fontSize, lineHeight])
-
-  useEffect(() => {
-    manager.current?.setTerminalOptions({ theme: terminalTheme(colorTheme) })
-  }, [colorTheme])
-
-  useEffect(() => {
-    manager.current?.setGpuAcceleration(gpuAcceleration)
-  }, [gpuAcceleration])
+  useTerminalAppearance(manager)
 
   useEffect(() => {
     isShown.current = shown
