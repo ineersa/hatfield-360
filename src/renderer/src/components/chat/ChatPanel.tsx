@@ -1,22 +1,43 @@
+import { FilePen, Map as MapIcon, Plus, X } from 'lucide-react'
+import { useLayoutEffect, useRef } from 'react'
 import {
-  ArrowDown,
-  Check,
-  ChevronRight,
-  Circle,
-  FilePen,
-  Loader,
-  Map as MapIcon,
-  Plus,
-  Send,
-  Square,
-  X,
-  XCircle
-} from 'lucide-react'
-import { useLayoutEffect, useRef, useState } from 'react'
+  Confirmation,
+  ConfirmationAccepted,
+  ConfirmationAction,
+  ConfirmationActions,
+  ConfirmationRejected,
+  ConfirmationTitle
+} from '@/components/ai-elements/confirmation'
+import {
+  Conversation,
+  ConversationContent,
+  ConversationEmptyState,
+  ConversationScrollButton
+} from '@/components/ai-elements/conversation'
+import { Message, MessageContent } from '@/components/ai-elements/message'
+import {
+  PromptInput,
+  PromptInputBody,
+  PromptInputFooter,
+  PromptInputProvider,
+  PromptInputSelect,
+  PromptInputSelectContent,
+  PromptInputSelectItem,
+  PromptInputSelectTrigger,
+  PromptInputSelectValue,
+  PromptInputSubmit,
+  PromptInputTextarea,
+  PromptInputTools
+} from '@/components/ai-elements/prompt-input'
+import { Reasoning, ReasoningContent, ReasoningTrigger } from '@/components/ai-elements/reasoning'
+import { Shimmer } from '@/components/ai-elements/shimmer'
+import { Tool, ToolContent, ToolHeader, ToolInput, ToolOutput } from '@/components/ai-elements/tool'
+import type { ToolState } from '@/components/ai-elements/ui-parts'
 import {
   SIDE_PANEL_HANDLE_WIDTH,
   SidePanelResizeHandle
 } from '@/components/shell/SidePanelResizeHandle'
+import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/class-names'
 import { cssFontFamily } from '@/lib/css-font-family'
@@ -26,9 +47,6 @@ import { useSettingsStore } from '@/state/settings-store'
 import { SIDE_PANEL_MIN_WIDTH, useShellLayoutStore } from '@/state/shell-layout-store'
 import type { ChatConfigId, ChatToolStatus } from '../../../../shared/chat-agent-api'
 import { ChatMarkdown } from './ChatMarkdown'
-
-const ICON_BUTTON =
-  'flex size-icon-button shrink-0 items-center justify-center rounded-button text-muted-foreground hover:bg-hover hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none disabled:opacity-50 disabled:hover:bg-transparent'
 
 function IconButton({
   label,
@@ -44,147 +62,107 @@ function IconButton({
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <button
-          type="button"
+        <Button
+          variant="ghost"
+          size="icon"
           aria-label={label}
           disabled={disabled}
           onClick={onClick}
-          className={ICON_BUTTON}
+          className="text-muted-foreground"
         >
           {children}
-        </button>
+        </Button>
       </TooltipTrigger>
       <TooltipContent side="bottom">{label}</TooltipContent>
     </Tooltip>
   )
 }
 
-const STATUS_LABEL: Record<ChatToolStatus, string> = {
-  pending: 'Pending',
-  in_progress: 'Running',
-  completed: 'Done',
-  failed: 'Failed'
+const TOOL_STATE: Record<ChatToolStatus, ToolState> = {
+  pending: 'input-streaming',
+  in_progress: 'input-available',
+  completed: 'output-available',
+  failed: 'output-error'
 }
 
-function ToolStatusIcon({ status }: { status: ChatToolStatus }): React.JSX.Element {
-  const props = { className: 'size-3.5 shrink-0', strokeWidth: 2, 'aria-hidden': true } as const
-  if (status === 'completed')
-    return <Check {...props} className={cn(props.className, 'text-success')} />
-  if (status === 'failed')
-    return <XCircle {...props} className={cn(props.className, 'text-error')} />
-  if (status === 'in_progress')
-    return (
-      <Loader {...props} className={cn(props.className, 'animate-spin text-muted-foreground')} />
-    )
-  return <Circle {...props} className={cn(props.className, 'text-muted-foreground')} />
-}
-
-/** A collapsed section, opened to show what a tool got and gave, or a thought. */
-function Disclosure({
-  summary,
-  label,
-  children
-}: {
-  summary: React.ReactNode
-  label: string
-  children: React.ReactNode
-}): React.JSX.Element {
-  return (
-    <details aria-label={label} className="group rounded-component border border-separator">
-      <summary className="flex h-tree-row cursor-pointer list-none items-center gap-1.5 px-2 hover:bg-hover [&::-webkit-details-marker]:hidden">
-        <ChevronRight
-          className="size-3.5 shrink-0 text-muted-foreground transition-transform group-open:rotate-90"
-          aria-hidden
-        />
-        {summary}
-      </summary>
-      <div className="flex flex-col gap-2 border-t border-separator p-2">{children}</div>
-    </details>
-  )
-}
-
-const Code = ({ text }: { text: string }): React.JSX.Element => (
-  <pre className="chat-code max-h-64 overflow-auto rounded-component bg-frame p-2 whitespace-pre-wrap">
-    {text}
-  </pre>
-)
-
-function Item({ item, busy }: { item: ChatItem; busy: boolean }): React.JSX.Element {
+function Item({ item, live }: { item: ChatItem; live: boolean }): React.JSX.Element {
   const answer = useChatStore((state) => state.answerPermission)
   switch (item.kind) {
     case 'user':
       return (
-        <div
-          aria-label="Your message"
-          className="ml-8 self-end rounded-component bg-selection px-3 py-2 whitespace-pre-wrap text-selection-foreground"
-        >
-          {item.text}
-        </div>
+        <Message from="user" aria-label="Your message">
+          <MessageContent className="whitespace-pre-wrap">{item.text}</MessageContent>
+        </Message>
       )
     case 'assistant':
       return (
-        <div aria-label="Claude's reply">
-          <ChatMarkdown text={item.text} />
-        </div>
+        <Message from="assistant" aria-label="Claude's reply">
+          <MessageContent>
+            <ChatMarkdown text={item.text} streaming={live} />
+          </MessageContent>
+        </Message>
       )
     case 'thought':
       return (
-        <Disclosure label="Thinking" summary={<span className="type-hint">Thinking</span>}>
-          <p className="type-hint whitespace-pre-wrap">{item.text}</p>
-        </Disclosure>
+        <Reasoning isStreaming={live}>
+          <ReasoningTrigger />
+          <ReasoningContent>{item.text}</ReasoningContent>
+        </Reasoning>
       )
     case 'tool':
       return (
-        <Disclosure
-          label={`Tool: ${item.title}`}
-          summary={
-            <>
-              <ToolStatusIcon status={item.status} />
-              <span className="min-w-0 flex-1 truncate">{item.title}</span>
-              <span className="type-hint shrink-0">{STATUS_LABEL[item.status]}</span>
-            </>
+        <Tool role="group" aria-label={`Tool: ${item.title}`}>
+          <ToolHeader
+            type="dynamic-tool"
+            toolName={item.title}
+            title={item.title}
+            state={TOOL_STATE[item.status]}
+          />
+          <ToolContent>
+            {item.input === null ? null : <ToolInput input={item.input} />}
+            <ToolOutput
+              output={item.status === 'failed' ? undefined : item.output}
+              errorText={item.status === 'failed' ? (item.output ?? 'Failed') : undefined}
+            />
+          </ToolContent>
+        </Tool>
+      )
+    case 'permission': {
+      const chosen = item.options.find((option) => option.name === item.answer)
+      return (
+        <Confirmation
+          role="region"
+          aria-label="Permission request"
+          state={item.answer === null ? 'approval-requested' : 'approval-responded'}
+          approval={
+            item.answer === null
+              ? { id: item.requestId }
+              : { id: item.requestId, approved: chosen?.kind.startsWith('allow') ?? false }
           }
         >
-          {item.input === null ? null : <Code text={item.input} />}
-          {item.output === null ? null : <Code text={item.output} />}
-          {item.input === null && item.output === null ? (
-            <p className="type-hint">Nothing to show.</p>
-          ) : null}
-        </Disclosure>
-      )
-    case 'permission':
-      return (
-        <section
-          aria-label="Permission request"
-          className="flex flex-col gap-2 rounded-component border border-warning-border bg-warning-background p-3"
-        >
-          <p>
+          <ConfirmationTitle>
             Allow <span className="font-mono">{item.title}</span>?
-          </p>
-          {item.answer === null ? (
-            <div className="flex flex-wrap gap-2">
-              {item.options.map((option) => (
-                <button
-                  key={option.optionId}
-                  type="button"
-                  disabled={!busy}
-                  onClick={() => answer(item.requestId, option.optionId, option.name)}
-                  className={cn(
-                    'type-button h-control rounded-button border px-3 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none',
-                    option.kind.startsWith('allow')
-                      ? 'border-transparent bg-primary text-primary-foreground'
-                      : 'border-button-border bg-button text-button-foreground hover:bg-hover'
-                  )}
-                >
-                  {option.name}
-                </button>
-              ))}
-            </div>
-          ) : (
+          </ConfirmationTitle>
+          <ConfirmationAccepted>
             <p className="type-hint">{item.answer}</p>
-          )}
-        </section>
+          </ConfirmationAccepted>
+          <ConfirmationRejected>
+            <p className="type-hint">{item.answer}</p>
+          </ConfirmationRejected>
+          <ConfirmationActions className="flex-wrap justify-start self-start">
+            {item.options.map((option) => (
+              <ConfirmationAction
+                key={option.optionId}
+                variant={option.kind.startsWith('allow') ? 'default' : 'outline'}
+                onClick={() => answer(item.requestId, option.optionId, option.name)}
+              >
+                {option.name}
+              </ConfirmationAction>
+            ))}
+          </ConfirmationActions>
+        </Confirmation>
       )
+    }
   }
   return (
     <p
@@ -193,76 +171,6 @@ function Item({ item, busy }: { item: ChatItem; busy: boolean }): React.JSX.Elem
     >
       {item.text}
     </p>
-  )
-}
-
-/** How close to the end counts as following the conversation. */
-const AT_END_PX = 24
-
-/**
- * The conversation, scrolled: it follows new output while it shows the end, and stays where the
- * user scrolled to otherwise, with a button back to the end.
- */
-const scrollToEnd = (element: HTMLElement | null): void => {
-  if (element) element.scrollTop = element.scrollHeight
-}
-
-function Conversation({ children }: { children: React.ReactNode }): React.JSX.Element {
-  const scroller = useRef<HTMLDivElement>(null)
-  const content = useRef<HTMLDivElement>(null)
-  const following = useRef(true)
-  const [atEnd, setAtEnd] = useState(true)
-  useLayoutEffect(() => {
-    const element = content.current
-    if (!element) return undefined
-    // Streamed text grows the content without a render here; a resize catches every change.
-    const observer = new ResizeObserver(() => {
-      const view = scroller.current
-      // Content that fits (a new chat) is followed again from its start.
-      if (view && view.scrollHeight <= view.clientHeight + AT_END_PX) {
-        following.current = true
-        setAtEnd(true)
-      }
-      if (following.current) scrollToEnd(view)
-    })
-    observer.observe(element)
-    return () => observer.disconnect()
-  }, [])
-  return (
-    <div className="relative min-h-0 flex-1">
-      <div
-        ref={scroller}
-        className="h-full overflow-y-auto"
-        onScroll={(event) => {
-          const element = event.currentTarget
-          const end = element.scrollHeight - element.scrollTop - element.clientHeight <= AT_END_PX
-          following.current = end
-          setAtEnd(end)
-        }}
-      >
-        <div
-          ref={content}
-          role="log"
-          aria-label="Conversation"
-          className="flex flex-col gap-3 px-4 py-2"
-        >
-          {children}
-        </div>
-      </div>
-      {atEnd ? null : (
-        <button
-          type="button"
-          aria-label="Scroll to the latest"
-          onClick={() => {
-            following.current = true
-            scrollToEnd(scroller.current)
-          }}
-          className="absolute bottom-2 left-1/2 flex size-icon-button -translate-x-1/2 items-center justify-center rounded-button border border-button-border bg-button text-button-foreground hover:bg-hover"
-        >
-          <ArrowDown className="size-4" aria-hidden />
-        </button>
-      )}
-    </div>
   )
 }
 
@@ -276,32 +184,30 @@ function ConfigPickers(): React.JSX.Element {
   const options = useChatStore((state) => state.configOptions)
   const setConfig = useChatStore((state) => state.setConfig)
   return (
-    <div className="flex min-w-0 flex-1 gap-1">
+    <PromptInputTools className="min-w-0 flex-1">
       {PICKERS.map(({ id, label }) => {
         const option = options.find((each) => each.id === id)
         if (!option) return null
         return (
-          <select
+          <PromptInputSelect
             key={id}
-            aria-label={label}
-            title={label}
             value={option.currentValue}
-            onChange={(event) => setConfig(id, event.target.value)}
-            className="type-hint h-control min-w-0 flex-1 truncate rounded-component border border-input-border bg-input px-1 text-input-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            onValueChange={(value) => setConfig(id, value)}
           >
-            {option.options.map((choice) => (
-              <option
-                key={choice.value}
-                value={choice.value}
-                title={choice.description ?? undefined}
-              >
-                {choice.name}
-              </option>
-            ))}
-          </select>
+            <PromptInputSelectTrigger aria-label={label} title={label} className="min-w-0">
+              <PromptInputSelectValue />
+            </PromptInputSelectTrigger>
+            <PromptInputSelectContent>
+              {option.options.map((choice) => (
+                <PromptInputSelectItem key={choice.value} value={choice.value}>
+                  {choice.name}
+                </PromptInputSelectItem>
+              ))}
+            </PromptInputSelectContent>
+          </PromptInputSelect>
         )
       })}
-    </div>
+    </PromptInputTools>
   )
 }
 
@@ -309,56 +215,36 @@ function Composer(): React.JSX.Element {
   const status = useChatStore((state) => state.status)
   const send = useChatStore((state) => state.send)
   const stop = useChatStore((state) => state.stop)
-  const [text, setText] = useState('')
-  const input = useRef<HTMLTextAreaElement>(null)
   const busy = status === 'busy'
-  useLayoutEffect(() => {
-    input.current?.focus()
-  }, [])
-  const submit = (): void => {
-    if (send(text)) setText('')
-  }
   return (
-    <form
-      className="flex shrink-0 flex-col gap-1.5 border-t border-separator p-2"
-      onSubmit={(event) => {
-        event.preventDefault()
-        submit()
-      }}
-    >
-      <textarea
-        ref={input}
-        aria-label="Message"
-        rows={3}
-        value={text}
-        placeholder="Ask about the workspace. @selection and @file refer to the editor."
-        disabled={status === 'ended' || status === 'none'}
-        onChange={(event) => setText(event.target.value)}
-        onKeyDown={(event) => {
-          if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
-            event.preventDefault()
-            submit()
-          }
+    <PromptInputProvider>
+      <PromptInput
+        className="shrink-0 p-2"
+        onSubmit={({ text }) => {
+          // Throwing keeps the text in the box: it wasn't sent.
+          if (!send(text)) throw new Error('The message was not sent.')
         }}
-        className="max-h-48 min-h-control resize-none rounded-component border border-input-border bg-input px-2 py-1.5 text-input-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
-      />
-      <div className="flex items-center gap-1">
-        <ConfigPickers />
-        {busy ? (
-          <IconButton label="Stop (Esc)" onClick={stop}>
-            <Square className="size-4" aria-hidden />
-          </IconButton>
-        ) : (
-          <IconButton
-            label="Send (Enter)"
-            onClick={submit}
-            disabled={status !== 'ready' || text.trim() === ''}
-          >
-            <Send className="size-4" aria-hidden />
-          </IconButton>
-        )}
-      </div>
-    </form>
+      >
+        <PromptInputBody>
+          <PromptInputTextarea
+            aria-label="Message"
+            autoFocus
+            placeholder="Ask about the workspace. @selection and @file refer to the editor."
+            disabled={status === 'ended' || status === 'none'}
+          />
+        </PromptInputBody>
+        <PromptInputFooter>
+          <ConfigPickers />
+          <PromptInputSubmit
+            aria-label={busy ? 'Stop (Esc)' : 'Send (Enter)'}
+            title={busy ? 'Stop (Esc)' : 'Send (Enter)'}
+            status={busy ? 'streaming' : 'ready'}
+            onStop={stop}
+            disabled={!busy && status !== 'ready'}
+          />
+        </PromptInputFooter>
+      </PromptInput>
+    </PromptInputProvider>
   )
 }
 
@@ -420,22 +306,20 @@ export function ChatPanel(): React.JSX.Element {
             <X className="size-4.5" aria-hidden />
           </IconButton>
         </div>
-        <Conversation>
-          {items.length === 0 && status !== 'none' ? (
-            <p className="type-description">
-              {status === 'starting'
-                ? 'Starting Claude…'
-                : 'Ask Claude about the projects in this workspace.'}
-            </p>
-          ) : null}
-          {items.map((item) => (
-            <Item key={item.id} item={item} busy={busy} />
-          ))}
-          {busy ? (
-            <p className="type-hint flex items-center gap-1.5">
-              <Loader className="size-3.5 animate-spin" aria-hidden /> Working…
-            </p>
-          ) : null}
+        <Conversation aria-label="Conversation" className="min-h-0">
+          <ConversationContent className="gap-3 px-4 py-2">
+            {items.length === 0 && status !== 'none' ? (
+              <ConversationEmptyState
+                title={status === 'starting' ? 'Starting Claude…' : 'Ask Claude'}
+                description="About the projects in this workspace."
+              />
+            ) : null}
+            {items.map((item, index) => (
+              <Item key={item.id} item={item} live={busy && index === items.length - 1} />
+            ))}
+            {busy ? <Shimmer className="type-hint">Working…</Shimmer> : null}
+          </ConversationContent>
+          <ConversationScrollButton aria-label="Scroll to the latest" />
         </Conversation>
         {error === null ? null : (
           <p role="alert" className="type-hint shrink-0 px-4 pb-1 text-error">

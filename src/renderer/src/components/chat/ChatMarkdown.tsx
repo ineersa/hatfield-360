@@ -1,5 +1,5 @@
-import Markdown, { type Components } from 'react-markdown'
-import remarkGfm from 'remark-gfm'
+import type { Components } from 'streamdown'
+import { MessageResponse } from '@/components/ai-elements/message'
 import { useChatStore } from '@/state/chat-store'
 import { parseCodeReference } from '../../../../shared/chat-references'
 
@@ -15,14 +15,9 @@ const follow = (text: string): boolean => {
 
 const COMPONENTS: Components = {
   // A `path:line` in a reply opens the editor there.
-  code: ({ children, className }) => {
+  inlineCode: ({ children, className }) => {
     const text = typeof children === 'string' ? children : null
-    if (
-      className === undefined &&
-      text !== null &&
-      !text.includes('\n') &&
-      parseCodeReference(text) !== null
-    ) {
+    if (text !== null && parseCodeReference(text) !== null) {
       return (
         <button type="button" className={LINK_CLASS} onClick={() => follow(text)}>
           <code>{text}</code>
@@ -54,12 +49,22 @@ const COMPONENTS: Components = {
 }
 
 /** A reply as Markdown, without raw HTML, with its code references as links. */
-export function ChatMarkdown({ text }: { text: string }): React.JSX.Element {
+export function ChatMarkdown({
+  text,
+  streaming
+}: {
+  text: string
+  streaming: boolean
+}): React.JSX.Element {
   return (
-    <div className="markdown-preview chat-markdown">
-      <Markdown remarkPlugins={[remarkGfm]} skipHtml components={COMPONENTS}>
-        {text}
-      </Markdown>
-    </div>
+    <MessageResponse
+      className="markdown-preview chat-markdown"
+      components={COMPONENTS}
+      skipHtml
+      linkSafety={{ enabled: false }}
+      isAnimating={streaming}
+    >
+      {text}
+    </MessageResponse>
   )
 }
