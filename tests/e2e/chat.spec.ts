@@ -7,12 +7,13 @@ import { seedWorkspace } from './workspace-seed'
 
 const fixtures = resolve(__dirname, '..', 'fixtures', 'acp')
 
-/** What the links cassette sends; its reply repeats the text after the first line. */
-const LINKS_PROMPT = [
-  'Without using any tools, reply with exactly this text and nothing else:',
-  '',
-  'The greeting is in src/greeting.js:2:10 and is called from __src/main.js:1, 3__; the readme is **README.md**, see also `src/greeting.js#L2-L3`. There is no src/missing.js:4.'
-].join('\n')
+/** What the links cassette sends, as scripts/record-chat-cassettes.ts recorded it. */
+const linksPrompt = (repo: string): string =>
+  [
+    'Without using any tools, reply with exactly this text and nothing else:',
+    '',
+    `The greeting is in src/greeting.js:2:10 and is called from __src/main.js:1, 3__; the readme is **README.md**, see also \`src/greeting.js#L2-L3\` and [its last line](<${repo}/src/greeting.js#L3>). There is no src/missing.js:4.`
+  ].join('\n')
 
 const panel = (page: Page) => page.getByRole('complementary', { name: 'Chat panel' })
 
@@ -97,7 +98,7 @@ test('Shift Shift opens a new chat on Haiku whose answer links to the code it fo
 })
 
 test('every file a reply names opens the editor at its line, and a missing one stays text', async () => {
-  const [, userData, cleanup] = await recordedProject()
+  const [repo, userData, cleanup] = await recordedProject()
   try {
     await withApp(
       async (_app, page) => {
@@ -106,7 +107,7 @@ test('every file a reply names opens the editor at its line, and a missing one s
         const chat = panel(page)
         const message = chat.getByRole('textbox', { name: 'Message' })
         await expect(picker(chat, 'Model')).toHaveText('Haiku 5.5')
-        await message.fill(LINKS_PROMPT)
+        await message.fill(linksPrompt(repo))
         await message.press('Enter')
         const reply = chat.getByLabel("Claude's reply")
         await expect(reply).toContainText('There is no src/missing.js:4.')
@@ -134,6 +135,11 @@ test('every file a reply names opens the editor at its line, and a missing one s
         await link('README.md').click()
         await expect(tab(page, 'README.md')).toHaveAttribute('aria-selected', 'true')
         await expect(caret).toHaveText('1:1')
+
+        // A Markdown link to an absolute path in the project opens it too.
+        await reply.getByRole('link', { name: 'its last line' }).click()
+        await expect(tab(page, 'greeting.js')).toHaveAttribute('aria-selected', 'true')
+        await expect(caret).toHaveText('3:1')
       },
       { userDataDir: userData, env: replaying('links') }
     )

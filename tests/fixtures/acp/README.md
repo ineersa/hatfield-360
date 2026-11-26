@@ -31,3 +31,7 @@ upgrading the adapter: a unit test fails while a cassette's `adapter` differs fr
 one. Check the diff before committing: the normalizer replaces your home folder, the project
 folder, generated ids, timestamps and email addresses, and drops the account status and usage
 messages the app ignores.
+
+A reply may name the project folder (an absolute path): the normalizer joins the streamed pieces a
+path is split across before replacing it with `<cwd>`, which the replayer fills with the test's
+folder. Recording fails if the temp folder or your home folder is still in the cassette.
