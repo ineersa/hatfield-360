@@ -9,6 +9,7 @@ import {
 } from '@/components/ui/context-menu'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/class-names'
+import { useMemorySearchStore } from '@/state/memory-search-store'
 import { notify } from '@/state/notification-store'
 import {
   RECENT_CONVERSATION_MS,
@@ -124,6 +125,7 @@ function RecentRow({
 }
 
 export function RecentSessions({
+  project,
   name,
   projectBranch,
   generation,
@@ -131,6 +133,8 @@ export function RecentSessions({
   live,
   now
 }: {
+  /** The project whose memory the hint for older sessions searches; null for none. */
+  project: string | null
   name: string
   projectBranch: string | null
   generation: number
@@ -182,15 +186,16 @@ export function RecentSessions({
             </button>
           </li>
         ) : null}
-        {expanded && remaining === 0 ? (
+        {expanded && remaining === 0 && project !== null ? (
           <li>
-            <span
-              className="type-hint flex h-tree-row items-center gap-1.5 px-2 text-muted-foreground"
-              title="Memory search is not available yet"
+            <button
+              type="button"
+              onClick={() => useMemorySearchStore.getState().open(project)}
+              className="type-hint flex h-tree-row items-center gap-1.5 rounded-component px-2 text-muted-foreground hover:bg-row-hover hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
             >
               <Search className="size-3 shrink-0" aria-hidden />
               Older than 14 days: search memory
-            </span>
+            </button>
           </li>
         ) : null}
       </ul>

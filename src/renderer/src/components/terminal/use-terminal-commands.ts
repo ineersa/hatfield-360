@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { connectTerminalOutput } from '@/lib/terminal-output-router'
 import { terminalCommandForKey } from '@/lib/keymap-match'
 import { useKeymapStore } from '@/state/keymap-store'
+import { useMemorySearchStore } from '@/state/memory-search-store'
 import { useTerminalStore } from '@/state/terminal-store'
 import { useWorkspaceStore } from '@/state/workspace-store'
 import type { TerminalCommand } from '../../../../shared/terminal-api'
@@ -19,6 +20,8 @@ export function focusActiveTerminal(): void {
  * act only on terminals on screen: a shortcut pressed in Settings must not close a hidden shell.
  */
 export function runTerminalCommand(command: TerminalCommand): boolean {
+  // The Search Memory popup owns the keys: a pane must not close or split behind it.
+  if (useMemorySearchStore.getState().project !== null) return false
   const { tabs, activeTabId, openTerminal, cycleTab } = useTerminalStore.getState()
   const activeTab = tabs.find((tab) => tab.id === activeTabId)
   const controller = activeTab ? terminalTabControllers.get(activeTab.id) : undefined

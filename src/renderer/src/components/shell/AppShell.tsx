@@ -1,4 +1,6 @@
 import { useEffect, useRef } from 'react'
+import { MemorySearchDialog } from '@/components/memory/MemorySearchDialog'
+import { useMemorySearchShortcut } from '@/components/memory/use-memory-search-shortcut'
 import { ChatPanel } from '@/components/chat/ChatPanel'
 import { useChatShortcut } from '@/components/chat/use-chat-shortcut'
 import { UnsavedChangesDialog } from '@/components/editor/UnsavedChangesDialog'
@@ -33,6 +35,7 @@ import { StatusBar } from './StatusBar'
 const MAIN_AREA_MIN_WIDTH = 120
 
 export function AppShell(): React.JSX.Element {
+  useMemorySearchShortcut()
   const activeView = useShellLayoutStore((state) => state.activeView)
   const panel = useShellLayoutStore((state) => state.panels[state.activeView])
   const setPanelWidth = useShellLayoutStore((state) => state.setPanelWidth)
@@ -89,6 +92,7 @@ export function AppShell(): React.JSX.Element {
 
   return (
     <TooltipProvider>
+      <MemorySearchDialog />
       <div className="type-body flex h-screen flex-col bg-frame">
         <div className="flex min-h-0 flex-1 pt-island-gap">
           <ActivityBar />

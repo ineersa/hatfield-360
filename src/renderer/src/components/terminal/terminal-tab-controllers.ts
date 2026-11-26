@@ -13,6 +13,8 @@ export type TerminalTabController = {
   splitConversation: (agent: AgentLaunch, cwd: string | null) => boolean
   launchSplit: (provider: AgentProvider) => void
   focus: () => void
+  /** The folder the active pane was opened in; a split can belong to another project than its tab. */
+  activeCwd: () => string | null
   /** Whether the tab's panes are on screen (its tab is active and no other page covers them). */
   isShown: () => boolean
 }

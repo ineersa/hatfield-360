@@ -89,7 +89,12 @@ describe('keymap', () => {
     )
     const app = APP_COMMANDS.map((command) => appShortcut(shellKeymap('linux'), command))
     expect(terminal.filter((key) => key !== null && plainCtrl.test(key))).toEqual([])
-    expect(app.filter((key) => key !== null && plainCtrl.test(key))).toEqual(['Ctrl+O', 'Ctrl+S'])
+    // Search Memory takes Ctrl+K (kill-line) on purpose: it opens over a focused terminal.
+    expect(app.filter((key) => key !== null && plainCtrl.test(key))).toEqual([
+      'Ctrl+O',
+      'Ctrl+S',
+      'Ctrl+K'
+    ])
   })
 
   it('has app keys after JetBrains', () => {

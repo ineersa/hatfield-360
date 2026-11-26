@@ -9,6 +9,7 @@ import { KEYBINDINGS_CHANNELS, type KeybindingsView } from '../shared/keybinding
 import { SEARCH_CHANNELS, type SearchEvent } from '../shared/search-api'
 import { SETTINGS_CHANNELS, type SettingsView } from '../shared/settings-api'
 import { SHELL_LAYOUT_CHANNELS } from '../shared/shell-layout-api'
+import { MEMORY_SEARCH_CHANNELS } from '../shared/memory-search-api'
 import { LANGUAGE_SERVER_CHANNELS, type LanguageServerStatus } from '../shared/language-server-api'
 import { TERMINAL_CHANNELS, type TerminalCommand, type TerminalExit } from '../shared/terminal-api'
 import { type WorkspaceView, WORKSPACE_CHANNELS } from '../shared/workspace-api'
@@ -36,6 +37,8 @@ const desktopApi: DesktopApi = {
   launchAgent: (request) => ipcRenderer.invoke(AGENT_CHANNELS.launch, request),
   getRecentConversations: (generation) => ipcRenderer.invoke(AGENT_CHANNELS.recent, generation),
   getAgentSessions: () => ipcRenderer.invoke(AGENT_CHANNELS.get),
+  searchMemory: (request) => ipcRenderer.invoke(MEMORY_SEARCH_CHANNELS.search, request),
+  recallMemory: (project, id) => ipcRenderer.invoke(MEMORY_SEARCH_CHANNELS.recall, project, id),
   subscribeAgentNotifications: (callback) => {
     const listener = (_event: unknown, notice: AgentNotification): void => callback(notice)
     ipcRenderer.on(AGENT_CHANNELS.notification, listener)
