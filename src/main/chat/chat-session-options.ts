@@ -43,7 +43,7 @@ type SessionSetup = {
 
 /**
  * A lean, unpersisted Claude Code session: only the basic tools, no MCP servers but the app's, no
- * CLAUDE.md, settings, plugins, hooks or skills, and Bash in Claude Code's own sandbox.
+ * CLAUDE.md, settings, plugins, hooks or skills.
  */
 export function newSessionRequest({
   cwd,
@@ -71,14 +71,7 @@ export function newSessionRequest({
           strictMcpConfig: true,
           settingSources: [],
           // Without this Claude Code keeps a memory folder under ~/.claude/projects.
-          settings: { autoMemoryEnabled: false },
-          sandbox: {
-            enabled: true,
-            // A missing sandbox (bubblewrap or socat not installed) stops the chat instead of running unsandboxed.
-            failIfUnavailable: true,
-            autoAllowBashIfSandboxed: true,
-            filesystem: { allowWrite: additionalDirectories }
-          }
+          settings: { autoMemoryEnabled: false }
         }
       }
     }

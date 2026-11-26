@@ -1,5 +1,5 @@
 // Re-records every workspace chat cassette from real Claude Code (`pnpm record:chat-cassettes`).
-// Needs a logged-in `claude` and Claude Code's sandbox (bubblewrap and socat on Linux).
+// Needs a logged-in `claude` on your shell's PATH.
 // Each session runs through the app's own ACP client, with the adapter behind acp-tee.mjs.
 import { execFileSync } from 'node:child_process'
 import { cp, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
