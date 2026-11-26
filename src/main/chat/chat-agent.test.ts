@@ -106,7 +106,7 @@ describe('ChatAgentSession against recorded Claude Code', () => {
     expect(seen.at(-1)).toMatchObject({ kind: 'turn-end', stopReason: 'end_turn' })
     expect(seen).toContainEqual(expect.objectContaining({ kind: 'tool', status: 'completed' }))
     expect(await readFile(mapPath, 'utf8')).toBe(
-      '<!-- playbook -->\n- Run the tests with npm test.\n<!-- /playbook -->\n'
+      '<!-- playbook -->\n- Run the tests with `npm test`.\n<!-- /playbook -->\n'
     )
     chat.end()
     await chat.exited()

@@ -26,8 +26,8 @@ const desktopApi: DesktopApi = {
   endChat: (chatId) => ipcRenderer.invoke(CHAT_AGENT_CHANNELS.end, chatId),
   generateWorkspaceMap: (chatId) => ipcRenderer.invoke(CHAT_AGENT_CHANNELS.generateMap, chatId),
   workspaceMapFile: () => ipcRenderer.invoke(CHAT_AGENT_CHANNELS.mapFile),
-  resolveChatLink: (chatId, path, line, endLine) =>
-    ipcRenderer.invoke(CHAT_AGENT_CHANNELS.resolveLink, chatId, path, line, endLine),
+  resolveChatPaths: (chatId, paths) =>
+    ipcRenderer.invoke(CHAT_AGENT_CHANNELS.resolvePaths, chatId, paths),
   subscribeChatEvents: (callback) => {
     const listener = (_event: unknown, chatEvent: ChatEvent): void => callback(chatEvent)
     ipcRenderer.on(CHAT_AGENT_CHANNELS.event, listener)

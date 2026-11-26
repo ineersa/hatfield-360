@@ -54,12 +54,23 @@ type Script = (chat: ChatAgentSession, driver: Driver) => Promise<void>
 
 const turn = (driver: Driver) => driver.next(is('turn-end'))
 
+/** A reply naming files in prose, in every form the chat links, and one that doesn't exist. */
+const LINKS_PROMPT = [
+  'Without using any tools, reply with exactly this text and nothing else:',
+  '',
+  'The greeting is in src/greeting.js:2:10 and is called from src/main.js:1, 3; the readme is README.md, see also `src/greeting.js#L2-L3`. There is no src/missing.js:4.'
+].join('\n')
+
 /** The scripted sessions, one cassette each; README.md describes what each must contain. */
 const SCRIPTS: Record<string, Script> = {
   answer: async (chat, driver) => {
     chat.prompt(
       'Where is the greeting implemented? Reply in one sentence with a path:line reference.'
     )
+    await turn(driver)
+  },
+  links: async (chat, driver) => {
+    chat.prompt(LINKS_PROMPT)
     await turn(driver)
   },
   permission: async (chat, driver) => {

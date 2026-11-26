@@ -36,7 +36,8 @@ type ChatState = {
   setConfig: (configId: ChatConfigId, value: string) => void
   generateMap: () => void
   editMap: () => void
-  followLink: (path: string, line: number, endLine: number | null) => void
+  /** Opens a reply's resolved file in the editor, at the line and column it gave. */
+  openReference: (path: string, line: number | null, column: number | null) => void
 }
 
 /** A refused prompt or map request: its turn never started, so the chat takes the next one. */
@@ -167,21 +168,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
       })
       .catch(report('Opening the map'))
   },
-  followLink: (path, line, endLine) => {
-    const { chatId } = get()
-    if (chatId === null) return
-    window.desktop
-      .resolveChatLink(chatId, path, line, endLine)
-      .then((target) => {
-        if (target === null) {
-          set({ error: `${path} isn't a file in the workspace.` })
-          return
-        }
-        useShellLayoutStore.getState().showFiles()
-        useEditorTabStore
-          .getState()
-          .open(target.path, { line: target.line, start: 1, end: 1, focus: true })
-      })
-      .catch(report('Opening the link'))
+  openReference: (path, line, column) => {
+    useShellLayoutStore.getState().showFiles()
+    const start = column === null ? 0 : column - 1
+    useEditorTabStore.getState().open(path, { line: line ?? 1, start, end: start, focus: true })
   }
 }))

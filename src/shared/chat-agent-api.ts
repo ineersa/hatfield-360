@@ -59,8 +59,8 @@ export type ChatEventBody =
 
 export type ChatEvent = ChatEventBody & { chatId: string }
 
-/** A `file:line` reference in a reply, resolved to a file inside the workspace. */
-export type ChatLinkTarget = { path: string; line: number; endLine: number | null }
+/** How many file references one reply may resolve at once; more stay text. */
+export const CHAT_REFERENCE_CAP = 200
 
 export const CHAT_AGENT_CHANNELS = {
   start: 'chat-agent:start',
@@ -71,7 +71,7 @@ export const CHAT_AGENT_CHANNELS = {
   end: 'chat-agent:end',
   generateMap: 'chat-agent:generate-map',
   mapFile: 'chat-agent:map-file',
-  resolveLink: 'chat-agent:resolve-link',
+  resolvePaths: 'chat-agent:resolve-paths',
   event: 'chat-agent:event'
 } as const
 
@@ -93,12 +93,10 @@ export type ChatAgentApi = {
   generateWorkspaceMap: (chatId: string) => Promise<void>
   /** The workspace's map file, created empty when missing so it can be opened. */
   workspaceMapFile: () => Promise<string>
-  /** Resolves a reply's `path:line` against the chat's folder and the workspace folders. */
-  resolveChatLink: (
-    chatId: string,
-    path: string,
-    line: number,
-    endLine: number | null
-  ) => Promise<ChatLinkTarget | null>
+  /**
+   * The files a reply's paths name, each resolved against the chat's folder and the workspace
+   * folders, in order; null for one that isn't a file inside them.
+   */
+  resolveChatPaths: (chatId: string, paths: string[]) => Promise<(string | null)[]>
   subscribeChatEvents: (callback: (event: ChatEvent) => void) => () => void
 }

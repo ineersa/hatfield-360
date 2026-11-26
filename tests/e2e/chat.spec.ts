@@ -7,6 +7,13 @@ import { seedWorkspace } from './workspace-seed'
 
 const fixtures = resolve(__dirname, '..', 'fixtures', 'acp')
 
+/** What the links cassette sends; its reply repeats the text after the first line. */
+const LINKS_PROMPT = [
+  'Without using any tools, reply with exactly this text and nothing else:',
+  '',
+  'The greeting is in src/greeting.js:2:10 and is called from src/main.js:1, 3; the readme is README.md, see also `src/greeting.js#L2-L3`. There is no src/missing.js:4.'
+].join('\n')
+
 const panel = (page: Page) => page.getByRole('complementary', { name: 'Chat panel' })
 
 /** A config picker in the chat, by its label: Mode, Model or Effort. */
@@ -62,7 +69,7 @@ test('Shift Shift opens a new chat on Haiku whose answer links to the code it fo
         await message.press('Enter')
         await expect(chat.getByLabel('Your message')).toContainText('Where is the greeting')
         const reply = chat.getByLabel("Claude's reply")
-        await expect(reply).toContainText('which returns')
+        await expect(reply).toContainText('is called from')
         await expect(chat.getByRole('group', { name: /^Tool: / })).toContainText('Completed')
         await expect(chat.getByRole('button', { name: 'Send (Enter)' })).toBeVisible()
         await saveScreenshot(page, 'chat-answer')
@@ -83,6 +90,52 @@ test('Shift Shift opens a new chat on Haiku whose answer links to the code it fo
         await expect(chat).toBeHidden()
       },
       { userDataDir: userData, env: replaying('answer') }
+    )
+  } finally {
+    await cleanup()
+  }
+})
+
+test('every file a reply names opens the editor at its line, and a missing one stays text', async () => {
+  const [, userData, cleanup] = await recordedProject()
+  try {
+    await withApp(
+      async (_app, page) => {
+        await expect(page.getByRole('main')).toBeVisible()
+        await doubleShift(page)
+        const chat = panel(page)
+        const message = chat.getByRole('textbox', { name: 'Message' })
+        await expect(picker(chat, 'Model')).toHaveText('Haiku 5.5')
+        await message.fill(LINKS_PROMPT)
+        await message.press('Enter')
+        const reply = chat.getByLabel("Claude's reply")
+        await expect(reply).toContainText('There is no src/missing.js:4.')
+        await expect(chat.getByRole('button', { name: 'Send (Enter)' })).toBeVisible()
+        const link = (name: string) => reply.getByRole('button', { name, exact: true })
+        await expect(link('README.md')).toBeVisible()
+        await saveScreenshot(page, 'chat-links')
+        // Resolved together: once one is a link, a path that isn't in the workspace never becomes one.
+        await expect(link('src/missing.js:4')).toHaveCount(0)
+
+        // The status bar's caret, `line:column`, says where each link put the editor.
+        const caret = page.getByRole('status', { name: 'Caret position' })
+        await link('src/greeting.js:2:10').click()
+        await expect(tab(page, 'greeting.js')).toBeVisible()
+        await expect(caret).toHaveText('2:10')
+
+        await link('src/main.js:1, 3').click()
+        await expect(tab(page, 'main.js')).toHaveAttribute('aria-selected', 'true')
+        await expect(caret).toHaveText('1:1')
+
+        await link('src/greeting.js#L2-L3').click()
+        await expect(tab(page, 'greeting.js')).toHaveAttribute('aria-selected', 'true')
+        await expect(caret).toHaveText('2:1')
+
+        await link('README.md').click()
+        await expect(tab(page, 'README.md')).toHaveAttribute('aria-selected', 'true')
+        await expect(caret).toHaveText('1:1')
+      },
+      { userDataDir: userData, env: replaying('links') }
     )
   } finally {
     await cleanup()
@@ -142,7 +195,7 @@ test('a permission request waits for the user, and Yes lets the tool run', async
         await request.getByRole('button', { name: 'Yes', exact: true }).click()
         await expect(request.getByRole('button')).toHaveCount(0)
         await expect(request).toContainText('Yes')
-        await expect(chat.getByLabel("Claude's reply")).toContainText('I created')
+        await expect(chat.getByLabel("Claude's reply")).toContainText('Created')
         await expect(chat.getByRole('button', { name: 'Send (Enter)' })).toBeVisible()
       },
       { userDataDir: userData, env: replaying('permission') }
