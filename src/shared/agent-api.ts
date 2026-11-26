@@ -49,7 +49,7 @@ export type AgentNotification = {
   terminalId: string
   message:
     | { kind: 'needs-input' | 'failed' }
-    /** `response` is the final assistant text the provider reported, up to 2,000 characters. */
+    /** `response` is the final assistant text the provider reported, up to 2,000 Unicode scalar values. */
     | { kind: 'completed'; response: string | null }
     | { kind: 'explicit'; title: string; body: string }
 }

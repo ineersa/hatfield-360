@@ -44,6 +44,7 @@ type Turn = {
 const turnOptional: Record<string, Validator> = { trigger, response: text(2000) }
 const turn = (value: unknown): value is Turn =>
   record(value) &&
+  (!Object.hasOwn(value, 'response') || value.status === 'completed') &&
   shape({
     id,
     status: turnStatus,

@@ -152,7 +152,9 @@ describe.skipIf(process.platform === 'win32')('agent status socket', () => {
       { schedules: Array.from({ length: 17 }, (_, index) => ({ ...loop, id: `job-${index}` })) },
       { turn: { id: 'turn', status: 'working', trigger: 'cron' } },
       { turn: { id: 'turn', status: 'completed', response: 'x'.repeat(2001) } },
-      { turn: { id: 'turn', status: 'completed', response: 42 } }
+      { turn: { id: 'turn', status: 'completed', response: 42 } },
+      { turn: { id: 'turn', status: 'working', response: 'Not yet' } },
+      { turn: { id: 'turn', status: 'failed', response: 'Partial' } }
     ]
     expect(await send(...invalid.map((fields) => event(1, { ...start, ...fields })))).toEqual(
       invalid.map(() => ({ ok: false, error: 'invalid' }))

@@ -1,5 +1,6 @@
 import { X } from 'lucide-react'
 import type { AppNotification } from '@/state/notification-store'
+import { cn } from '@/lib/class-names'
 import { SeverityIcon } from './SeverityIcon'
 
 const DISMISS_BUTTON_CLASS =
@@ -11,13 +12,16 @@ export function NotificationContent({
   titleId,
   closeLabel,
   onClose,
-  showTime
+  showTime,
+  scrollBody
 }: {
   notification: AppNotification
   titleId: string
   closeLabel: string
   onClose: () => void
   showTime: boolean
+  /** Caps the body's height and scrolls it, for toasts over the layout. */
+  scrollBody: boolean
 }): React.JSX.Element {
   const { severity, title, body, action, time } = notification
   return (
@@ -34,7 +38,16 @@ export function NotificationContent({
             </time>
           ) : null}
         </div>
-        {body ? <p className="break-words whitespace-pre-line">{body}</p> : null}
+        {body ? (
+          <p
+            className={cn(
+              'break-words whitespace-pre-wrap',
+              scrollBody && 'max-h-toast-body overflow-y-auto'
+            )}
+          >
+            {body}
+          </p>
+        ) : null}
         {action ? (
           <button
             type="button"
