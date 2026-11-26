@@ -17,6 +17,7 @@ import { registerMemorySearchIpc } from './ipc/memory-search-ipc'
 import { registerSearchIpc } from './ipc/search-ipc'
 import { registerSettingsIpc } from './ipc/settings-ipc'
 import { registerShellLayoutIpc } from './ipc/shell-layout-ipc'
+import { registerSourceControlIpc } from './ipc/source-control-ipc'
 import { registerTerminalIpc } from './ipc/terminal-ipc'
 import { registerWebLinkIpc } from './ipc/web-link-ipc'
 import { registerWorkspaceIpc } from './ipc/workspace-ipc'
@@ -42,6 +43,7 @@ void app.whenReady().then(async () => {
   registerAppInfoIpc()
   registerWorkspaceIpc()
   registerWorktreeIpc()
+  registerSourceControlIpc()
   registerFileTreeIpc()
   registerSearchIpc()
   registerEditorIpc()
