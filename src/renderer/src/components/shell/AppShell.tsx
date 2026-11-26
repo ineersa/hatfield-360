@@ -58,6 +58,7 @@ export function AppShell(): React.JSX.Element {
   const hasTerminals = useTerminalStore((state) => state.tabs.length > 0)
   const hasEditorTabs = useEditorTabStore((state) => state.tabs.length > 0)
   const hasHunkTabs = useHunkTabStore((state) => state.tabs.length > 0)
+  const hasStartedHunkTabs = useHunkTabStore((state) => state.tabs.length > state.pending.size)
   const hunkMissing = useHunkTabStore((state) => state.missing)
   const notificationsOpen = useNotificationStore((state) => state.panelOpen)
   const chatOpen = useChatStore((state) => state.open)
@@ -97,7 +98,8 @@ export function AppShell(): React.JSX.Element {
   // they stay on screen when the workspace's last folder goes, so unsaved ones can still be saved.
   const showEditor = hasEditorTabs && !settingsOpen && (view.id === 'files' || view.id === 'search')
   // hunk tabs stay mounted the same way; a failed launch shows how to install hunk in their place.
-  const showHunkTabs = hasHunkTabs && !settingsOpen && view.id === 'git' && !hunkMissing
+  const inGitView = !settingsOpen && view.id === 'git'
+  const showHunkTabs = hasStartedHunkTabs && inGitView && !hunkMissing
 
   return (
     <TooltipProvider>
@@ -141,12 +143,15 @@ export function AppShell(): React.JSX.Element {
             )}
             <main
               aria-label={settingsOpen ? 'Settings' : view.label}
-              className="flex min-w-0 flex-1 rounded-island bg-island"
+              className="relative flex min-w-0 flex-1 rounded-island bg-island"
             >
               {hasTerminals ? <TerminalTabs hidden={!showTerminals} /> : null}
               <UnsavedChangesDialog />
               {hasEditorTabs ? <LazyEditorTabs hidden={!showEditor} /> : null}
-              {hasHunkTabs ? <HunkTabs hidden={!showHunkTabs} /> : null}
+              {hasHunkTabs ? (
+                // A starting hunk is laid out unseen, at its real size, until it runs.
+                <HunkTabs placement={showHunkTabs ? 'shown' : inGitView ? 'offstage' : 'hidden'} />
+              ) : null}
               {showTerminals || showEditor || showHunkTabs ? null : settingsOpen ? (
                 <SettingsPage />
               ) : workspaceEmpty ? (

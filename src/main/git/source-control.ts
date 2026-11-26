@@ -1,3 +1,4 @@
+import { devNull } from 'node:os'
 import { isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { type FileStatusResult, simpleGit } from 'simple-git'
 import type {
@@ -155,6 +156,26 @@ async function changedFiles(root: string, paths: string[]): Promise<ChangedFile[
 /** A path and, for a rename, where it came from: the two halves of one change. */
 const bothSides = (file: ChangedFile): string[] =>
   file.originalPath === null ? [file.path] : [file.path, file.originalPath]
+
+/**
+ * What a diff of one changed file compares, as the Commit panel lists it: HEAD (the empty tree
+ * before the first commit) against the working tree, for the path and the other side of a rename,
+ * as literal pathspecs.
+ */
+export async function fileDiffSpec(
+  root: string,
+  requested: unknown
+): Promise<{ base: string; pathspecs: string[] }> {
+  const [path] = repositoryPaths(root, [requested])
+  if (path === undefined) throw new Error('Invalid file path.')
+  const [file] = await changedFiles(root, [path])
+  const head = await run(root, ['rev-parse', '--verify', '-q', 'HEAD'])
+  const base =
+    head.exitCode === 0
+      ? 'HEAD'
+      : (await runOrThrow(root, ['hash-object', '-t', 'tree', devNull])).trim()
+  return { base, pathspecs: (file ? bothSides(file) : [path]).map(literal) }
+}
 
 /**
  * Commits the paths as they are in the working tree, leaving every other change (staged or not)

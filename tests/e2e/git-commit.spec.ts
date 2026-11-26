@@ -133,13 +133,6 @@ test('the Commit panel lists changes, commits checked files, amends, and commits
         expect(gitOutput(remote, 'log', '--format=%s', 'main')).toBe(
           'Remove b\nChange a, add new\nAdd files\nfirst'
         )
-
-        // A double click opens a changed file in the editor, in the Files view.
-        await writeFile(join(repo, 'c.txt'), 'c.txt two\n')
-        await page.getByRole('button', { name: 'Refresh' }).click()
-        await row(page, 'c.txt').dblclick()
-        await expect(page.getByRole('main', { name: 'Files' })).toBeVisible()
-        await expect(editorTab(page, 'c.txt')).toHaveAttribute('aria-selected', 'true')
       },
       { userDataDir: fixture.userData, env: fixture.env }
     )
@@ -280,9 +273,10 @@ test(
   }
 )
 
-test('Review and Log run hunk in tabs in the Git view, which close when hunk ends', async () => {
+test('Review, Log and file diffs run hunk in tabs in the Git view, which close when hunk ends', async () => {
   const fixture = await commitFixture()
   const { repo } = fixture
+  await writeFile(join(repo, 'c.txt'), 'c.txt two\n')
   const [bin, cleanBin] = await makeTempDir('bin')
   const [home, cleanHome] = await makeTempDir('home')
   // Says how it was started, then ends once a line is typed, as hunk does on q.
@@ -326,6 +320,26 @@ test('Review and Log run hunk in tabs in the Git view, which close when hunk end
         await page.keyboard.press('Enter')
         await expect(page.getByRole('main', { name: 'Git' }).getByRole('tab')).toHaveCount(0)
         await expect(page.getByRole('heading', { name: 'Review changes with hunk' })).toBeVisible()
+
+        // A double click shows the file's own changes since HEAD, its name taken literally.
+        await row(page, 'c.txt').dblclick()
+        const diff = page.getByRole('tabpanel', { name: 'c.txt · app' })
+        await expect(diff.locator('.xterm-rows')).toContainText(
+          `fake hunk diff --watch HEAD -- :(literal)c.txt in ${repo}`
+        )
+        await saveScreenshot(page, 'git-hunk-file-diff')
+        // The diff's bar opens the file in the editor, in the Files view.
+        await diff
+          .getByRole('toolbar', { name: 'Diff' })
+          .getByRole('button', { name: 'Open in Editor' })
+          .click()
+        await expect(page.getByRole('main', { name: 'Files' })).toBeVisible()
+        await expect(editorTab(page, 'c.txt')).toHaveAttribute('aria-selected', 'true')
+        // So does the row's menu.
+        await showGit(page)
+        await row(page, 'c.txt').click({ button: 'right' })
+        await page.getByRole('menuitem', { name: 'Open in Editor' }).click()
+        await expect(page.getByRole('main', { name: 'Files' })).toBeVisible()
       },
       {
         userDataDir: fixture.userData,

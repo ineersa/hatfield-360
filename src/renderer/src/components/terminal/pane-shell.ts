@@ -29,8 +29,11 @@ type TerminalSize = { cols: number; rows: number }
 
 /** How a pane's program starts and what its ending means. */
 type PaneProgram = {
-  /** Starts it at the pane's first size; resolves with the session and the size it runs at. */
-  start: (size: TerminalSize) => Promise<{ session: TerminalSession; size: TerminalSize }>
+  /**
+   * Starts it at the pane's first size; resolves with the session and the size it runs at, or null
+   * when there is nothing to run and the pane's owner has dealt with that.
+   */
+  start: (size: TerminalSize) => Promise<{ session: TerminalSession; size: TerminalSize } | null>
   /** Named in the line a failed start writes: "The shell couldn't start: …". */
   name: string
   /** Whether a clean exit with a nonzero code ends the pane too, as a shell's does. */
@@ -77,7 +80,9 @@ export function startPaneProgram(pane: ManagedPane, program: PaneProgram): PaneS
       if (disposed) return
       program
         .start({ cols: terminal.cols, rows: terminal.rows })
-        .then(({ session, size }) => {
+        .then((started) => {
+          if (!started) return
+          const { session, size } = started
           if (disposed) {
             void window.desktop.killTerminal(session.id)
             return

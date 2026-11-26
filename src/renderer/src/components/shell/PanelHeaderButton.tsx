@@ -3,7 +3,10 @@ import { Spinner } from '@/components/ui/spinner'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/class-names'
 
-/** An icon button in a side panel's header, named by its tooltip. */
+/**
+ * An icon button in a side panel's header, named by its tooltip. One that can't act stays
+ * hoverable (aria-disabled), so its tooltip can say why.
+ */
 export function PanelHeaderButton({
   label,
   pressed,
@@ -30,12 +33,14 @@ export function PanelHeaderButton({
           aria-label={label}
           aria-pressed={pressed}
           aria-busy={busy || undefined}
-          disabled={disabled || busy}
-          onClick={onClick}
+          aria-disabled={disabled || undefined}
+          disabled={busy}
+          onClick={disabled ? undefined : onClick}
           className={cn(
-            'flex size-icon-button items-center justify-center rounded-button text-muted-foreground hover:bg-hover hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none',
+            'flex size-icon-button items-center justify-center rounded-button text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none',
+            !disabled && 'hover:bg-hover hover:text-foreground',
             pressed && 'bg-selection-inactive text-foreground',
-            disabled && 'pointer-events-none opacity-40',
+            disabled && 'cursor-default opacity-40',
             busy && 'pointer-events-none'
           )}
         >

@@ -492,6 +492,7 @@ export const APP_COMMANDS = [
   'copy-absolute-path',
   'copy-relative-path',
   'select-opened-file',
+  'jump-to-source',
   'find-in-files',
   'search-everywhere',
   'go-to-file',
@@ -557,6 +558,13 @@ const APP_KEYMAP: Record<AppCommand, ShellAction> = {
     label: 'Select Opened File',
     mac: null,
     other: null
+  },
+  // JetBrains' Jump to Source (EditSource), from a changed file in the Commit panel.
+  'jump-to-source': {
+    id: 'hatfield.git.jumpToSource',
+    label: 'Jump to Source',
+    mac: 'F4',
+    other: 'F4'
   },
   'find-in-files': {
     id: 'hatfield.search.findInFiles',
