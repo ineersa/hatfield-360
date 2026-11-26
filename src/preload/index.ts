@@ -7,6 +7,7 @@ import { FILES_SESSION_CHANNELS } from '../shared/files-session-api'
 import { FILE_TREE_CHANNELS } from '../shared/file-tree-api'
 import { KEYBINDINGS_CHANNELS, type KeybindingsView } from '../shared/keybindings-api'
 import { SEARCH_CHANNELS, type SearchEvent } from '../shared/search-api'
+import { SEARCH_EVERYWHERE_CHANNELS } from '../shared/search-everywhere-api'
 import { SETTINGS_CHANNELS, type SettingsView } from '../shared/settings-api'
 import { SHELL_LAYOUT_CHANNELS } from '../shared/shell-layout-api'
 import { SOURCE_CONTROL_CHANNELS } from '../shared/source-control-api'
@@ -90,6 +91,8 @@ const desktopApi: DesktopApi = {
   revealPath: (path) => ipcRenderer.invoke(FILE_TREE_CHANNELS.reveal, path),
   trashPaths: (paths) => ipcRenderer.invoke(FILE_TREE_CHANNELS.trash, paths),
   renamePath: (path, name) => ipcRenderer.invoke(FILE_TREE_CHANNELS.rename, path, name),
+  createEntry: (folder, name, kind) =>
+    ipcRenderer.invoke(FILE_TREE_CHANNELS.create, folder, name, kind),
   subscribeDirectoryChanges: (callback) => {
     const listener = (_event: unknown, paths: string[]): void => callback(paths)
     ipcRenderer.on(FILE_TREE_CHANNELS.changed, listener)
@@ -97,6 +100,8 @@ const desktopApi: DesktopApi = {
   },
   startSearch: (id, query) => ipcRenderer.invoke(SEARCH_CHANNELS.start, id, query),
   cancelSearch: () => ipcRenderer.invoke(SEARCH_CHANNELS.cancel),
+  findWorkspaceFiles: (query) => ipcRenderer.invoke(SEARCH_EVERYWHERE_CHANNELS.findFiles, query),
+  findUnlistedPaths: (paths) => ipcRenderer.invoke(SEARCH_EVERYWHERE_CHANNELS.findUnlisted, paths),
   subscribeSearch: (callback) => {
     const listener = (_event: unknown, event: SearchEvent): void => callback(event)
     ipcRenderer.on(SEARCH_CHANNELS.event, listener)

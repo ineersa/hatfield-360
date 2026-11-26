@@ -10,7 +10,7 @@ export type ShellLayout = {
   panels: Record<ShellViewId, SidePanelLayout>
   /** The notifications panel on the right; it shares the side panels' width range. */
   notificationsWidth: number
-  /** The workspace chat panel on the right, opened with Shift Shift. */
+  /** The workspace chat panel on the right, opened with New Chat (Ctrl/Cmd+\). */
   chatWidth: number
 }
 

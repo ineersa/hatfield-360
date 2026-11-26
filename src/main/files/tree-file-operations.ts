@@ -1,4 +1,4 @@
-import { lstat, rename } from 'node:fs/promises'
+import { lstat, mkdir, rename, stat, writeFile } from 'node:fs/promises'
 import { basename, dirname, isAbsolute, join } from 'node:path'
 import { isPathInside, realRoots, resolveInsideRoots } from './path-containment'
 
@@ -50,6 +50,41 @@ export async function renameEntry(path: string, name: string, roots: string[]): 
   }
   await rename(entry, target)
   return join(dirname(path), name)
+}
+
+/**
+ * Creates an empty file or a folder named `name` in `folder` and returns its path. `name` may hold
+ * `/`-separated folders, created as needed; the entry itself never replaces an existing one.
+ */
+export async function createEntry(
+  folder: string,
+  name: string,
+  kind: 'file' | 'directory',
+  roots: string[]
+): Promise<string> {
+  const names = name.split('/')
+  for (const each of names) {
+    const problem = invalidEntryName(each)
+    if (problem !== null) throw new Error(problem)
+  }
+  let real = await resolveInsideRoots(folder, roots)
+  if (real === null) throw new Error('Not inside the workspace')
+  for (const each of names.slice(0, -1)) {
+    const next = join(real, each)
+    await mkdir(next).catch((error: unknown) => {
+      if (!(error instanceof Error && 'code' in error && error.code === 'EEXIST')) throw error
+    })
+    // An existing link on the way must not lead out of the workspace.
+    real = await resolveInsideRoots(next, roots)
+    if (real === null || !(await stat(real)).isDirectory())
+      throw new Error(`${each} is not a folder in the workspace`)
+  }
+  const last = names.at(-1) ?? name
+  const target = join(real, last)
+  if (await exists(target)) throw new Error(`${last} already exists`)
+  if (kind === 'directory') await mkdir(target)
+  else await writeFile(target, '', { flag: 'wx' })
+  return join(folder, ...names)
 }
 
 /** `paths` without those inside another of them: trashing a folder takes what is in it along. */

@@ -493,17 +493,22 @@ export const APP_COMMANDS = [
   'copy-relative-path',
   'select-opened-file',
   'find-in-files',
+  'search-everywhere',
+  'go-to-file',
+  'go-to-class',
+  'go-to-symbol',
+  'new-chat',
   'search-memory'
 ] as const
 export type AppCommand = (typeof APP_COMMANDS)[number]
 
 /** The app's own actions: menu accelerators, and keys the editor tabs and file tree handle. */
 const APP_KEYMAP: Record<AppCommand, ShellAction> = {
-  // JetBrains has no key for Open; Command+O is Go to Class on macOS, which the app doesn't have yet.
+  // JetBrains has no key for Open; Command+O is Go to Class on macOS.
   'open-folder': {
     id: 'hatfield.openFolder',
     label: 'Open Folder',
-    mac: 'Command+O',
+    mac: null,
     other: 'Ctrl+O'
   },
   // The editor runs the same command on the same key while it has the keys.
@@ -559,6 +564,33 @@ const APP_KEYMAP: Record<AppCommand, ShellAction> = {
     mac: 'Command+Shift+F',
     other: 'Ctrl+Shift+F'
   },
+  // Shift pressed twice opens it too, as in JetBrains; that isn't a key keybindings.json can name.
+  'search-everywhere': {
+    id: 'hatfield.search.searchEverywhere',
+    label: 'Search Everywhere',
+    mac: null,
+    other: null
+  },
+  'go-to-file': {
+    id: 'hatfield.search.goToFile',
+    label: 'Go to File',
+    mac: 'Command+Shift+O',
+    other: 'Ctrl+Shift+N'
+  },
+  'go-to-class': {
+    id: 'hatfield.search.goToClass',
+    label: 'Go to Class',
+    mac: 'Command+O',
+    other: 'Ctrl+N'
+  },
+  'go-to-symbol': {
+    id: 'hatfield.search.goToSymbol',
+    label: 'Go to Symbol',
+    mac: 'Command+Alt+O',
+    other: 'Ctrl+Alt+Shift+N'
+  },
+  // Taken from a focused terminal too, where Ctrl+\ would otherwise send SIGQUIT.
+  'new-chat': { id: 'hatfield.chat.new', label: 'New Chat', mac: 'Command+\\', other: 'Ctrl+\\' },
   // Like a command palette; it opens from a focused terminal too, which never receives the key.
   'search-memory': {
     id: 'hatfield.memory.search',

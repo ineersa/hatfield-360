@@ -38,9 +38,17 @@ type FileTreeState = {
   trash: (paths: string[]) => void
   /** Renames an entry in its folder; resolves false, after telling the user why, when main refuses. */
   rename: (path: string, name: string) => Promise<boolean>
-  /** The file Select Opened File is revealing, until the tree shows its row (by `key`). */
-  locating: { path: string; key: string } | null
-  /** Expands the tree down to the active editor tab's file, which the Files panel then selects. */
+  /** Creates a file or folder in `folder` (`name` may hold `/`-separated folders) and lists it. */
+  create: (
+    folder: string,
+    name: string,
+    kind: DirectoryEntry['kind']
+  ) => Promise<{ ok: true; path: string } | { ok: false; message: string }>
+  /** The entry the tree is revealing, until it shows its row (by `key`); `focus` moves focus to it. */
+  locating: { path: string; key: string; focus: boolean } | null
+  /** Expands the tree down to the entry at `path`, which the Files panel then selects. */
+  select: (path: string, focus: boolean) => void
+  /** Selects the active editor tab's file. */
   selectOpenedFile: () => void
   locateDone: () => void
   /** Follows changes main reports in watched folders; returns the unsubscribe. */
@@ -221,14 +229,28 @@ export const useFileTreeStore = create<FileTreeState>((set, get) => {
         if (get().listings[parentOf(path)]) load(parentOf(path))
       }
     },
+    create: async (folder, name, kind) => {
+      try {
+        const path = await window.desktop.createEntry(folder, name, kind)
+        return { ok: true, path }
+      } catch (error) {
+        return { ok: false, message: mainErrorMessage(error) }
+      } finally {
+        // The watcher would also catch it; listing at once shows the new row without a wait.
+        if (get().listings[folder]) load(folder)
+      }
+    },
     locating: null,
-    selectOpenedFile: () => {
-      const path = useEditorTabStore.getState().activePath
-      const located = path === null ? null : locateInTree(get().roots, path)
-      if (path === null || located === null) return
-      set({ locating: { path, key: located.key } })
+    select: (path, focus) => {
+      const located = locateInTree(get().roots, path)
+      if (located === null) return
+      set({ locating: { path, key: located.key, focus } })
       get().expand(located.folders)
       showLocated()
+    },
+    selectOpenedFile: () => {
+      const path = useEditorTabStore.getState().activePath
+      if (path !== null) get().select(path, true)
     },
     locateDone: () => set({ locating: null }),
     connect: () =>

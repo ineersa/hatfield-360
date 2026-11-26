@@ -24,7 +24,7 @@ type ChatState = {
   error: string | null
   /** Follows the chats' events from main; returns the unsubscribe. */
   connect: () => () => void
-  /** Shift Shift: opens the panel with a new chat, ending the one it had. */
+  /** New Chat (Ctrl/Cmd+\): opens the panel with a new chat, ending the one it had. */
   openNewChat: () => void
   /** Closes the panel, ending its chat. */
   close: () => void

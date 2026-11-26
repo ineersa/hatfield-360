@@ -7,6 +7,9 @@ import { homedir } from 'node:os'
 import { delimiter, dirname, isAbsolute, join, parse } from 'node:path'
 import { promisify } from 'node:util'
 import { realRoots } from '../files/path-containment'
+import { gitIgnoreRules } from '../git/ignore-rules'
+import { intelephenseExclude } from './intelephense-exclude'
+import { indexNeedsClearing } from './intelephense-index'
 import { isPythonLibraryFolder, libraryFoldersBesideHome } from './library-folders'
 
 type JsonObject = Record<string, unknown>
@@ -27,8 +30,11 @@ export type LanguageServerDefinition = {
   languages: string[]
   /** The command, or why it isn't available and how to install it. */
   command: () => Promise<ServerCommand | { missing: string }>
-  /** Worked out by main for each start (its workspace folder), never taken from the page. */
-  configure?: (root: string) => Promise<ServerConfiguration>
+  /**
+   * Worked out by main for each start (its workspace folder), never taken from the page; `storage`
+   * is a folder of the app's own the server may keep its index in.
+   */
+  configure?: (root: string, storage: string) => Promise<ServerConfiguration>
   /**
    * Folders outside any project holding the language's own sources (standard library, stubs),
    * which Go to Definition may open read-only.
@@ -113,10 +119,15 @@ async function findUserPython(): Promise<UserPython | null> {
 }
 
 /**
- * Intelephense keeps its own index and finds a key in its global storage folder; a key in
- * `~/intelephense` (`licence.txt` or `license.txt`) is passed as a path, which it reads itself.
+ * Intelephense finds a key in its global storage folder; a key in `~/intelephense` (`licence.txt` or
+ * `license.txt`) is passed as a path, which it reads itself. Its index is the app's own: the default
+ * one is shared with every other Intelephense (an editor, another build) indexing without these
+ * exclusions, and Intelephense keeps what an index already holds.
  */
-async function intelephenseConfiguration(): Promise<ServerConfiguration> {
+async function intelephenseConfiguration(
+  root: string,
+  storage: string
+): Promise<ServerConfiguration> {
   const folder = join(homedir(), 'intelephense')
   let licenceKey: string | undefined
   for (const name of ['licence.txt', 'license.txt']) {
@@ -125,9 +136,18 @@ async function intelephenseConfiguration(): Promise<ServerConfiguration> {
       break
     }
   }
+  const storagePath = join(storage, 'intelephense')
+  const exclude = intelephenseExclude(root, await gitIgnoreRules(root))
+  const clearCache = await indexNeedsClearing(storagePath, root, exclude)
   return {
-    ...(licenceKey === undefined ? {} : { initializationOptions: { licenceKey } }),
-    settings: { intelephense: { telemetry: { enabled: false } } }
+    initializationOptions: {
+      storagePath,
+      ...(clearCache ? { clearCache } : {}),
+      ...(licenceKey === undefined ? {} : { licenceKey })
+    },
+    settings: {
+      intelephense: { telemetry: { enabled: false }, files: { exclude } }
+    }
   }
 }
 

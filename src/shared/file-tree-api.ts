@@ -19,7 +19,8 @@ export const FILE_TREE_CHANNELS = {
   copyPath: 'file-tree:copy-path',
   reveal: 'file-tree:reveal',
   trash: 'file-tree:trash',
-  rename: 'file-tree:rename'
+  rename: 'file-tree:rename',
+  create: 'file-tree:create'
 } as const
 
 /** How Copy Path writes a path: as is, or from the root folder it is under. */
@@ -46,4 +47,9 @@ export type FileTreeApi = {
   trashPaths: (paths: string[]) => Promise<void>
   /** Renames a file or folder inside the workspace within its folder, never over an existing name; resolves with the new path. */
   renamePath: (path: string, name: string) => Promise<string>
+  /**
+   * Creates an empty file or a folder in a workspace folder, never over an existing name; `name` may
+   * hold `/`-separated folders, created as needed. Resolves with the new path.
+   */
+  createEntry: (folder: string, name: string, kind: DirectoryEntry['kind']) => Promise<string>
 }

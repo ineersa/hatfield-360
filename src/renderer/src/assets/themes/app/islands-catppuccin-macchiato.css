@@ -38,6 +38,8 @@
   --selection-foreground: #cad3f5;
   --selection-inactive: #3a3e53;
   --search-match: #eed49f40;
+  /* FileStatus IGNORED of the matching editor scheme. */
+  --file-ignored: #939ab7;
   --ring: #c6a0f6;
   --border: #24273a;
   --separator: #363a4f;

@@ -55,6 +55,7 @@
   --color-selection-inactive: var(--selection-inactive);
   /* Find in Files' match highlight, after each theme's search result colour. */
   --color-search-match: var(--search-match);
+  --color-file-ignored: var(--file-ignored);
   --color-ring: var(--ring);
   --color-border: var(--border);
   --color-separator: var(--separator);

@@ -217,9 +217,11 @@ export function CodeEditor({
     // A file opened at a position (a search result) shows it once its model is in and on screen:
     // a hidden editor can't take the keys.
     if (reveal?.path !== path || hidden || !themed) return
-    const range = new monaco.Range(reveal.line, reveal.start + 1, reveal.line, reveal.end + 1)
-    instance.setSelection(range)
-    instance.revealRangeInCenter(range)
+    if (reveal.line !== null) {
+      const range = new monaco.Range(reveal.line, reveal.start + 1, reveal.line, reveal.end + 1)
+      instance.setSelection(range)
+      instance.revealRangeInCenter(range)
+    }
     if (reveal.focus) instance.focus()
     useEditorTabStore.getState().revealDone()
   }, [path, ready, reveal, hidden, themed])

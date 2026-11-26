@@ -4,7 +4,12 @@ import { listDirectory } from '../files/directory-listing'
 import { DirectoryWatchers } from '../files/directory-watchers'
 import { fileRoots } from '../files/file-roots'
 import { resolveInsideRoots, rootRelativePath } from '../files/path-containment'
-import { outermostPaths, renameEntry, resolveChangeableEntry } from '../files/tree-file-operations'
+import {
+  createEntry,
+  outermostPaths,
+  renameEntry,
+  resolveChangeableEntry
+} from '../files/tree-file-operations'
 import { handleTrusted } from './trusted-ipc'
 
 /** More expanded folders than any tree shows; a longer list is a bug or abuse. */
@@ -102,6 +107,17 @@ export function registerFileTreeIpc(): void {
       throw new Error('renamePath expects a path and a name')
     }
     return renameEntry(path, name, await rootPaths())
+  })
+
+  handleTrusted(FILE_TREE_CHANNELS.create, async (_event, folder, name, kind) => {
+    if (
+      typeof folder !== 'string' ||
+      typeof name !== 'string' ||
+      (kind !== 'file' && kind !== 'directory')
+    ) {
+      throw new Error('createEntry expects a folder, a name and a kind')
+    }
+    return createEntry(folder, name, kind, await rootPaths())
   })
 
   // A folder leaving the workspace stops being watched.
