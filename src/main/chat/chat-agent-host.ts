@@ -23,9 +23,13 @@ const exists = (path: string): Promise<boolean> =>
 /** The one workspace chat: started from the panel, ended by New chat, closing the panel or quitting. */
 class ChatAgentHost {
   private current: { session: ChatAgentSession; cwd: string } | null = null
+  /** Bumped by every start, so a start overtaken by a newer one ends its own session. */
+  private generation = 0
+  private readonly watched = new WeakSet<WebContents>()
 
   async start(owner: WebContents, requested: string | null): Promise<{ chatId: string }> {
     this.end()
+    const generation = ++this.generation
     const roots = (await fileRoots.current()).map((root) => root.path)
     const folders = (await workspaceStore.view()).folders
       .filter((folder) => !folder.missing)
@@ -56,11 +60,16 @@ class ChatAgentHost {
         })
       }
     )
+    if (generation !== this.generation) {
+      session.end()
+      throw new Error('A newer chat was started.')
+    }
     this.current = { session, cwd }
-    // Ends with the page, so a reload doesn't leave the agent running.
-    owner.once('destroyed', () => {
-      if (this.current?.session === session) this.end()
-    })
+    if (!this.watched.has(owner)) {
+      this.watched.add(owner)
+      // Ends with the page, so a reload doesn't leave the agent running.
+      owner.once('destroyed', () => this.end())
+    }
     void session.open()
     return { chatId: session.id }
   }
@@ -72,6 +81,8 @@ class ChatAgentHost {
   }
 
   end(chatId?: string): void {
+    // An end without an id also cancels a start still on its way.
+    if (chatId === undefined) this.generation++
     if (!this.current || (chatId !== undefined && this.current.session.id !== chatId)) return
     this.current.session.end()
     this.current = null

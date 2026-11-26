@@ -39,6 +39,15 @@ type ChatState = {
   followLink: (path: string, line: number, endLine: number | null) => void
 }
 
+/** A refused prompt or map request: its turn never started, so the chat takes the next one. */
+const refused =
+  (action: string, chatId: string) =>
+  (error: unknown): void => {
+    report(action)(error)
+    const { chatId: current, status } = useChatStore.getState()
+    if (current === chatId && status === 'busy') useChatStore.setState({ status: 'ready' })
+  }
+
 const report =
   (action: string) =>
   (error: unknown): void => {
@@ -47,6 +56,9 @@ const report =
       error: `${action} failed: ${error instanceof Error ? error.message : String(error)}`
     })
   }
+
+/** Counts chat starts, so only the latest one's chat is kept. */
+let starts = 0
 
 export const useChatStore = create<ChatState>((set, get) => ({
   open: false,
@@ -82,18 +94,25 @@ export const useChatStore = create<ChatState>((set, get) => ({
     get().newChat()
   },
   close: () => {
+    starts++
     const { chatId } = get()
     set({ open: false, chatId: null, status: 'none', items: [], configOptions: [], error: null })
     if (chatId !== null) window.desktop.endChat(chatId).catch(() => undefined)
   },
   newChat: () => {
     const previous = get().chatId
+    const start = ++starts
     set({ chatId: null, status: 'starting', items: [], configOptions: [], error: null })
     if (previous !== null) window.desktop.endChat(previous).catch(() => undefined)
     window.desktop
       .startChat(null)
-      .then(({ chatId }) => set({ chatId }))
+      .then(({ chatId }) => {
+        // Closed, or a newer chat asked for, while this one started.
+        if (start === starts && get().open) set({ chatId })
+        else window.desktop.endChat(chatId).catch(() => undefined)
+      })
       .catch((error: unknown) => {
+        if (start !== starts) return
         set({ status: 'none' })
         report('Starting the chat')(error)
       })
@@ -107,7 +126,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
       return false
     }
     set((state) => ({ items: withUserMessage(state.items, text), status: 'busy', error: null }))
-    window.desktop.sendChatPrompt(chatId, expanded.text).catch(report('Sending the message'))
+    window.desktop
+      .sendChatPrompt(chatId, expanded.text)
+      .catch(refused('Sending the message', chatId))
     return true
   },
   stop: () => {
@@ -135,7 +156,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       status: 'busy',
       error: null
     }))
-    window.desktop.generateWorkspaceMap(chatId).catch(report('Generating the map'))
+    window.desktop.generateWorkspaceMap(chatId).catch(refused('Generating the map', chatId))
   },
   editMap: () => {
     window.desktop

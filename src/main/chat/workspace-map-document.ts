@@ -30,9 +30,12 @@ function sectionBody(text: string, section: MapSection): string | null {
   return found ? text.slice(found.bodyStart, found.bodyEnd).trim() : null
 }
 
+/** Any section marker, which written text must not carry: it would end its section early. */
+const MARKER = /<!--\s*\/?\s*(?:workspace|playbook)\s*-->/gi
+
 /** Replaces the section's body, keeping everything around it; a missing section is added at the end. */
 export function replaceSection(text: string, section: MapSection, body: string): string {
-  const capped = body.trim().slice(0, SECTION_CAPS[section])
+  const capped = body.replace(MARKER, '').trim().slice(0, SECTION_CAPS[section])
   const found = locate(text, section)
   if (found) return `${text.slice(0, found.start)}${block(section, capped)}${text.slice(found.end)}`
   const before = text.trimEnd()

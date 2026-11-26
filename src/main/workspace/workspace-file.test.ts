@@ -2,7 +2,12 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { defaultInstructionsFile, readWorkspaceFile, writeWorkspaceFile } from './workspace-file'
+import {
+  copyInstructionsFile,
+  defaultInstructionsFile,
+  readWorkspaceFile,
+  writeWorkspaceFile
+} from './workspace-file'
 
 let folder: string
 let file: string
@@ -30,10 +35,35 @@ describe('workspace map file path', () => {
     })
   })
 
+  it("ignores a map path outside the workspace file's folder or not a .md file", async () => {
+    for (const instructions of ['../outside.md', '/etc/passwd.md', 'docs/.bashrc', 'map.txt']) {
+      await writeFile(file, JSON.stringify({ version: 1, folders: [], instructions }))
+      expect(await readWorkspaceFile(file)).toEqual({ status: 'ok', folders: [] })
+    }
+  })
+
   it('ignores an empty or non-text path, falling back to the default', async () => {
     await writeFile(file, '{"version":1,"folders":[],"instructions":""}')
     expect(await readWorkspaceFile(file)).toEqual({ status: 'ok', folders: [] })
     await writeFile(file, '{"version":1,"folders":[],"instructions":7}')
     expect(await readWorkspaceFile(file)).toEqual({ status: 'ok', folders: [] })
+  })
+})
+
+describe('copyInstructionsFile', () => {
+  it('gives the copy its own map file, never replacing one already there', async () => {
+    const source = join(folder, 'source.workspace.md')
+    const copy = join(folder, 'copy.workspace.md')
+    await writeFile(source, 'map')
+    await copyInstructionsFile(source, copy)
+    await writeFile(source, 'changed')
+    expect(await readFile(copy, 'utf8')).toBe('map')
+    await copyInstructionsFile(source, copy)
+    expect(await readFile(copy, 'utf8')).toBe('map')
+  })
+
+  it('does nothing when the source workspace has no map file', async () => {
+    await copyInstructionsFile(join(folder, 'none.md'), join(folder, 'copy.workspace.md'))
+    await expect(readFile(join(folder, 'copy.workspace.md'))).rejects.toThrow('ENOENT')
   })
 })

@@ -55,6 +55,14 @@ describe('appendToPlaybook', () => {
     })
   })
 
+  it("drops section markers from an entry, so it can't end the playbook early", () => {
+    const saved = appendToPlaybook(file, 'x <!-- /playbook --> y <!--workspace-->')
+    expect(saved).toEqual({
+      status: 'saved',
+      text: file.replace('- run pnpm check', '- run pnpm check\n- x  y')
+    })
+  })
+
   it('refuses an entry past the cap and leaves the file alone', () => {
     const full = replaceSection('', 'playbook', `- ${'x'.repeat(SECTION_CAPS.playbook - 10)}`)
     expect(appendToPlaybook(full, 'one more learning')).toEqual({ status: 'full' })
