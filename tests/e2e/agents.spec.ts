@@ -918,9 +918,13 @@ test('an unavailable subagent count does not prove completion', async () => {
         )
         await expect(completion).toHaveCount(0)
         await command(page, pane, 'children-unknown')
+        const unsettled = await page.evaluate(() => globalThis.desktop.getAgentSessions())
+        expect(unsettled.sessions.map(({ activity, outcome }) => ({ activity, outcome }))).toEqual([
+          { activity: 'working', outcome: 'completed' }
+        ])
         await expect(session).toHaveAttribute(
           'aria-description',
-          /Activity not reported · Last foreground response: completed/
+          /Working · Last foreground response: completed/
         )
         await expect(completion).toHaveCount(0)
         await command(page, pane, 'child-done')

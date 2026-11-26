@@ -277,8 +277,11 @@ export function trackAgentSessions(
         recurring,
         nextRunAt
       })) ?? null
+    // An unknown child count can't settle a completed turn, so a working session stays working until it's known.
+    const unsettled =
+      status === 'completed' && live?.activeSubagents === null && session.activity === 'working'
     session.activity =
-      status === 'working' || (live?.activeSubagents ?? 0) > 0
+      status === 'working' || (live?.activeSubagents ?? 0) > 0 || unsettled
         ? 'working'
         : (status === 'completed' && live?.activeSubagents === 0) ||
             status === 'failed' ||
