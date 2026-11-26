@@ -190,6 +190,10 @@ for await (const command of input) {
         settle(command)
         snapshot.tool = null
         reply = await report()
+        // Like the real adapters, only the update that completes the turn carries its response.
+        snapshot.turn = Object.fromEntries(
+          Object.entries(snapshot.turn).filter(([key]) => key !== 'response')
+        )
         break
       case 'schedule':
         snapshot.schedules = [
