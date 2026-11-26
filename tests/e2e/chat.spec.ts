@@ -11,7 +11,7 @@ const fixtures = resolve(__dirname, '..', 'fixtures', 'acp')
 const LINKS_PROMPT = [
   'Without using any tools, reply with exactly this text and nothing else:',
   '',
-  'The greeting is in src/greeting.js:2:10 and is called from src/main.js:1, 3; the readme is README.md, see also `src/greeting.js#L2-L3`. There is no src/missing.js:4.'
+  'The greeting is in src/greeting.js:2:10 and is called from __src/main.js:1, 3__; the readme is **README.md**, see also `src/greeting.js#L2-L3`. There is no src/missing.js:4.'
 ].join('\n')
 
 const panel = (page: Page) => page.getByRole('complementary', { name: 'Chat panel' })

@@ -7,15 +7,19 @@ export type CodeReference = {
 }
 
 const LINE = '[1-9]\\d*'
-// A path ends on a letter, digit or `/`, so a sentence's full stop or comma isn't part of it.
-const PATH = '[^\\s:`\'"<>|()\\[\\]{},;#*!?]*[^\\s:`\'"<>|()\\[\\]{},;#*!?.]'
+// Inline code or a link target is all reference: any file name, the line suffix found lazily.
+const EXACT_PATH = '[^\\s:`\'"<>|]+?'
+// In prose, brackets may sit inside a path (`app/[id]/page.tsx`, `app/(auth)/x.ts`) but not at
+// its ends, and a full stop or comma after it is the sentence's.
+const PROSE_PATH =
+  '[^\\s:`\'"<>|()\\[\\]{},;#*!?](?:[^\\s:`\'"<>|{},;#*!?]*[^\\s:`\'"<>|()\\[\\]{},;#*!?.])?'
 const SUFFIX =
   `(?::(?<line>${LINE})(?::(?<column>${LINE})|-(?<end>${LINE})|(?:, ?${LINE})+)?` +
   `|#L(?<anchor>${LINE})(?:-L(?<anchorEnd>${LINE}))?)?`
-const REFERENCE = new RegExp(`^(?<path>${PATH})${SUFFIX}$`)
+const REFERENCE = new RegExp(`^(?<path>${EXACT_PATH})${SUFFIX}$`)
 // In prose a reference starts a word; a URL is matched first so its parts are never one.
 const IN_TEXT = new RegExp(
-  `[a-z][\\w+.-]*://\\S+|(?<![^\\s(\\[{"'])(?<path>${PATH})${SUFFIX}(?![\\w/-])`,
+  `[a-z][\\w+.-]*://\\S+|(?<![^\\s(\\[{"'])(?<path>${PROSE_PATH})${SUFFIX}(?![\\w/-])`,
   'gi'
 )
 

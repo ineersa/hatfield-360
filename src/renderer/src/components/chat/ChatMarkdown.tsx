@@ -1,28 +1,34 @@
-import { createContext, useContext, useEffect, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { defaultRehypePlugins, type Components } from 'streamdown'
 import { MessageResponse } from '@/components/ai-elements/message'
 import { useChatStore } from '@/state/chat-store'
 import { CHAT_REFERENCE_CAP } from '../../../../shared/chat-agent-api'
-import {
-  findCodeReferences,
-  parseCodeReference,
-  type CodeReference
-} from '../../../../shared/chat-references'
+import { parseCodeReference, type CodeReference } from '../../../../shared/chat-references'
 import { FILE_REFERENCE_TAG, fileReferenceRehype } from './file-reference-rehype'
 
 const LINK_CLASS =
   'cursor-pointer text-link underline-offset-2 hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none'
 
-/** Each path the reply names that main found inside the workspace, to the file it opens. */
-const ResolvedFiles = createContext<ReadonlyMap<string, string>>(new Map())
+type ReplyFiles = {
+  /** Each path the reply names that main found inside the workspace, to the file it opens. */
+  resolved: ReadonlyMap<string, string>
+  /** A rendered reference reports its path; a new identity asks every reference again. */
+  named: (path: string) => void
+}
+
+const ReplyFilesContext = createContext<ReplyFiles>({ resolved: new Map(), named: () => undefined })
 
 type Target = { reference: CodeReference; file: string }
 
 /** The reference in `text` when it names a file the workspace has, with that file. */
 function useTarget(text: string | null): Target | null {
-  const resolved = useContext(ResolvedFiles)
+  const { resolved, named } = useContext(ReplyFilesContext)
   const reference = text === null ? null : parseCodeReference(text)
-  const file = reference === null ? undefined : resolved.get(reference.path)
+  const path = reference?.path ?? null
+  useEffect(() => {
+    if (path !== null) named(path)
+  }, [path, named])
+  const file = path === null ? undefined : resolved.get(path)
   return reference === null || file === undefined ? null : { reference, file }
 }
 
@@ -103,41 +109,54 @@ const COMPONENTS: Components = {
 // After the defaults sanitize the tree, so the elements it adds are kept.
 const REHYPE_PLUGINS = [...Object.values(defaultRehypePlugins), fileReferenceRehype]
 
-/** Every path the reply may name, in prose, inline code or a link target, up to the cap. */
-const namedPaths = (text: string): string[] => {
-  const paths = new Set(findCodeReferences(text).map(({ reference }) => reference.path))
-  for (const [, code, target] of text.matchAll(/`([^`\n]+)`|\]\(([^)\s]+)\)/g)) {
-    const reference = parseCodeReference(code ?? target ?? '')
-    if (reference !== null) paths.add(reference.path)
-  }
-  return [...paths].slice(0, CHAT_REFERENCE_CAP)
-}
-
-/** The files a finished reply names, resolved by main in one call; none while it streams. */
-function useResolvedFiles(text: string, streaming: boolean): ReadonlyMap<string, string> {
-  const chatId = useChatStore((state) => state.chatId)
+/**
+ * The files a finished reply's rendered references name, resolved by main in batches: the
+ * references found in one render go in one call. Nothing is asked while the reply streams.
+ */
+function useReplyFiles(streaming: boolean): ReplyFiles {
   const [resolved, setResolved] = useState<ReadonlyMap<string, string>>(new Map())
+  const batch = useRef({ pending: new Set<string>(), requested: new Set<string>(), alive: true })
+
   useEffect(() => {
-    const paths = streaming || chatId === null ? [] : namedPaths(text)
-    let current = paths.length > 0
-    if (chatId === null || !current) return () => undefined
+    const state = batch.current
+    state.alive = true
+    return () => {
+      state.alive = false
+    }
+  }, [])
+
+  const flush = useCallback(() => {
+    const state = batch.current
+    const room = Math.max(0, CHAT_REFERENCE_CAP - state.requested.size)
+    const paths = [...state.pending].slice(0, room)
+    state.pending.clear()
+    const { chatId } = useChatStore.getState()
+    if (chatId === null || paths.length === 0) return
+    for (const path of paths) state.requested.add(path)
     window.desktop
       .resolveChatPaths(chatId, paths)
       .then((files) => {
-        if (!current) return
-        const found = new Map<string, string>()
-        paths.forEach((path, index) => {
+        const found = paths.flatMap((path, index) => {
           const file = files[index]
-          if (typeof file === 'string') found.set(path, file)
+          return typeof file === 'string' ? [[path, file] as const] : []
         })
-        setResolved(found)
+        if (state.alive && found.length > 0)
+          setResolved((previous) => new Map([...previous, ...found]))
       })
       .catch((error: unknown) => console.error("Resolving the reply's files failed:", error))
-    return () => {
-      current = false
-    }
-  }, [text, streaming, chatId])
-  return resolved
+  }, [])
+
+  const named = useCallback(
+    (path: string) => {
+      const state = batch.current
+      if (streaming || state.requested.has(path)) return
+      if (state.pending.size === 0) queueMicrotask(flush)
+      state.pending.add(path)
+    },
+    [streaming, flush]
+  )
+
+  return useMemo(() => ({ resolved, named }), [resolved, named])
 }
 
 /** A reply as Markdown, without raw HTML, with the workspace files it names as links. */
@@ -148,9 +167,9 @@ export function ChatMarkdown({
   text: string
   streaming: boolean
 }): React.JSX.Element {
-  const resolved = useResolvedFiles(text, streaming)
+  const files = useReplyFiles(streaming)
   return (
-    <ResolvedFiles.Provider value={resolved}>
+    <ReplyFilesContext.Provider value={files}>
       <MessageResponse
         className="markdown-preview chat-markdown"
         components={COMPONENTS}
@@ -161,6 +180,6 @@ export function ChatMarkdown({
       >
         {text}
       </MessageResponse>
-    </ResolvedFiles.Provider>
+    </ReplyFilesContext.Provider>
   )
 }

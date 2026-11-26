@@ -20,6 +20,11 @@ describe('parseCodeReference', () => {
     expect(parseCodeReference('src/foo.ts#L12')).toEqual(at('src/foo.ts', 12))
     expect(parseCodeReference('src/foo.ts#L12-L20')).toEqual(at('src/foo.ts', 12, 20))
     expect(parseCodeReference('../lib/Dockerfile')).toEqual(at('../lib/Dockerfile'))
+    expect(parseCodeReference('src/app/[id]/page.tsx:12')).toEqual(at('src/app/[id]/page.tsx', 12))
+    expect(parseCodeReference('src/app/(auth)/page.tsx#L3')).toEqual(
+      at('src/app/(auth)/page.tsx', 3)
+    )
+    expect(parseCodeReference('notes/a#b.md')).toEqual(at('notes/a#b.md'))
   })
 
   it('leaves other code alone', () => {
@@ -57,6 +62,13 @@ describe('findCodeReferences', () => {
       { text: 'README.md', reference: at('README.md') },
       { text: 'lib/x.ts:4:2', reference: at('lib/x.ts', 4, null, 2) },
       { text: 'a/b.ts#L3-L5', reference: at('a/b.ts', 3, 5) }
+    ])
+  })
+
+  it('keeps brackets inside a path, not around it', () => {
+    expect(found('Routes: src/app/[id]/page.tsx:12 and (src/app/(auth)/page.tsx).')).toEqual([
+      { text: 'src/app/[id]/page.tsx:12', reference: at('src/app/[id]/page.tsx', 12) },
+      { text: 'src/app/(auth)/page.tsx', reference: at('src/app/(auth)/page.tsx') }
     ])
   })
 
