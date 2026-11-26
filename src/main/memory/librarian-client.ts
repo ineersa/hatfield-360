@@ -1,3 +1,4 @@
+import { Buffer } from 'node:buffer'
 import { isPlainObject } from '../../shared/plain-object'
 
 /** Where Librarian's MCP endpoint is, from Settings. */
@@ -59,6 +60,11 @@ function rpcMessage(text: string, eventStream: boolean, id: number): unknown {
   throw new Error('Librarian closed the stream without answering.')
 }
 
+/** The path's UTF-8 bytes: fetch takes header values only as byte strings. */
+export function projectHeader(path: string): string {
+  return Buffer.from(path, 'utf8').toString('latin1')
+}
+
 async function post(
   endpoint: LibrarianEndpoint,
   project: string,
@@ -69,7 +75,7 @@ async function post(
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     Accept: 'application/json, text/event-stream',
-    'X-Librarian-Project': project
+    'X-Librarian-Project': projectHeader(project)
   }
   if (endpoint.token) headers.Authorization = `Bearer ${endpoint.token}`
   if (connection) {

@@ -21,7 +21,7 @@ describe('parseMemorySearch', () => {
           kind: 'reflection',
           id: '0678e9156899c794a5901c90ba068f3b',
           session_id: '12',
-          timestamp: '2026-11-21 02:05',
+          timestamp: '2026-11-22T00:03:05+00:00',
           content: 'Protocol v1 uses a Unix-domain socket.'
         },
         {
@@ -52,7 +52,7 @@ describe('parseMemorySearch', () => {
           kind: 'reflection',
           sessionId: '12',
           provider: 'hatfield',
-          at: Date.UTC(2026, 10, 21, 2, 5),
+          at: Date.UTC(2026, 10, 22, 0, 3, 5),
           content: 'Protocol v1 uses a Unix-domain socket.',
           importance: null
         },
@@ -75,10 +75,38 @@ describe('parseMemorySearch', () => {
 })
 
 describe('parseMemoryRecall', () => {
-  it('condenses Claude and Hatfield journal events into speaker lines, skipping thinking', () => {
+  it('condenses Claude and Hatfield journal events into speaker lines, skipping thinking and prompts', () => {
     const evidence = parseMemoryRecall({
       ok: true,
       events: [
+        {
+          type: 'run_started',
+          created_at: '2026-11-21T02:00:00+00:00',
+          payload: {
+            step_id: 'start-1',
+            payload: {
+              system_prompt: '',
+              messages: [
+                { role: 'system', content: [{ type: 'text', text: 'You are a coding agent.' }] },
+                {
+                  role: 'user-context',
+                  content: [{ type: 'text', text: '<agents_instructions>' }]
+                },
+                { role: 'user', content: [{ type: 'text', text: 'Plan the status protocol' }] }
+              ]
+            }
+          }
+        },
+        {
+          type: 'tool_execution_end',
+          created_at: '2026-11-21T02:01:00+00:00',
+          payload: {
+            tool_result: {
+              is_error: false,
+              result: { tool_name: 'bash', content: [{ type: 'text', text: '/ 938G 771G' }] }
+            }
+          }
+        },
         {
           seq: 660,
           type: 'assistant',
@@ -134,6 +162,12 @@ describe('parseMemoryRecall', () => {
       ]
     })
     expect(evidence).toEqual([
+      {
+        at: Date.parse('2026-11-21T02:00:00+00:00'),
+        speaker: 'user',
+        text: 'Plan the status protocol'
+      },
+      { at: Date.parse('2026-11-21T02:01:00+00:00'), speaker: 'tool', text: '/ 938G 771G' },
       {
         at: Date.parse('2026-11-24T15:00:16.799Z'),
         speaker: 'tool',

@@ -13,9 +13,16 @@ function memoryProvider(sessionId: string): AgentProvider | null {
   return null
 }
 
-/** Librarian's `YYYY-MM-DD HH:MM` stamps are UTC, like the journal events they come from. */
+/**
+ * Observations carry `YYYY-MM-DD HH:MM` in UTC, like the journal events they come from;
+ * reflections carry ISO 8601 with an offset.
+ */
 function librarianTime(value: unknown): number | null {
   if (typeof value !== 'string') return null
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:\d{2})$/.test(value)) {
+    const at = Date.parse(value)
+    return Number.isFinite(at) ? at : null
+  }
   const match = /^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2})$/.exec(value)
   if (!match) return null
   const [, year, month, day, hour, minute] = match.map(Number)
@@ -97,6 +104,17 @@ function eventEvidence(event: unknown): MemoryEvidence[] {
   const { payload } = event
   const created = typeof event.created_at === 'string' ? Date.parse(event.created_at) : NaN
   const at = Number.isFinite(created) ? created : null
+  // A Hatfield run starts with its whole prompt; only the user's own messages are evidence.
+  if (event.type === 'run_started' && isPlainObject(payload.payload)) {
+    const messages = Array.isArray(payload.payload.messages) ? payload.payload.messages : []
+    return messages
+      .filter((message) => isPlainObject(message) && message.role === 'user')
+      .flatMap((message) => messageEvidence(message, at, event.type))
+  }
+  if (isPlainObject(payload.tool_result) && isPlainObject(payload.tool_result.result)) {
+    const text = blockText(payload.tool_result.result).trim()
+    return text ? [{ at, speaker: 'tool', text }] : []
+  }
   const message = isPlainObject(payload.message)
     ? payload.message
     : isPlainObject(payload.assistant_message)
@@ -107,7 +125,12 @@ function eventEvidence(event: unknown): MemoryEvidence[] {
       ? [{ at, speaker: 'user', text: payload.text }]
       : []
   }
-  const speaker = message.role === 'user' || event.type === 'user' ? 'user' : 'assistant'
+  return messageEvidence(message, at, event.type)
+}
+
+function messageEvidence(message: unknown, at: number | null, type: unknown): MemoryEvidence[] {
+  if (!isPlainObject(message)) return []
+  const speaker = message.role === 'user' || type === 'user' ? 'user' : 'assistant'
   const calls = Array.isArray(message.tool_calls) ? message.tool_calls : []
   const blocks: unknown[] = Array.isArray(message.content)
     ? message.content

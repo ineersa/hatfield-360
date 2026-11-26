@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { separatorOf } from '@/components/editor/editor-tab-labels'
+import { terminalTabControllers } from '@/components/terminal/terminal-tab-controllers'
 import { useTerminalStore } from './terminal-store'
 import { useWorkspaceStore } from './workspace-store'
 import { useWorktreeStore } from './worktree-store'
@@ -25,7 +26,8 @@ function activeProject(): string | null {
     (folder) => folder.kind === 'project' && !folder.missing
   )
   const { tabs, activeTabId } = useTerminalStore.getState()
-  const cwd = tabs.find((tab) => tab.id === activeTabId)?.cwd ?? null
+  const tab = tabs.find((candidate) => candidate.id === activeTabId)
+  const cwd = tab ? (terminalTabControllers.get(tab.id)?.activeCwd() ?? tab.cwd) : null
   const worktrees = useWorktreeStore.getState().projects
   const owner =
     cwd === null

@@ -75,7 +75,10 @@ test('Search Memory opens over a focused terminal, keeps its keys from the shell
           await expect(dialog(page).locator(':focus')).toHaveCount(1)
         }
 
+        // Close Pane's key in the popup leaves the terminal behind it alone.
         await input.focus()
+        await page.keyboard.press(process.platform === 'darwin' ? 'Meta+W' : 'Control+Shift+W')
+        await expect(dialog(page)).toBeVisible()
         await page.keyboard.press('Escape')
         await expect(dialog(page)).toBeHidden()
         await expect(textarea).toBeFocused()
