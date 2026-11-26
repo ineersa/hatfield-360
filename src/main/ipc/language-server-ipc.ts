@@ -2,6 +2,8 @@ import {
   LANGUAGE_SERVER_CHANNELS,
   type LanguageServerConnectResult
 } from '../../shared/language-server-api'
+import { app } from 'electron'
+import { join } from 'node:path'
 import { fileRoots } from '../files/file-roots'
 import { realpath } from 'node:fs/promises'
 import { isPathInside, resolveInsideRoots } from '../files/path-containment'
@@ -63,7 +65,9 @@ export function registerLanguageServerIpc(): void {
         return { kind: 'missing', server: definition.name, message: command.missing }
       // One server per workspace folder, as in VS Code: it finds the projects inside it itself.
       const root = folder
-      const configuration = (await definition.configure?.(root)) ?? {}
+      const configuration =
+        (await definition.configure?.(root, join(app.getPath('userData'), 'language-servers'))) ??
+        {}
       return {
         kind: 'connected',
         connection: languageServerSessions.connect(
