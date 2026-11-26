@@ -4,7 +4,11 @@ import { useEditorScheme } from '@/lib/editor-scheme'
 import { useEditorTabStore } from '@/state/editor-tab-store'
 import { useFileTreeStore } from '@/state/file-tree-store'
 import { useSettingsStore } from '@/state/settings-store'
-import { setEditorCaret, setEditorSelectionSource } from '@/state/editor-selection'
+import {
+  setEditorCaret,
+  setEditorPromptContextSource,
+  setEditorSelectionSource
+} from '@/state/editor-selection'
 import { editorViewState, setEditorViewState } from '@/state/editor-view-states'
 import { editorDocument, saveDocument } from './editor-documents'
 import { editorColorTheme, type MenuColors } from './editor-color-theme'
@@ -163,8 +167,19 @@ export function CodeEditor({
       if (selection.startLineNumber !== selection.endLineNumber) return null
       return model.getValueInRange(selection)
     })
+    setEditorPromptContextSource(() => {
+      const model = instance.getModel()
+      const file = shownPath.current
+      if (!model || file === null) return { file: null, selection: null }
+      const selection = instance.getSelection()
+      if (!selection) return { file, selection: null }
+      // With nothing selected, the caret's line stands for the selection.
+      const text = selection.isEmpty() ? '' : model.getValueInRange(selection)
+      return { file, selection: { ...referencedLines(selection), text } }
+    })
     return () => {
       setEditorSelectionSource(null)
+      setEditorPromptContextSource(null)
       setEditorCaret(null)
       instance.dispose()
       editor.current = null

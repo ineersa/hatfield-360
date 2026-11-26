@@ -64,7 +64,8 @@ test('the window size, position and layout come back after a restart', async () 
           search: { width: 300, collapsed: false },
           git: { width: 300, collapsed: false }
         },
-        notificationsWidth: 380
+        notificationsWidth: 380,
+        chatWidth: 440
       }
     })
 

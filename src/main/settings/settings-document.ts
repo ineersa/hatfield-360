@@ -95,9 +95,18 @@ function agentProfile(raw: unknown): Checked<Settings['agents.hatfield']> {
   return { value: { executable, args: raw.args } }
 }
 
+/** An agent's id for a model or effort level, such as `haiku` or `claude-sonnet-5`. */
+function agentOptionId(value: unknown): Checked<string> {
+  return typeof value === 'string' && /^[\w.:[\]-]{1,64}$/.test(value)
+    ? { value }
+    : { problem: 'must be a model or effort id, such as "haiku" or "medium"' }
+}
+
 const CHECKS: { [K in SettingKey]: (value: unknown) => Checked<Settings[K]> } = {
   'agents.hatfield': agentProfile,
   'agents.claude': agentProfile,
+  'chat.model': agentOptionId,
+  'chat.effort': agentOptionId,
   'notifications.agentSounds': flag,
   'notifications.completedSound': agentSound,
   'notifications.needsInputSound': agentSound,

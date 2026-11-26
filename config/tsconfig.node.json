@@ -5,6 +5,7 @@
     "../src/preload/**/*",
     "../src/shared/**/*",
     "../tests/**/*",
+    "../scripts/**/*",
     "../electron.vite.config.ts",
     "./*.mts"
   ],

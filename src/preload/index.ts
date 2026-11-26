@@ -1,5 +1,6 @@
 import { AGENT_CHANNELS, type AgentNotification, type AgentSnapshot } from '../shared/agent-api'
 import { contextBridge, ipcRenderer } from 'electron'
+import { CHAT_AGENT_CHANNELS, type ChatEvent } from '../shared/chat-agent-api'
 import { type DesktopApi, IPC_CHANNELS } from '../shared/desktop-api'
 import { EDITOR_CHANNELS } from '../shared/editor-api'
 import { FILES_SESSION_CHANNELS } from '../shared/files-session-api'
@@ -15,6 +16,23 @@ import { WEB_LINK_CHANNELS } from '../shared/web-link-api'
 import { type ProjectWorktrees, WORKTREE_CHANNELS } from '../shared/worktree-api'
 
 const desktopApi: DesktopApi = {
+  startChat: (cwd) => ipcRenderer.invoke(CHAT_AGENT_CHANNELS.start, cwd),
+  sendChatPrompt: (chatId, text) => ipcRenderer.invoke(CHAT_AGENT_CHANNELS.prompt, chatId, text),
+  answerChatPermission: (chatId, requestId, optionId) =>
+    ipcRenderer.invoke(CHAT_AGENT_CHANNELS.answerPermission, chatId, requestId, optionId),
+  setChatConfig: (chatId, configId, value) =>
+    ipcRenderer.invoke(CHAT_AGENT_CHANNELS.setConfig, chatId, configId, value),
+  stopChat: (chatId) => ipcRenderer.invoke(CHAT_AGENT_CHANNELS.stop, chatId),
+  endChat: (chatId) => ipcRenderer.invoke(CHAT_AGENT_CHANNELS.end, chatId),
+  generateWorkspaceMap: (chatId) => ipcRenderer.invoke(CHAT_AGENT_CHANNELS.generateMap, chatId),
+  workspaceMapFile: () => ipcRenderer.invoke(CHAT_AGENT_CHANNELS.mapFile),
+  resolveChatLink: (chatId, path, line, endLine) =>
+    ipcRenderer.invoke(CHAT_AGENT_CHANNELS.resolveLink, chatId, path, line, endLine),
+  subscribeChatEvents: (callback) => {
+    const listener = (_event: unknown, chatEvent: ChatEvent): void => callback(chatEvent)
+    ipcRenderer.on(CHAT_AGENT_CHANNELS.event, listener)
+    return () => ipcRenderer.removeListener(CHAT_AGENT_CHANNELS.event, listener)
+  },
   launchAgent: (request) => ipcRenderer.invoke(AGENT_CHANNELS.launch, request),
   getAgentSessions: () => ipcRenderer.invoke(AGENT_CHANNELS.get),
   subscribeAgentNotifications: (callback) => {

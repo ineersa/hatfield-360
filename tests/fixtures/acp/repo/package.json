@@ -1,0 +1,9 @@
+{
+  "name": "greeter",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test",
+    "start": "node src/main.js"
+  }
+}

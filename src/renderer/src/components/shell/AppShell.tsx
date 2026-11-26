@@ -1,4 +1,6 @@
 import { useEffect, useRef } from 'react'
+import { ChatPanel } from '@/components/chat/ChatPanel'
+import { useChatShortcut } from '@/components/chat/use-chat-shortcut'
 import { UnsavedChangesDialog } from '@/components/editor/UnsavedChangesDialog'
 import { SettingsPage } from '@/components/settings/SettingsPage'
 import { useAppFont } from '@/components/settings/use-app-font'
@@ -11,6 +13,7 @@ import { useFindInFiles } from '@/components/search/use-find-in-files'
 import { useTerminalCommands } from '@/components/terminal/use-terminal-commands'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { WelcomeScreen } from '@/components/workspace/WelcomeScreen'
+import { useChatStore } from '@/state/chat-store'
 import { connectFilesSession } from '@/state/files-session'
 import { useEditorTabStore } from '@/state/editor-tab-store'
 import { useKeymapStore } from '@/state/keymap-store'
@@ -48,6 +51,7 @@ export function AppShell(): React.JSX.Element {
   const hasTerminals = useTerminalStore((state) => state.tabs.length > 0)
   const hasEditorTabs = useEditorTabStore((state) => state.tabs.length > 0)
   const notificationsOpen = useNotificationStore((state) => state.panelOpen)
+  const chatOpen = useChatStore((state) => state.open)
 
   useEffect(() => connectWorkspace(), [connectWorkspace])
   useEffect(() => connectWorktrees(), [connectWorktrees])
@@ -64,6 +68,7 @@ export function AppShell(): React.JSX.Element {
   useColorThemes()
   useTerminalCommands()
   useFindInFiles()
+  useChatShortcut()
   useEffect(() => {
     document.title = workspaceName ? `${workspaceName} — Hatfield 360` : 'Hatfield 360'
   }, [workspaceName])
@@ -155,6 +160,7 @@ export function AppShell(): React.JSX.Element {
               )}
             </main>
           </div>
+          {chatOpen ? <ChatPanel /> : null}
           {notificationsOpen ? <NotificationsPanel /> : null}
           <NotificationsBar />
         </div>

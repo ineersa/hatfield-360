@@ -5,6 +5,9 @@
 @import './themes/base.css';
 @import './terminal.css';
 @import './markdown-preview.css';
+/* Streamdown (chat replies) styles its own markup with Tailwind classes. */
+@source '../../../../node_modules/streamdown/dist/*.js';
+@source '../../../../node_modules/@streamdown/*/dist/*.js';
 
 /*
  * Every component styles itself through these roles, never with raw values. Colours, radii and row
@@ -142,4 +145,13 @@ body {
 /* Tab strips scroll with arrow buttons; a scrollbar under the tabs only crowds them. */
 @utility scrollbar-hidden {
   scrollbar-width: none;
+}
+
+/* A bare `border` (as in the shadcn and AI Elements components) is a separator, not the text colour. */
+@layer base {
+  *,
+  ::before,
+  ::after {
+    border-color: var(--color-separator);
+  }
 }

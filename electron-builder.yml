@@ -8,6 +8,9 @@ files:
   - package.json
   # The main process loads it as the Linux window icon.
   - resources/icon.png
+  # The workspace chat runs the user's own `claude` (CLAUDE_CODE_EXECUTABLE), so the Claude Agent SDK's
+  # bundled Claude Code, a package per platform of a few hundred MB, is left out.
+  - '!node_modules/@anthropic-ai/claude-agent-sdk-*/**'
 # Executables run from real files, not from the asar: node-pty's native addon, spawn-helper (macOS),
 # TypeScript's native language server and ripgrep. basedpyright changes its working directory to its own
 # folder, which can't be inside an asar; it has no dependencies to take along.
