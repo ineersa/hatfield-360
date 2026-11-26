@@ -23,6 +23,16 @@ const snapshot = {
   backgroundScripts: provider === 'hatfield' ? 0 : null,
   tool: null
 }
+// A settled turn keeps its ID and trigger; only a completed one carries the final response.
+const settle = (status) => {
+  const { id, trigger } = snapshot.turn ?? { id: `turn-${sequence + 1}` }
+  snapshot.turn = {
+    id,
+    status,
+    ...(trigger ? { trigger } : {}),
+    ...(status === 'completed' ? { response: 'Reviewed <3> files.\n  All checks pass.' } : {})
+  }
+}
 const print = (message) => process.stdout.write(`${message}\n`)
 const send = (event) =>
   new Promise((resolve, reject) => {
@@ -148,7 +158,7 @@ for await (const command of input) {
         break
       case 'report-failure-on-hangup':
         process.once('SIGHUP', () => {
-          snapshot.turn = { ...snapshot.turn, status: 'failed' }
+          settle('failed')
           void report()
             .then((status) => writeFile(join(process.cwd(), 'hangup-report'), status))
             .then(
@@ -177,9 +187,13 @@ for await (const command of input) {
       case 'completed':
       case 'failed':
       case 'cancelled':
-        snapshot.turn = { ...snapshot.turn, status: command }
+        settle(command)
         snapshot.tool = null
         reply = await report()
+        // Like the real adapters, only the update that completes the turn carries its response.
+        snapshot.turn = Object.fromEntries(
+          Object.entries(snapshot.turn).filter(([key]) => key !== 'response')
+        )
         break
       case 'schedule':
         snapshot.schedules = [

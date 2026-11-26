@@ -8,6 +8,8 @@ export class AgentNotificationPolicy {
   #epoch = 0
   #notified = new Set<string>()
   #closing = false
+  /** The response a turn reported when it completed, kept until its settled update notifies. */
+  #response: { turnId: string; text: string } | undefined
 
   beginClosing(): void {
     this.#closing = true
@@ -29,6 +31,7 @@ export class AgentNotificationPolicy {
     if (session.epoch !== this.#epoch) {
       this.#epoch = session.epoch
       this.#notified.clear()
+      this.#response = undefined
     }
     if (!session.telemetry) return []
     if (event.kind === 'notification')
@@ -36,6 +39,8 @@ export class AgentNotificationPolicy {
     if (this.#closing) return []
 
     const { turn, attention, activeSubagents } = session.telemetry
+    if (turn?.status === 'completed' && turn.response)
+      this.#response = { turnId: turn.id, text: turn.response }
     const messages: Message[] = []
     if (attention && this.#first(`attention:${attention.id}`))
       messages.push({ kind: 'needs-input' })
@@ -48,7 +53,10 @@ export class AgentNotificationPolicy {
       !attention &&
       this.#first(`completed:${turn.id}`)
     )
-      messages.push({ kind: 'completed' })
+      messages.push({
+        kind: 'completed',
+        response: this.#response?.turnId === turn.id ? this.#response.text : null
+      })
     return messages
   }
 }
