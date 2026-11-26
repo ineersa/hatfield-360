@@ -73,18 +73,10 @@ test('folders added to the workspace become projects or plain folders, and can b
   const [projects, cleanProjects] = await makeProjectsDir()
   const app = makeRepo(projects, 'app')
   git(app, 'worktree', 'add', '-q', '-b', 'feature', join(projects, 'app-feature'))
+  await mkdir(join(app, '.hatfield'))
   const notes = join(projects, 'notes')
-  await mkdir(notes)
+  await mkdir(join(notes, '.hatfield'), { recursive: true })
   const [userData, cleanUserData] = await makeTempDir('user-data')
-  // Polled: the workspace file is written after the panels update.
-  const expectSavedKinds = (kinds: string[]) =>
-    expect
-      .poll(async (): Promise<unknown> =>
-        JSON.parse(
-          await readFile(join(userData, 'workspaces', 'default.hatfield-workspace'), 'utf8')
-        )
-      )
-      .toMatchObject({ folders: kinds.map((kind) => ({ kind })) })
   try {
     await withApp(
       async (electronApp, page) => {
@@ -97,7 +89,16 @@ test('folders added to the workspace become projects or plain folders, and can b
         await expect(checkoutRows(page)).toHaveCount(0)
         await page.getByRole('button', { name: 'Worktrees (1)', exact: true }).click()
         await expect(checkoutRows(page)).toHaveText(['feature'])
-        await expectSavedKinds(['project', 'folder'])
+        expect(
+          await page.evaluate(() =>
+            globalThis.desktop
+              .getWorkspace()
+              .then(({ folders }) => folders.map(({ path, kind }) => ({ path, kind })))
+          )
+        ).toEqual([
+          { path: app, kind: 'project' },
+          { path: notes, kind: 'folder' }
+        ])
 
         // The worktree sits under its project, as in Projects.
         await showView(page, 'Files')
@@ -106,6 +107,7 @@ test('folders added to the workspace become projects or plain folders, and can b
         await expect(tree(page).getByRole('treeitem')).toHaveText([
           'appmain',
           'featureapp-feature',
+          '.hatfield',
           'notes'
         ])
         await expect(item(page, 'feature worktree app-feature')).toHaveAttribute('aria-level', '2')
@@ -122,13 +124,22 @@ test('folders added to the workspace become projects or plain folders, and can b
         await contextMenu(page, projectRows(page).first(), 'Hide from Projects')
         await expect(projectRows(page)).toHaveText(['notestrunk'])
         await expect(checkoutRows(page)).toHaveCount(0)
-        await expectSavedKinds(['folder', 'project'])
       },
       { userDataDir: userData }
     )
 
     await withApp(
       async (electronApp, page) => {
+        expect(
+          await page.evaluate(() =>
+            globalThis.desktop
+              .getWorkspace()
+              .then(({ folders }) => folders.map(({ path, kind }) => ({ path, kind })))
+          )
+        ).toEqual([
+          { path: app, kind: 'folder' },
+          { path: notes, kind: 'project' }
+        ])
         // The kinds were saved: app stays out of Projects, and with it its worktree.
         await expect(projectRows(page)).toHaveText(['notestrunk'])
         await expect(checkoutRows(page)).toHaveCount(0)
@@ -188,12 +199,13 @@ test('a project and its linked worktree can both be roots', async () => {
   }
 })
 
-test('the file tree follows the disk and git ignore rules in expanded folders', async () => {
+test('the file tree reloads disk changes and git ignore rules in expanded folders', async () => {
   const [projects, cleanProjects] = await makeProjectsDir()
   const repo = makeRepo(projects, 'app')
   await writeFile(join(repo, '.gitignore'), 'dist/\n')
   git(repo, 'add', '.gitignore')
   git(repo, 'commit', '-q', '-m', 'ignore dist')
+  await mkdir(join(repo, '.hatfield'))
   await mkdir(join(repo, 'src'))
   await mkdir(join(repo, 'dist'))
   await writeFile(join(repo, 'src', 'a.ts'), '')
@@ -202,6 +214,7 @@ test('the file tree follows the disk and git ignore rules in expanded folders', 
   await writeFile(join(repo, 'README.md'), '')
   const plain = join(projects, 'logs')
   await mkdir(join(plain, 'dist'), { recursive: true })
+  await mkdir(join(plain, '.hatfield'))
   await writeFile(join(plain, '.gitignore'), 'dist/\n')
   // A repository kept as a plain folder, until it is shown in Projects.
   git(plain, 'init', '-q', '-b', 'main')
@@ -222,6 +235,7 @@ test('the file tree follows the disk and git ignore rules in expanded folders', 
         // `.git` is never listed: it is git's, not the project's.
         await expect(tree(page).getByRole('treeitem')).toHaveText([
           'appmain',
+          '.hatfield',
           'dist',
           'src',
           'a.ts',
@@ -242,39 +256,44 @@ test('the file tree follows the disk and git ignore rules in expanded folders', 
         await expect(icon('README.md')).toHaveAttribute('data-icon', 'readme')
         await expect(icon('notes.txt')).toHaveAttribute('data-icon', 'text')
         // Lucide has one icon per category of file and folder.
-        await writeFile(join(userData, 'settings.json'), '{ "workbench.iconTheme": "lucide" }')
+        await page.evaluate(() => globalThis.desktop.updateSetting('workbench.iconTheme', 'lucide'))
         await expect(icon('src')).toHaveAttribute('data-icon', 'folder-code')
         await expect(icon('dist')).toHaveAttribute('data-icon', 'folder-build')
         await expect(icon('a.ts')).toHaveAttribute('data-icon', 'file-code')
         await expect(icon('README.md')).toHaveAttribute('data-icon', 'file-text')
         await expect(icon('.gitignore')).toHaveAttribute('data-icon', 'file-config')
-        await saveScreenshot(page, 'file-tree-lucide')
-        await rm(join(userData, 'settings.json'))
+        await page.evaluate(() => globalThis.desktop.updateSetting('workbench.iconTheme', null))
         await expect(icon('a.ts')).toHaveAttribute('data-icon', 'typescript')
 
-        // Changes on disk show up in expanded folders.
+        const reload = () => contextMenu(page, item(page, 'app main'), 'Reload from Disk')
+        // Reload refreshes files and ignore rules in expanded folders.
         await writeFile(join(repo, 'src', 'b.ts'), '')
+        await reload()
         await expect(item(page, 'b.ts')).toBeVisible()
         await rename(join(repo, 'src', 'b.ts'), join(repo, 'src', 'c.ts'))
+        await reload()
         await expect(item(page, 'c.ts')).toBeVisible()
         await expect(item(page, 'b.ts')).toHaveCount(0)
         await rm(join(repo, 'src', 'c.ts'))
+        await reload()
         await expect(item(page, 'c.ts')).toHaveCount(0)
         await mkdir(join(repo, 'src', 'lib'))
+        await reload()
         await expect(item(page, 'lib')).toBeVisible()
 
-        // Editing `.gitignore` updates the dimming by itself, also in expanded subfolders.
         await appendFile(join(repo, '.gitignore'), 'README.md\nsrc/a.ts\n')
+        await reload()
         await ignored('README.md')
         await ignored('a.ts')
         await writeFile(join(repo, '.gitignore'), 'dist/\n')
+        await reload()
         await notIgnored('README.md')
         await notIgnored('a.ts')
 
         // `.git/info/exclude` isn't watched; Reload from Disk reads it.
         await mkdir(join(repo, '.git', 'info'), { recursive: true })
         await appendFile(join(repo, '.git', 'info', 'exclude'), 'notes.txt\n')
-        await contextMenu(page, item(page, 'app main'), 'Reload from Disk')
+        await reload()
         await ignored('notes.txt')
 
         // A plain folder has nothing dimmed, even with ignore rules of its own.
@@ -282,17 +301,18 @@ test('the file tree follows the disk and git ignore rules in expanded folders', 
         await expect(item(page, '.gitignore').last()).toBeVisible()
         await expect(tree(page).getByRole('treeitem').last()).toHaveText('.gitignore')
         await expect(tree(page).locator('[data-ignored]')).toHaveCount(2)
-        await saveScreenshot(page, 'file-tree')
 
         await page.getByRole('button', { name: 'Hide Ignored Files' }).click()
         await expect(tree(page).getByRole('treeitem')).toHaveText([
           'appmain',
+          '.hatfield',
           'src',
           'lib',
           'a.ts',
           '.gitignore',
           'README.md',
           'logs',
+          '.hatfield',
           'dist',
           '.gitignore'
         ])

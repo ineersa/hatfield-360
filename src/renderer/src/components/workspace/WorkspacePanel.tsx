@@ -1,3 +1,9 @@
+import { useRecentSessionStore } from '@/state/recent-session-store'
+import { RecentSessions } from './RecentSessions'
+import {
+  RECENT_CONVERSATION_MS,
+  type RecentConversation
+} from '../../../../shared/recent-conversation'
 import { HidePanelButton } from '@/components/shell/HidePanelButton'
 import { AgentAttention } from './AgentAttention'
 import { ProjectPicker } from './ProjectPicker'
@@ -29,7 +35,7 @@ import {
   usePointerTooltip
 } from '@/components/ui/tooltip'
 import { cn } from '@/lib/class-names'
-import { Fragment, useId, useState } from 'react'
+import { Fragment, useEffect, useId, useState } from 'react'
 import { OpenTerminalMenuContent } from '@/components/terminal/OpenTerminalMenuContent'
 import {
   OpenFolderEmptyState,
@@ -134,10 +140,18 @@ function LinkedWorktrees({
 
 function ProjectContents({
   folder,
-  visible
+  visible,
+  recent,
+  generation,
+  live,
+  now
 }: {
   folder: WorkspaceFolder
   visible: AgentSession[]
+  recent: RecentConversation[]
+  generation: number
+  live: AgentSession[]
+  now: number
 }): React.JSX.Element | null {
   const project = useWorktreeStore((state) => state.projects[folder.path])
   const collapsed = useWorktreeStore((state) => state.collapsed[folder.path] === true)
@@ -152,6 +166,18 @@ function ProjectContents({
           </ul>
         </li>
       )}
+      <RecentSessions
+        name={folder.name}
+        projectBranch={
+          project?.status === 'git'
+            ? (project.worktrees.find((tree) => tree.project)?.branch ?? null)
+            : null
+        }
+        generation={generation}
+        sessions={recent}
+        live={live}
+        now={now}
+      />
       {project?.status === 'error' && (
         <li>
           <p role="alert" className="type-hint flex gap-2 px-1 py-1">
@@ -263,6 +289,45 @@ export function WorkspacePanel(): React.JSX.Element {
   const allFolders = workspace?.folders ?? []
   const folders = allFolders.filter((folder) => folder.kind === 'project')
   const { sessions, error } = useAgentSessions()
+  const [now, setNow] = useState(Date.now)
+  const generation = workspace?.terminalGeneration ?? 0
+  const catalog = useRecentSessionStore((state) => state.catalog)
+  const load = useRecentSessionStore((state) => state.load)
+  const projects = useWorktreeStore((state) => state.projects)
+  const catalogScope = JSON.stringify(
+    allFolders
+      .filter((folder) => folder.kind === 'project')
+      .map(({ path, missing }) => [
+        path,
+        missing,
+        projects[path]?.status === 'git'
+          ? projects[path].worktrees.map(({ path: treePath, prunable }) => [treePath, prunable])
+          : []
+      ])
+  )
+  useEffect(() => {
+    let stopped = false
+    let timer: ReturnType<typeof setTimeout> | undefined
+    async function refresh(): Promise<void> {
+      setNow(Date.now())
+      await load(generation, catalogScope)
+      if (!stopped && catalogScope !== '[]') timer = setTimeout(() => void refresh(), 60_000)
+    }
+    void refresh()
+    return () => {
+      stopped = true
+      clearTimeout(timer)
+    }
+  }, [generation, catalogScope, load])
+  const currentCatalog =
+    catalog?.key === JSON.stringify([generation, catalogScope]) ? catalog : null
+  const catalogError = currentCatalog?.errors.join(' ')
+  const recent = (currentCatalog?.sessions ?? []).filter(
+    (entry) => entry.lastModified > now - RECENT_CONVERSATION_MS
+  )
+  const otherRecent = recent.filter(
+    (entry) => !folders.some((folder) => !folder.missing && folder.path === entry.project)
+  )
   const [project, setProject] = useState('')
   const [filter, setFilter] = useState<SessionFilter | null>(null)
   const scope = folders.some((folder) => folder.path === project) ? project : ''
@@ -302,7 +367,11 @@ export function WorkspacePanel(): React.JSX.Element {
       ) : null}
       {problem ? <WorkspaceProblemBanner problem={problem} /> : null}
       <AgentAttention sessions={sessions} folders={folders} />
-      {workspace && folders.length === 0 && sessions.length === 0 && !workspace.problem ? (
+      {workspace &&
+      folders.length === 0 &&
+      sessions.length === 0 &&
+      recent.length === 0 &&
+      !workspace.problem ? (
         <OpenFolderEmptyState
           message={
             allFolders.length === 0
@@ -357,11 +426,19 @@ export function WorkspacePanel(): React.JSX.Element {
                 <Fragment key={folder.path}>
                   <ProjectRow
                     folder={folder}
-                    hasSessions={sessions.some((session) => session.project === folder.path)}
+                    hasSessions={
+                      sessions.some((session) => session.project === folder.path) ||
+                      recent.some((entry) => entry.project === folder.path)
+                    }
                   />
                   {folder.missing ? null : (
                     <ProjectContents
+                      key={generation}
                       folder={folder}
+                      recent={recent.filter((entry) => entry.project === folder.path)}
+                      generation={generation}
+                      live={sessions}
+                      now={now}
                       visible={visible.filter((session) => session.project === folder.path)}
                     />
                   )}
@@ -371,14 +448,36 @@ export function WorkspacePanel(): React.JSX.Element {
           {sessions.length > 0 && visible.length === 0 && (
             <p className="type-hint px-2 pt-2">No sessions match this filter.</p>
           )}
-          {ungrouped.length > 0 && (
+          {(ungrouped.length > 0 || (!scope && otherRecent.length > 0)) && (
             <div className="px-2 py-2">
               <h3 className="type-section-title px-2">Other terminals</h3>
               <ul aria-label="Other terminal sessions">
                 <AgentSessionRows sessions={ungrouped} />
+                {!scope && (
+                  <RecentSessions
+                    key={generation}
+                    name="Other terminals"
+                    projectBranch={null}
+                    generation={generation}
+                    sessions={otherRecent}
+                    live={sessions}
+                    now={now}
+                  />
+                )}
               </ul>
             </div>
           )}
+          {folders.length > 0 &&
+          (!currentCatalog || (currentCatalog.loading && currentCatalog.sessions.length === 0)) ? (
+            <p role="status" className="type-hint px-4 text-muted-foreground">
+              Loading recent sessions…
+            </p>
+          ) : null}
+          {catalogError ? (
+            <p role="status" className="type-hint px-4 text-error">
+              {catalogError}
+            </p>
+          ) : null}
         </div>
       )}
     </>

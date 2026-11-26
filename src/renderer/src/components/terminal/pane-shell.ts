@@ -118,6 +118,7 @@ export function startPaneShell(
         .catch((error: unknown) => {
           if (disposed) return
           exited = true
+          pane.container.dataset.exited = 'true'
           if (restoring)
             notify({
               severity: 'error',

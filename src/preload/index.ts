@@ -34,6 +34,7 @@ const desktopApi: DesktopApi = {
     return () => ipcRenderer.removeListener(CHAT_AGENT_CHANNELS.event, listener)
   },
   launchAgent: (request) => ipcRenderer.invoke(AGENT_CHANNELS.launch, request),
+  getRecentConversations: (generation) => ipcRenderer.invoke(AGENT_CHANNELS.recent, generation),
   getAgentSessions: () => ipcRenderer.invoke(AGENT_CHANNELS.get),
   subscribeAgentNotifications: (callback) => {
     const listener = (_event: unknown, notice: AgentNotification): void => callback(notice)

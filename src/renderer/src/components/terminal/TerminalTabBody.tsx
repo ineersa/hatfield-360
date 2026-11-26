@@ -1,4 +1,5 @@
 import { checkpointTab, currentTerminalGeneration } from '@/state/terminal-workspace'
+import { conversationKey } from '../../../../shared/recent-conversation'
 import type { PaneLeaf } from '../../../../shared/terminal-workspace-api'
 import type { ManagedPane } from '@/lib/pane-manager/pane-manager-types'
 import { notify } from '@/state/notification-store'
@@ -80,8 +81,9 @@ export function TerminalTabBody({
       checkpoint()
     }
     let nextLaunch = tab.agent
+    let nextCwd = tab.cwd
     const create = (pane: ManagedPane, saved?: PaneLeaf) => {
-      const leaf = saved ?? { kind: 'pane', id: crypto.randomUUID(), cwd: tab.cwd }
+      const leaf = saved ?? { kind: 'pane', id: crypto.randomUUID(), cwd: nextCwd }
       pane.container.dataset.layoutId = leaf.id
       leaves.set(leaf.id, leaf)
       const agent: AgentLaunch | undefined =
@@ -92,6 +94,12 @@ export function TerminalTabBody({
             }
           : nextLaunch
       nextLaunch = undefined
+      if (agent && 'recent' in agent.target)
+        pane.container.dataset.pendingConversation = agent.target.recent.key
+      else if (saved?.agent) {
+        const key = conversationKey({ ...saved.agent, cwd: saved.cwd })
+        if (key) pane.container.dataset.pendingConversation = key
+      }
       bindClipboardKeys(pane.terminal)
       shells.set(
         pane.id,
@@ -101,7 +109,7 @@ export function TerminalTabBody({
           () => panes.closePane(pane.id),
           agent,
           publishActivePane,
-          Boolean(saved)
+          Boolean(saved) || Boolean(agent && 'recent' in agent.target)
         )
       )
       checkpoint()
@@ -161,6 +169,32 @@ export function TerminalTabBody({
         if (!pane) return false
         panes.setActivePane(pane.id, isShown.current)
         return true
+      },
+      selectPendingConversation: (keys, reported) => {
+        const pane = panes
+          .getPanes()
+          .find(
+            ({ container: { dataset } }) =>
+              dataset.pendingConversation !== undefined &&
+              keys.has(dataset.pendingConversation) &&
+              !dataset.exited &&
+              (!dataset.terminalId || !reported.has(dataset.terminalId))
+          )
+        if (!pane) return false
+        panes.setActivePane(pane.id, isShown.current)
+        return true
+      },
+      splitConversation: (agent, cwd) => {
+        const pane = panes.getActivePane()
+        if (!pane) return false
+        nextLaunch = agent
+        nextCwd = cwd
+        try {
+          return panes.splitPane(pane.id, 'vertical') !== null
+        } finally {
+          nextLaunch = undefined
+          nextCwd = tab.cwd
+        }
       },
       launchSplit: (provider) => {
         const pane = panes.getActivePane()

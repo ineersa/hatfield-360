@@ -1,6 +1,9 @@
+import { conversationKey, type RecentCatalog } from '../../shared/recent-conversation'
+import { listClaudeCatalog } from '../workspace/claude-catalog'
+import { listHatfieldCatalog } from '../workspace/hatfield-catalog'
 import { basename } from 'node:path'
 import { BrowserWindow } from 'electron'
-import { AGENT_CHANNELS, type AgentNotification } from '../../shared/agent-api'
+import { AGENT_CHANNELS, type AgentNotification, type AgentProvider } from '../../shared/agent-api'
 import { isPlainObject } from '../../shared/plain-object'
 import { agentSnapshot, trackAgentSessions } from '../agent-status/agent-sessions'
 import { worktreeStore } from '../git/worktree-store'
@@ -10,6 +13,41 @@ import { terminalSessions } from '../terminal/terminal-sessions'
 import { workspaceStore } from '../workspace/workspace-store'
 import { existingDirectory } from './terminal-ipc'
 import { handleTrusted } from './trusted-ipc'
+
+async function recentCatalog(
+  generation: unknown,
+  provider?: AgentProvider,
+  sessionId?: string
+): Promise<RecentCatalog> {
+  const workspace = await workspaceStore.view()
+  if (generation !== workspace.terminalGeneration) throw new Error('The workspace has changed.')
+  const projects = worktreeStore.view()
+  const now = Date.now()
+  const settings = await settingsStore.view()
+  const [claude, hatfield] = await Promise.all([
+    provider === 'hatfield'
+      ? Promise.resolve({ sessions: [], errors: [] })
+      : listClaudeCatalog(workspace.folders, projects, now, sessionId).then(
+          (sessions) => ({ sessions, errors: [] }),
+          () => ({
+            sessions: [],
+            errors: ['Claude: could not read the session catalog.']
+          })
+        ),
+    provider === 'claude'
+      ? Promise.resolve({ sessions: [], errors: [], scopeAliases: new Map<string, string>() })
+      : listHatfieldCatalog(workspace.folders, projects, settings.values['agents.hatfield'], now)
+  ])
+  if (generation !== (await workspaceStore.view()).terminalGeneration)
+    throw new Error('The workspace has changed.')
+  return {
+    sessions: [...claude.sessions, ...hatfield.sessions].toSorted(
+      (a, b) => b.lastModified - a.lastModified
+    ),
+    errors: [...claude.errors, ...hatfield.errors],
+    scopeAliases: hatfield.scopeAliases
+  }
+}
 
 export function registerAgentIpc(): void {
   const launch = trackAgentSessions(
@@ -23,6 +61,7 @@ export function registerAgentIpc(): void {
     }
   )
   handleTrusted(AGENT_CHANNELS.get, (event) => agentSnapshot(event.sender))
+  handleTrusted(AGENT_CHANNELS.recent, (_event, generation) => recentCatalog(generation))
   handleTrusted(AGENT_CHANNELS.launch, async (event, value) => {
     if (
       !isPlainObject(value) ||
@@ -36,21 +75,46 @@ export function registerAgentIpc(): void {
     const folders = (await workspaceStore.view()).folders.filter((folder) => !folder.missing)
     let cwd: string
     let project: string | null
-    if (isPlainObject(target.restore)) {
-      const { generation, paneId } = target.restore
-      if (typeof generation !== 'number' || !isTerminalId(paneId))
-        throw new Error('Invalid saved pane.')
-      const pane = await workspaceStore.savedPane(generation, paneId)
-      const id = pane?.agent?.providerSessionId
+    if (isPlainObject(target.restore) || isPlainObject(target.recent)) {
+      let saved:
+        | {
+            cwd: string | null
+            agent: { provider: string; providerSessionId: string | null; project: string | null }
+          }
+        | undefined
+      if (isPlainObject(target.restore)) {
+        const { generation, paneId } = target.restore
+        if (typeof generation !== 'number' || !isTerminalId(paneId))
+          throw new Error('Invalid saved pane.')
+        const pane = await workspaceStore.savedPane(generation, paneId)
+        if (pane?.agent) saved = { cwd: pane.cwd, agent: pane.agent }
+      } else if (isPlainObject(target.recent)) {
+        const { generation, key } = target.recent
+        if (typeof generation !== 'number' || typeof key !== 'string' || key.length > 26000)
+          throw new Error('Invalid Recent conversation.')
+        const identity: unknown = JSON.parse(key)
+        if (
+          !Array.isArray(identity) ||
+          identity.length !== 3 ||
+          identity[0] !== provider ||
+          typeof identity[1] !== 'string'
+        )
+          throw new Error('Invalid Recent conversation.')
+        const catalog = await recentCatalog(generation, provider, identity[1])
+        const entry = catalog.sessions.find((session) => conversationKey(session) === key)
+        if (!entry && catalog.errors.length) throw new Error(catalog.errors.join(' '))
+        if (entry) saved = { cwd: entry.resumeCwd ?? entry.cwd, agent: entry }
+      }
+      const id = saved?.agent.providerSessionId
       if (
-        pane?.agent?.provider !== provider ||
+        saved?.agent.provider !== provider ||
         !id ||
         !(provider === 'hatfield'
           ? /^\d+$/.test(id)
           : /^[\da-f]{8}(?:-[\da-f]{4}){3}-[\da-f]{12}$/i.test(id))
       )
         throw new Error('The saved conversation ID is unavailable.')
-      if (!pane.cwd) throw new Error('The saved conversation folder is unavailable.')
+      if (!saved.cwd) throw new Error('The saved conversation folder is unavailable.')
       const profile = (await settingsStore.view()).values[`agents.${provider}`]
       const directClaudePrompt =
         provider === 'claude' &&
@@ -68,6 +132,12 @@ export function registerAgentIpc(): void {
         throw new Error(
           'Remove conversation, prompt or folder overrides from the agent profile in Settings.'
         )
+      const directory = await existingDirectory(saved.cwd)
+      if (
+        isPlainObject(target.recent) &&
+        target.recent.generation !== (await workspaceStore.view()).terminalGeneration
+      )
+        throw new Error('The workspace has changed.')
       return launch(
         event.sender,
         provider,
@@ -78,8 +148,8 @@ export function registerAgentIpc(): void {
             ...(provider === 'hatfield' ? [`--resume=${id}`] : ['--resume', id])
           ]
         },
-        pane.agent.project,
-        { ...size, cwd: await existingDirectory(pane.cwd) },
+        saved.agent.project,
+        { ...size, cwd: directory },
         id
       )
     }

@@ -29,6 +29,24 @@ When empty, the section stays visible with a compact "No requests" state.
 Stopped responses use the error colour; process exits remove the row instead.
 Clicking a live session also selects its actual tab/pane.
 
+Below each project's live sessions, a folded **Recent N** group lists existing
+Claude Code and Hatfield sessions from their provider catalogs, scoped to workspace
+projects and known worktrees. Rows show the provider title, differing branch
+and time since last activity. The last 14 days are shown newest first, with
+five rows initially and pages of 20. Resume opens a new tab, Resume in Split
+uses the active tab, and an already open session selects its existing pane.
+Copy session ID is read-only, as is the catalog: there is no desktop history
+tracking or deletion. Existing sessions appear on first load and never
+auto-launch. Claude reads metadata through the official SDK without launching a CLI.
+Hatfield appends `session:list --json` to its Settings executable and argument prefix,
+using the same shell-command path as launches and resumes. Wrappers must forward
+subcommands rather than force `agent`; `php /path/to/hatfield.phar` profiles work the
+same way. Never invoke a hardcoded provider command or use a bare-command fallback.
+The catalog follows pagination and retains resume scope separately from recorded cwd.
+A missing Hatfield session table means an empty catalog. Other provider failures are displayed
+without hiding the other provider's sessions.
+The approved prototype is retained in `docs/design/issue-37-prototype/`.
+
 Search is a project-scoped Librarian popup above the mounted terminal workspace,
 not a new page or a separate transcript engine. Keyboard opening, Escape,
 contained Tab navigation, prior-focus restoration and isolation from terminal
@@ -82,6 +100,8 @@ manually typed launch detection are outside v1.
   protocol producers and provider-specific lifecycle/identity validation.
 - [#37](https://github.com/ineersa/hatfield-360/issues/37): durable history,
   workspace autosave and automatic restart restoration.
+- [#73](https://github.com/ineersa/hatfield-360/issues/73): continuation of #37's
+  approved Recent history and explicit relaunch, with toast-only launch failures.
 - [#38](https://github.com/ineersa/hatfield-360/issues/38): real Librarian search
   and source-session navigation/resume.
 
