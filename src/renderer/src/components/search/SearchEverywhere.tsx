@@ -10,8 +10,10 @@ import {
   CommandList
 } from '@/components/ui/command'
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog'
+import { folderLabel, useNamedFolders } from '@/components/search/workspace-folder-label'
 import { cn } from '@/lib/class-names'
 import { useSearchEverywhereStore } from '@/state/search-everywhere-store'
+import { useWorkspaceStore } from '@/state/workspace-store'
 import type { MatchRanges } from '../../../../shared/fuzzy-path-match'
 import type { FileHit, SearchEverywhereKind } from '../../../../shared/search-everywhere-api'
 import { isClassKind, type SymbolHit } from '../../../../shared/workspace-symbol-hits'
@@ -74,6 +76,19 @@ const fileKey = (hit: FileHit): string => `file:${hit.path}`
 const symbolKey = (hit: SymbolHit): string =>
   `symbol:${hit.path}:${String(hit.line)}:${String(hit.column)}:${hit.name}:${String(hit.kind)}`
 
+/** Cut from its start when it doesn't fit, so the folders nearest the file stay visible. */
+function StartTruncated({ children }: { children: React.ReactNode }): React.JSX.Element {
+  return (
+    <span dir="rtl" className="min-w-0 truncate text-left">
+      <bdi dir="ltr">{children}</bdi>
+    </span>
+  )
+}
+
+/** The container's own name: `RunEventLog` of `App\Session\RunEventLog`. */
+const shortContainer = (container: string): string =>
+  container.split(/\\|::|[./]/).findLast((part) => part !== '') ?? container
+
 function FileItem({
   hit,
   showFolder,
@@ -86,36 +101,54 @@ function FileItem({
   const slash = hit.relative.lastIndexOf('/')
   const name = hit.relative.slice(slash + 1)
   return (
-    <CommandItem value={fileKey(hit)} onSelect={onChoose}>
+    <CommandItem value={fileKey(hit)} onSelect={onChoose} title={hit.path}>
       <FileTreeIcon kind="file" name={name} className="size-4 shrink-0" />
       <span className="shrink-0">
         <Highlighted text={hit.relative} ranges={hit.ranges} from={slash + 1} />
       </span>
-      <span className="min-w-0 truncate type-hint">
-        {showFolder ? `${hit.folder}/` : null}
-        {slash < 0 ? null : <Highlighted text={hit.relative} ranges={hit.ranges} to={slash} />}
-      </span>
+      {showFolder || slash >= 0 ? (
+        <span className="flex min-w-0 type-hint">
+          <StartTruncated>
+            {showFolder ? `${hit.folder}/` : null}
+            {slash < 0 ? null : <Highlighted text={hit.relative} ranges={hit.ranges} to={slash} />}
+          </StartTruncated>
+        </span>
+      ) : null}
     </CommandItem>
   )
 }
 
 function SymbolItem({
   hit,
+  folder,
   onChoose
 }: {
   hit: SymbolHit
+  /** Where its file is, from the workspace folder. */
+  folder: string
   onChoose: () => void
 }): React.JSX.Element {
   const file = hit.path.split(/[\\/]/).pop() ?? hit.path
+  const at = hit.line === null ? file : `${file}:${String(hit.line)}`
   return (
-    <CommandItem value={symbolKey(hit)} onSelect={onChoose}>
+    <CommandItem
+      value={symbolKey(hit)}
+      onSelect={onChoose}
+      title={[hit.container, `${hit.path}${hit.line === null ? '' : `:${String(hit.line)}`}`]
+        .filter(Boolean)
+        .join('\n')}
+    >
       <SymbolIcon kind={hit.kind} />
-      <span className="shrink-0">
+      <span className="max-w-[40%] shrink-0 truncate">
         <Highlighted text={hit.name} ranges={hit.ranges} />
       </span>
-      <span className="min-w-0 truncate type-hint">
-        {hit.container === null ? '' : `${hit.container} · `}
-        {hit.line === null ? file : `${file}:${String(hit.line)}`}
+      {/* Short of room, the container gives way first, then the folder; the file and line stay. */}
+      <span className="min-w-0 flex-1 basis-0 truncate type-hint">
+        {hit.container === null ? null : shortContainer(hit.container)}
+      </span>
+      <span className="flex min-w-0 pl-4 type-hint">
+        {folder === '' ? null : <StartTruncated>{`${folder}/`}</StartTruncated>}
+        <span className="shrink-0">{at}</span>
       </span>
     </CommandItem>
   )
@@ -133,6 +166,8 @@ export function SearchEverywhere(): React.JSX.Element {
   const chose = useRef(false)
   // What the arrow keys selected among the current results; new results start at their best one.
   const [selection, setSelection] = useState({ among: '', value: '' })
+  const namedFolders = useNamedFolders()
+  const workspaceFolders = useWorkspaceStore((state) => state.workspace?.folders.length ?? 0)
   const multiFolder = new Set(files.map((hit) => hit.folder)).size > 1
 
   const all = kind === 'all'
@@ -173,7 +208,12 @@ export function SearchEverywhere(): React.JSX.Element {
     />
   )
   const symbolItem = (hit: SymbolHit): React.JSX.Element => (
-    <SymbolItem key={symbolKey(hit)} hit={hit} onChoose={() => pick(hit)} />
+    <SymbolItem
+      key={symbolKey(hit)}
+      hit={hit}
+      folder={folderLabel(hit.path, namedFolders, workspaceFolders > 1)}
+      onChoose={() => pick(hit)}
+    />
   )
   const empty =
     query.trim() === ''
