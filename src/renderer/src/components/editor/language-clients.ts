@@ -3,11 +3,15 @@ import { Uri } from 'vscode'
 import {
   AbstractMessageReader,
   AbstractMessageWriter,
+  type CancellationToken,
   CloseAction,
   type DataCallback,
   type Disposable,
   ErrorAction,
-  type Message
+  type Message,
+  type SymbolInformation,
+  type WorkspaceSymbol as LspWorkspaceSymbol,
+  WorkspaceSymbolRequest
 } from 'vscode-languageclient/browser'
 import { restartDelay } from '@/lib/restart-backoff'
 import { useLanguageServerStore } from '@/state/language-server-store'
@@ -19,6 +23,7 @@ import type {
   LanguageServerConnection,
   LanguageServerStatus
 } from '../../../../shared/language-server-api'
+import type { WorkspaceSymbol } from '../../../../shared/workspace-symbol-hits'
 
 /** Messages main relays from one server connection. */
 class ConnectionReader extends AbstractMessageReader {
@@ -264,4 +269,44 @@ export function detachLanguageServer(path: string): void {
   if (!entry) return
   entry.files.delete(path)
   if (entry.files.size === 0) release(id)
+}
+
+const toSymbol = ({
+  name,
+  kind,
+  containerName,
+  location
+}: SymbolInformation | LspWorkspaceSymbol) => {
+  const range = 'range' in location ? location.range : null
+  return {
+    name,
+    kind,
+    container: containerName ? containerName : null,
+    path: Uri.parse(location.uri).fsPath,
+    line: range === null ? null : range.start.line + 1,
+    column: range === null ? null : range.start.character + 1
+  } satisfies WorkspaceSymbol
+}
+
+/**
+ * Each running language server's `workspace/symbol` answer for `query`, one list per server; a
+ * server that fails or isn't ready adds nothing. Cancelling `token` cancels the requests.
+ */
+export function findWorkspaceSymbols(
+  query: string,
+  token: CancellationToken
+): Promise<WorkspaceSymbol[][]> {
+  const ready = [...clients.values()].filter((entry) => entry.state === 'ready')
+  return Promise.all(
+    ready.map(async ({ client, connection }) => {
+      try {
+        const symbols = await client.sendRequest(WorkspaceSymbolRequest.type, { query }, token)
+        return (symbols ?? []).map(toSymbol)
+      } catch (error) {
+        if (!token.isCancellationRequested)
+          console.warn(`${connection.server} couldn't list symbols:`, error)
+        return []
+      }
+    })
+  )
 }

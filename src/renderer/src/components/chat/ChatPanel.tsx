@@ -41,7 +41,9 @@ import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/class-names'
 import { cssFontFamily } from '@/lib/css-font-family'
+import { appShortcutLabel } from '@/lib/keymap-match'
 import { useChatStore } from '@/state/chat-store'
+import { useKeymapStore } from '@/state/keymap-store'
 import type { ChatItem } from '@/state/chat-transcript'
 import { useSettingsStore } from '@/state/settings-store'
 import { SIDE_PANEL_MIN_WIDTH, useShellLayoutStore } from '@/state/shell-layout-store'
@@ -248,11 +250,13 @@ function Composer(): React.JSX.Element {
   )
 }
 
-/** Claude in the workspace, on the right: opened and closed with Shift Shift, resized from its left edge. */
+/** Claude in the workspace, on the right: opened with New Chat (Ctrl/Cmd+\), resized from its left edge. */
 export function ChatPanel(): React.JSX.Element {
   const width = useShellLayoutStore((state) => state.chatWidth)
   const setWidth = useShellLayoutStore((state) => state.setChatWidth)
   const fontFamily = useSettingsStore((state) => state.values['editor.fontFamily'])
+  const newChatShortcut = useKeymapStore((state) => appShortcutLabel(state.shell, 'new-chat'))
+  const newChatLabel = newChatShortcut === '' ? 'New Chat' : `New Chat (${newChatShortcut})`
   const { chatId, status, items, error, newChat, close, stop, generateMap, editMap } =
     useChatStore()
   const aside = useRef<HTMLElement>(null)
@@ -299,7 +303,7 @@ export function ChatPanel(): React.JSX.Element {
           <IconButton label="Edit Workspace Map" onClick={editMap}>
             <FilePen className="size-4" aria-hidden />
           </IconButton>
-          <IconButton label="New Chat (Shift Shift)" onClick={newChat}>
+          <IconButton label={newChatLabel} onClick={newChat}>
             <Plus className="size-4.5" aria-hidden />
           </IconButton>
           <IconButton label="Close Chat" onClick={close}>

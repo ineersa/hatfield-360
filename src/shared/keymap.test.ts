@@ -89,7 +89,11 @@ describe('keymap', () => {
     )
     const app = APP_COMMANDS.map((command) => appShortcut(shellKeymap('linux'), command))
     expect(terminal.filter((key) => key !== null && plainCtrl.test(key))).toEqual([])
-    expect(app.filter((key) => key !== null && plainCtrl.test(key))).toEqual(['Ctrl+O', 'Ctrl+S'])
+    expect(app.filter((key) => key !== null && plainCtrl.test(key))).toEqual([
+      'Ctrl+O',
+      'Ctrl+S',
+      'Ctrl+N'
+    ])
   })
 
   it('has app keys after JetBrains', () => {
@@ -100,6 +104,9 @@ describe('keymap', () => {
     expect(appShortcut(shellKeymap('linux'), 'next-editor-tab')).toBe('Alt+Right')
     expect(appShortcut(shellKeymap('darwin'), 'previous-editor-tab')).toBe('Command+Shift+[')
     expect(appShortcut(shellKeymap('linux'), 'close-window')).toBeNull()
+    expect(appShortcut(shellKeymap('linux'), 'go-to-file')).toBe('Ctrl+Shift+N')
+    expect(appShortcut(shellKeymap('darwin'), 'go-to-class')).toBe('Command+O')
+    expect(appShortcut(shellKeymap('darwin'), 'open-folder')).toBeNull()
   })
 })
 
@@ -132,7 +139,7 @@ describe('shellKeymap', () => {
     expect(terminalShortcut(one, 'split-right')).toBeNull()
     const all = shellKeymap('darwin', [{ key: null, command: '-hatfield.save' }])
     expect(appShortcut(all, 'save')).toBeNull()
-    expect(appShortcut(all, 'open-folder')).toBe('Command+O')
+    expect(appShortcut(all, 'settings')).toBe('Command+,')
   })
 
   it('leaves out editor commands, unknown ids and two-chord keys', () => {

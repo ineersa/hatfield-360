@@ -14,6 +14,7 @@ import { registerFilesSessionIpc } from './ipc/files-session-ipc'
 import { registerFileTreeIpc } from './ipc/file-tree-ipc'
 import { registerKeybindingsIpc } from './ipc/keybindings-ipc'
 import { registerSearchIpc } from './ipc/search-ipc'
+import { registerSearchEverywhereIpc } from './ipc/search-everywhere-ipc'
 import { registerSettingsIpc } from './ipc/settings-ipc'
 import { registerShellLayoutIpc } from './ipc/shell-layout-ipc'
 import { registerTerminalIpc } from './ipc/terminal-ipc'
@@ -43,6 +44,7 @@ void app.whenReady().then(async () => {
   registerWorktreeIpc()
   registerFileTreeIpc()
   registerSearchIpc()
+  registerSearchEverywhereIpc()
   registerEditorIpc()
   registerFilesSessionIpc()
   registerSettingsIpc()

@@ -6,6 +6,7 @@ import type { FileTreeApi } from './file-tree-api'
 import type { KeybindingsApi } from './keybindings-api'
 import type { LanguageServerApi } from './language-server-api'
 import type { SearchApi } from './search-api'
+import type { SearchEverywhereApi } from './search-everywhere-api'
 import type { SettingsApi } from './settings-api'
 import type { ShellLayoutApi } from './shell-layout-api'
 import type { TerminalApi } from './terminal-api'
@@ -36,6 +37,7 @@ export type DesktopApi = WorkspaceApi &
   WorktreeApi &
   FileTreeApi &
   SearchApi &
+  SearchEverywhereApi &
   EditorApi &
   FilesSessionApi &
   LanguageServerApi & {
