@@ -7,6 +7,8 @@ import { homedir } from 'node:os'
 import { delimiter, dirname, isAbsolute, join, parse } from 'node:path'
 import { promisify } from 'node:util'
 import { realRoots } from '../files/path-containment'
+import { ignoredFolders } from '../git/git-ignore'
+import { intelephenseExclude } from './intelephense-exclude'
 import { isPythonLibraryFolder, libraryFoldersBesideHome } from './library-folders'
 
 type JsonObject = Record<string, unknown>
@@ -116,7 +118,7 @@ async function findUserPython(): Promise<UserPython | null> {
  * Intelephense keeps its own index and finds a key in its global storage folder; a key in
  * `~/intelephense` (`licence.txt` or `license.txt`) is passed as a path, which it reads itself.
  */
-async function intelephenseConfiguration(): Promise<ServerConfiguration> {
+async function intelephenseConfiguration(root: string): Promise<ServerConfiguration> {
   const folder = join(homedir(), 'intelephense')
   let licenceKey: string | undefined
   for (const name of ['licence.txt', 'license.txt']) {
@@ -127,7 +129,12 @@ async function intelephenseConfiguration(): Promise<ServerConfiguration> {
   }
   return {
     ...(licenceKey === undefined ? {} : { initializationOptions: { licenceKey } }),
-    settings: { intelephense: { telemetry: { enabled: false } } }
+    settings: {
+      intelephense: {
+        telemetry: { enabled: false },
+        files: { exclude: intelephenseExclude(root, await ignoredFolders(root)) }
+      }
+    }
   }
 }
 

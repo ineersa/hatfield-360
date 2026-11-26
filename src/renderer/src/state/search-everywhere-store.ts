@@ -2,6 +2,7 @@ import { CancellationTokenSource } from 'vscode-languageclient/browser'
 import { create } from 'zustand'
 import { findWorkspaceSymbols } from '@/components/editor/language-clients'
 import { mainErrorMessage } from '@/lib/main-error-message'
+import { focusedEditorSelection } from './editor-selection'
 import { useEditorTabStore } from './editor-tab-store'
 import { useShellLayoutStore } from './shell-layout-store'
 import type { FileHit, SearchEverywhereKind } from '../../../shared/search-everywhere-api'
@@ -16,7 +17,7 @@ type SearchEverywhereState = {
   /** Whether results for `query` are still coming. */
   searching: boolean
   error: string | null
-  /** Opens the popup on `kind`, with what was typed last selected. */
+  /** Opens the popup on `kind`, searching for the editor's selection if any, else what was typed last. */
   show: (kind: SearchEverywhereKind) => void
   close: () => void
   setKind: (kind: SearchEverywhereKind) => void
@@ -80,7 +81,8 @@ export const useSearchEverywhereStore = create<SearchEverywhereState>((set, get)
       if (!get().open)
         focusedBefore =
           document.activeElement instanceof HTMLElement ? document.activeElement : null
-      set({ open: true, kind })
+      const selected = focusedEditorSelection()?.trim()
+      set({ open: true, kind, ...(selected ? { query: selected } : {}) })
       run()
     },
     close: () => {

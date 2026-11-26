@@ -83,6 +83,14 @@ test('Search Everywhere finds a file from a path fragment and Enter opens it; Es
         await expect(results(page).first()).toHaveText(/^RunMessageProcessor\.php/)
         await page.keyboard.press('Escape')
         await expect(editor(page)).toHaveClass(/\bfocused\b/)
+
+        // Text selected in the editor is what it searches for.
+        await page.keyboard.press('ControlOrMeta+End')
+        await page.keyboard.press('ArrowUp')
+        await page.keyboard.press('Home')
+        await page.keyboard.press('Shift+End')
+        await goToFile(page)
+        await expect(searchBox(page)).toHaveValue('class RunMessageProcessor {}')
       },
       { userDataDir: userData }
     )
