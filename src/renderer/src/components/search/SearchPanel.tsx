@@ -1,7 +1,6 @@
 import { CaseSensitive, PackageOpen, Regex, WholeWord, X } from 'lucide-react'
 import { type KeyboardEvent, type ReactNode, useEffect, useMemo, useRef, useState } from 'react'
 import { separatorOf } from '@/components/editor/editor-tab-labels'
-import { treeRoots } from '@/components/files/file-tree-rows'
 import { FileTreeIcon } from '@/components/icons/FileTreeIcon'
 import { HidePanelButton } from '@/components/shell/HidePanelButton'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
@@ -10,27 +9,12 @@ import { appShortcutLabel } from '@/lib/keymap-match'
 import { useEditorTabStore } from '@/state/editor-tab-store'
 import { useKeymapStore } from '@/state/keymap-store'
 import { useSearchStore } from '@/state/search-store'
-import { useWorkspaceStore } from '@/state/workspace-store'
-import { useWorktreeStore } from '@/state/worktree-store'
+import { folderLabel, useNamedFolders } from '@/components/search/workspace-folder-label'
 import {
   SEARCH_MATCH_LIMIT,
   type SearchFileResult,
   type SearchMatch
 } from '../../../../shared/search-api'
-
-/** A folder results are shown under: a workspace folder or a worktree, by its name. */
-type NamedFolder = { path: string; name: string }
-
-/** Where a result's file is, from the workspace folder it is in: `app/src/deep`. */
-function folderLabel(path: string, folders: NamedFolder[]): string {
-  const separator = separatorOf(path)
-  const folder = path.slice(0, path.lastIndexOf(separator))
-  const root = folders
-    .filter((each) => folder === each.path || folder.startsWith(each.path + separator))
-    .toSorted((a, b) => b.path.length - a.path.length)[0]
-  if (!root) return folder
-  return [root.name, folder.slice(root.path.length + 1)].filter(Boolean).join('/')
-}
 
 const fileName = (path: string): string => path.slice(path.lastIndexOf(separatorOf(path)) + 1)
 
@@ -98,8 +82,6 @@ export function SearchPanel(): React.JSX.Element {
   const cancel = useSearchStore((state) => state.cancel)
   const resume = useSearchStore((state) => state.resume)
   const openFile = useEditorTabStore((state) => state.open)
-  const folders = useWorkspaceStore((state) => state.workspace?.folders)
-  const projects = useWorktreeStore((state) => state.projects)
   const shortcut = appShortcutLabel(
     useKeymapStore((state) => state.shell),
     'find-in-files'
@@ -112,14 +94,7 @@ export function SearchPanel(): React.JSX.Element {
   const active = chosen.generation === generation ? chosen.index : 0
   const setActive = (index: number): void => setChosen({ generation, index })
 
-  const namedFolders = useMemo(
-    (): NamedFolder[] =>
-      treeRoots(folders ?? [], projects).flatMap((root) => [
-        { path: root.path, name: root.name },
-        ...root.worktrees.map((tree) => ({ path: tree.path, name: tree.name }))
-      ]),
-    [folders, projects]
-  )
+  const namedFolders = useNamedFolders()
   /** Every match in list order, with the file it is in. */
   const matches = useMemo(
     () => files.flatMap((file) => file.matches.map((match) => ({ file, match }))),

@@ -208,6 +208,7 @@ function TreeRow({
   description?: string
   /** Undefined for rows that don't fold. */
   expanded?: boolean
+  /** Ignored by git: in the ignored-file colour, as JetBrains trees show it. */
   dimmed?: boolean
   /** Double-clicked, as JetBrains trees open files; a single click only selects. */
   onOpen?: () => void
@@ -230,7 +231,7 @@ function TreeRow({
       data-ignored={dimmed || undefined}
       className={cn(
         'type-tree-row flex h-tree-row shrink-0 cursor-default items-center gap-1 rounded-component pr-2.5 outline-none select-none data-[state=open]:ring-1 data-[state=open]:ring-ring data-[state=open]:ring-inset',
-        dimmed && 'text-muted-foreground',
+        dimmed && 'text-file-ignored',
         // As in JetBrains trees: the selection takes the accent while the tree has focus.
         selected
           ? 'bg-selection-inactive group-focus-within/tree:bg-selection group-focus-within/tree:text-selection-foreground'
@@ -1264,7 +1265,7 @@ export function FilesPanel(): React.JSX.Element {
               <span className="text-tooltip-muted-foreground">
                 {hideIgnored
                   ? `${hiddenIgnored} hidden in open folders`
-                  : 'Files git ignores are dimmed'}
+                  : 'Files git ignores are shown in their own colour'}
               </span>
             </span>
           }

@@ -11,7 +11,9 @@ import { NotificationsBar } from '@/components/notifications/NotificationsBar'
 import { NotificationsPanel } from '@/components/notifications/NotificationsPanel'
 import { Toaster } from '@/components/notifications/Toaster'
 import { TerminalTabs } from '@/components/terminal/TerminalTabs'
+import { SearchEverywhere } from '@/components/search/SearchEverywhere'
 import { useFindInFiles } from '@/components/search/use-find-in-files'
+import { useSearchEverywhere } from '@/components/search/use-search-everywhere'
 import { useTerminalCommands } from '@/components/terminal/use-terminal-commands'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { WelcomeScreen } from '@/components/workspace/WelcomeScreen'
@@ -72,6 +74,7 @@ export function AppShell(): React.JSX.Element {
   useTerminalCommands()
   useFindInFiles()
   useChatShortcut()
+  useSearchEverywhere()
   useEffect(() => {
     document.title = workspaceName ? `${workspaceName} — Hatfield 360` : 'Hatfield 360'
   }, [workspaceName])
@@ -170,6 +173,7 @@ export function AppShell(): React.JSX.Element {
         </div>
         <StatusBar />
         <Toaster />
+        <SearchEverywhere />
       </div>
     </TooltipProvider>
   )

@@ -27,7 +27,7 @@ Two columns, JetBrains-style, not Orca's three columns (no right-hand file/proje
 - **Side panel**: content depends on the view; resizable and collapsible.
 - **Main area**: content depends on the view.
 - Each view keeps its own state (open tabs, splits, selection) when you switch away and back.
-- **Workspace chat** (right, Shift Shift from anywhere): Claude Code over ACP, for questions about the workspace's projects ("where is X implemented") and small jobs. It is a tool window over any view, like the notifications panel, not a third column. It runs the user's own `claude` with its login (never an API key), Haiku at medium effort by default, and reads the workspace map file (`<workspace>.workspace.md`) as its instructions; Generate Workspace Map writes that file's map section, and the chat saves learnings to its playbook section.
+- **Workspace chat** (right, `Ctrl/Cmd+\` from anywhere; Shift Shift is Search Everywhere): Claude Code over ACP, for questions about the workspace's projects ("where is X implemented") and small jobs. It is a tool window over any view, like the notifications panel, not a third column. It runs the user's own `claude` with its login (never an API key), Haiku at medium effort by default, and reads the workspace map file (`<workspace>.workspace.md`) as its instructions; Generate Workspace Map writes that file's map section, and the chat saves learnings to its playbook section.
 
 ## Views (first implementation)
 
@@ -73,7 +73,7 @@ Rough priority order; each becomes its own issue when it's next.
 
 1. **Agent integration:** detect agent state (working / needs input / finished), show it in the tree and status bar, desktop notifications, agents notifying the app directly (Claude Code hooks, Hatfield).
 2. **Session persistence:** save sessions, terminals and layout on close; restore them on reopen.
-3. **Search:** fuzzy file/command finder (Ctrl/Cmd+P style), find in files; maybe semantic search.
+3. **Search:** Search Everywhere (Shift Shift: files, classes, symbols), find in files; maybe semantic search.
 4. **GitHub:** issues/tasks tracking (Hatfield task workflow), PRs, code review comments inside the editor.
 5. **Editor depth:** LSP (go-to-definition, diagnostics). Nice to have, not crucial.
 

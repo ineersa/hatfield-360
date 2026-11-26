@@ -21,10 +21,9 @@ const panel = (page: Page) => page.getByRole('complementary', { name: 'Chat pane
 const picker = (chat: Locator, label: string) =>
   chat.getByRole('combobox', { name: label, exact: true })
 
-/** Shift pressed twice on its own, as JetBrains opens Search Everywhere. */
-async function doubleShift(page: Page): Promise<void> {
-  await page.keyboard.press('Shift')
-  await page.keyboard.press('Shift')
+/** New Chat's key, from wherever the keys are. */
+async function newChatKey(page: Page): Promise<void> {
+  await page.keyboard.press('ControlOrMeta+Backslash')
 }
 
 /** A copy of the project the cassettes were recorded in, as the workspace's only folder. */
@@ -48,13 +47,13 @@ const replaying = (cassette: string) => ({
   HATFIELD_CHAT_CASSETTE: join(fixtures, `${cassette}.jsonl`)
 })
 
-test('Shift Shift opens a new chat on Haiku whose answer links to the code it found', async () => {
+test('Ctrl/Cmd+\\ opens a new chat on Haiku whose answer links to the code it found', async () => {
   const [, userData, cleanup] = await recordedProject()
   try {
     await withApp(
       async (_app, page) => {
         await expect(page.getByRole('main')).toBeVisible()
-        await doubleShift(page)
+        await newChatKey(page)
         const chat = panel(page)
         await expect(chat).toBeVisible()
         // The chat starts on the cheap defaults, in auto mode.
@@ -80,9 +79,9 @@ test('Shift Shift opens a new chat on Haiku whose answer links to the code it fo
         await expect(tab(page, 'greeting.js')).toBeVisible()
         await expect(editor(page).locator('.line-numbers.active-line-number')).toHaveText('2')
 
-        // Shift Shift again starts over in a fresh session, from wherever the keys are.
+        // The key again starts over in a fresh session, from wherever the keys are.
         await editor(page).locator('.view-lines').click()
-        await doubleShift(page)
+        await newChatKey(page)
         await expect(chat.getByLabel("Claude's reply")).toHaveCount(0)
         await expect(picker(chat, 'Model')).toHaveText('Haiku 5.5')
         await expect(chat.getByRole('textbox', { name: 'Message' })).toBeFocused()
@@ -103,7 +102,7 @@ test('every file a reply names opens the editor at its line, and a missing one s
     await withApp(
       async (_app, page) => {
         await expect(page.getByRole('main')).toBeVisible()
-        await doubleShift(page)
+        await newChatKey(page)
         const chat = panel(page)
         const message = chat.getByRole('textbox', { name: 'Message' })
         await expect(picker(chat, 'Model')).toHaveText('Haiku 5.5')
@@ -154,7 +153,7 @@ test('the chat shows why the agent stopped when it fails', async () => {
     await withApp(
       async (_app, page) => {
         await expect(page.getByRole('main')).toBeVisible()
-        await doubleShift(page)
+        await newChatKey(page)
         const chat = panel(page)
         const message = chat.getByRole('textbox', { name: 'Message' })
         await expect(picker(chat, 'Model')).toHaveText('Haiku 5.5')
@@ -178,7 +177,7 @@ test('a permission request waits for the user, and Yes lets the tool run', async
     await withApp(
       async (_app, page) => {
         await expect(page.getByRole('main')).toBeVisible()
-        await doubleShift(page)
+        await newChatKey(page)
         const chat = panel(page)
         await expect(picker(chat, 'Model')).toHaveText('Haiku 5.5')
         // Manual mode asks before every change.
@@ -217,7 +216,7 @@ test('Stop cancels a running command and the chat takes the next message', async
     await withApp(
       async (_app, page) => {
         await expect(page.getByRole('main')).toBeVisible()
-        await doubleShift(page)
+        await newChatKey(page)
         const chat = panel(page)
         await expect(picker(chat, 'Model')).toHaveText('Haiku 5.5')
         const message = chat.getByRole('textbox', { name: 'Message' })
@@ -243,7 +242,7 @@ test('Generate Workspace Map writes the map file, which Edit Workspace Map opens
     await withApp(
       async (_app, page) => {
         await expect(page.getByRole('main')).toBeVisible()
-        await doubleShift(page)
+        await newChatKey(page)
         const chat = panel(page)
         await expect(picker(chat, 'Model')).toHaveText('Haiku 5.5')
         await chat.getByRole('button', { name: 'Generate Workspace Map' }).click()
