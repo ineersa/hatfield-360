@@ -699,6 +699,7 @@ test('agent notifications follow accepted transitions and open only the owning t
           .getByRole('tabpanel', { name: 'Hatfield' })
           .getByTestId('terminal-pane')
         await startFocusedScenario(page, hatfield)
+        await command(page, hatfield, 'title')
         await command(page, hatfield, 'tool')
         const bell = page.getByRole('button', { name: /^Notifications(?: \(\d+\))?$/ })
         await expect(bell).toHaveAccessibleName('Notifications')
@@ -733,6 +734,7 @@ test('agent notifications follow accepted transitions and open only the owning t
         await send('child-done')
         const completedToast = page.getByRole('alert', { name: 'Agent turn completed' })
         await expect(completedToast).toBeVisible()
+        await expect(completedToast).toContainText('Hatfield · #hatfield-e2e — Review <draft>')
         await expect(completedToast.locator('strong')).toHaveText('<3> files')
         await expect(completedToast.getByRole('listitem')).toHaveText([
           'All checks pass',
@@ -769,7 +771,7 @@ test('agent notifications follow accepted transitions and open only the owning t
         await openSettings.click()
         await send('message')
         const message = panel.getByRole('listitem', { name: 'Review available' })
-        await expect(message).toContainText('Hatfield · hatfield-e2e')
+        await expect(message).toContainText('Hatfield · #hatfield-e2e — Review <draft>')
         await expect(message).toContainText('The report is ready.')
         await expect(settings).toBeVisible()
         expect(await page.evaluate(() => globalThis.desktop.getAgentSessions())).toEqual(

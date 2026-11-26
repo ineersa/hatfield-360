@@ -48,6 +48,8 @@ export type AgentNotification = {
   ownerWindowFocusedAndVisible: boolean
   provider: AgentProvider
   providerSessionId: string
+  /** The conversation title the provider reported, if any. */
+  title: string | null
   terminalId: string
   message:
     | { kind: 'needs-input' | 'failed' }

@@ -257,6 +257,7 @@ export function trackAgentSessions(
             provider: session.provider,
             terminalId: session.terminalId,
             providerSessionId: trusted.id,
+            title: trusted.title,
             message
           })
         }

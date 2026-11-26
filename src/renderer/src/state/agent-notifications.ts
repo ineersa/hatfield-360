@@ -1,4 +1,5 @@
 import { isTerminalShown, selectTerminal } from '@/components/terminal/terminal-tab-controllers'
+import { agentSessionIdentity } from '@/components/workspace/AgentSessionRows'
 import { AGENT_PROVIDERS, type AgentNotification } from '../../../shared/agent-api'
 import { AGENT_SOUND_KEYS } from '../../../shared/agent-sound-catalog'
 import { playAgentNotificationSound } from '@/lib/agent-notification-sound'
@@ -20,11 +21,13 @@ function soundsEnabled(): boolean {
 export function receiveAgentNotification({
   provider,
   providerSessionId,
+  title,
   terminalId,
   ownerWindowFocusedAndVisible,
   message
 }: AgentNotification): void {
-  const source = `${AGENT_PROVIDERS[provider]} · ${providerSessionId}`
+  const { displayName } = agentSessionIdentity({ provider, providerSessionId, title })
+  const source = `${AGENT_PROVIDERS[provider]} · ${displayName}`
   const explicit = message.kind === 'explicit'
   const content = explicit
     ? { title: message.title || 'Agent message', severity: 'info' as const }
