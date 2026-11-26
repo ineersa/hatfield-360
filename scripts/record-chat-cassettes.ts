@@ -50,9 +50,20 @@ const is =
   (event: ChatEvent): event is Extract<ChatEvent, { kind: K }> =>
     event.kind === kind && also(event)
 
-type Script = (chat: ChatAgentSession, driver: Driver) => Promise<void>
+type Script = (chat: ChatAgentSession, driver: Driver, cwd: string) => Promise<void>
 
 const turn = (driver: Driver) => driver.next(is('turn-end'))
+
+/**
+ * A reply naming files in prose, in every form the chat links, one that doesn't exist and an
+ * absolute link into the project; tests/e2e/chat.spec.ts sends the same.
+ */
+const linksPrompt = (cwd: string): string =>
+  [
+    'Without using any tools, reply with exactly this text and nothing else:',
+    '',
+    `The greeting is in src/greeting.js:2:10 and is called from __src/main.js:1, 3__; the readme is **README.md**, see also \`src/greeting.js#L2-L3\` and [its last line](<${cwd}/src/greeting.js#L3>). There is no src/missing.js:4.`
+  ].join('\n')
 
 /** The scripted sessions, one cassette each; README.md describes what each must contain. */
 const SCRIPTS: Record<string, Script> = {
@@ -60,6 +71,10 @@ const SCRIPTS: Record<string, Script> = {
     chat.prompt(
       'Where is the greeting implemented? Reply in one sentence with a path:line reference.'
     )
+    await turn(driver)
+  },
+  links: async (chat, driver, cwd) => {
+    chat.prompt(linksPrompt(cwd))
     await turn(driver)
   },
   permission: async (chat, driver) => {
@@ -121,7 +136,7 @@ async function record(name: string, script: Script, claude: string): Promise<voi
     const ready = driver.next(is('ready'))
     void chat.open()
     await ready
-    await script(chat, driver)
+    await script(chat, driver, cwd)
     chat.end()
     await chat.exited()
     const entries = (await readFile(log, 'utf8'))
@@ -129,13 +144,14 @@ async function record(name: string, script: Script, claude: string): Promise<voi
       .filter(Boolean)
       .map((line): unknown => JSON.parse(line))
     const claudeVersion = execFileSync(claude, ['--version'], { encoding: 'utf8' }).trim()
-    await writeFile(
-      join(fixtures, `${name}.jsonl`),
-      serializeCassette(
-        { cassette: name, adapter: adapterVersion, claude: claudeVersion },
-        normalize(entries, { cwd, home: homedir() })
-      )
+    const cassette = serializeCassette(
+      { cassette: name, adapter: adapterVersion, claude: claudeVersion },
+      normalize(entries, { cwd, home: homedir() })
     )
+    // A path left in would only match this machine and this run.
+    for (const path of [work, homedir()])
+      if (cassette.includes(path)) throw new Error(`${name}: the cassette still holds ${path}`)
+    await writeFile(join(fixtures, `${name}.jsonl`), cassette)
     process.stdout.write(`Recorded ${name}.jsonl (${entries.length} messages)\n`)
   } finally {
     await rm(work, { recursive: true, force: true })

@@ -19,7 +19,7 @@ export const PLAYBOOK_TOOL_DESCRIPTION = [
 const CHAT_PROMPT = [
   '# Hatfield 360 workspace chat',
   'You answer questions about the projects in this workspace ("where is X implemented", "how does Y work", "find me Z") and run small jobs for the user.',
-  'Keep answers short. Refer to code as `path:line` or `path:start-end`, with paths relative to the working directory; the app turns these into links that open the editor.',
+  'Keep answers short. Cite code in inline code as `path:line` or `path:start-end`, with paths relative to the working directory; the app turns these into links that open the editor.',
   `Use the ${PLAYBOOK_TOOL} tool to keep reusable learnings, as its description says.`
 ].join('\n')
 

@@ -1,11 +1,7 @@
 import { app, type WebContents } from 'electron'
-import { access } from 'node:fs/promises'
+import { stat } from 'node:fs/promises'
 import { isAbsolute, join } from 'node:path'
-import {
-  CHAT_AGENT_CHANNELS,
-  type ChatConfigId,
-  type ChatLinkTarget
-} from '../../shared/chat-agent-api'
+import { CHAT_AGENT_CHANNELS, type ChatConfigId } from '../../shared/chat-agent-api'
 import { fileRoots } from '../files/file-roots'
 import { resolveInsideRoots } from '../files/path-containment'
 import { settingsStore } from '../settings/settings-store'
@@ -14,9 +10,9 @@ import { ChatAgentSession } from './chat-agent'
 import { agentScriptOverridden, chatAgentCommand, resolveClaude } from './chat-agent-launch'
 import { WorkspaceMapFile } from './workspace-map-file'
 
-const exists = (path: string): Promise<boolean> =>
-  access(path).then(
-    () => true,
+const isFile = (path: string): Promise<boolean> =>
+  stat(path).then(
+    (found) => found.isFile(),
     () => false
   )
 
@@ -92,24 +88,20 @@ class ChatAgentHost {
     return this.chat(chatId).setConfig(configId, value)
   }
 
-  /** A reply's `path:line`, relative to the chat's folder or any workspace root, inside the roots. */
-  async resolveLink(
-    chatId: string,
-    path: string,
-    line: number,
-    endLine: number | null
-  ): Promise<ChatLinkTarget | null> {
+  /** A reply's file paths, relative to the chat's folder or any workspace root, inside the roots. */
+  async resolvePaths(chatId: string, paths: string[]): Promise<(string | null)[]> {
     const { cwd } = this.current?.session.id === chatId ? this.current : { cwd: null }
     const roots = (await fileRoots.current()).map((root) => root.path)
-    const candidates = isAbsolute(path)
-      ? [path]
-      : [...(cwd ? [cwd] : []), ...roots].map((root) => join(root, path))
-    for (const candidate of candidates) {
-      if (!(await exists(candidate))) continue
-      const inside = await resolveInsideRoots(candidate, roots)
-      if (inside !== null) return { path: candidate, line, endLine }
-    }
-    return null
+    const bases = [...(cwd ? [cwd] : []), ...roots]
+    return Promise.all(
+      paths.map(async (path) => {
+        for (const candidate of isAbsolute(path) ? [path] : bases.map((base) => join(base, path))) {
+          if (!(await isFile(candidate))) continue
+          if ((await resolveInsideRoots(candidate, roots)) !== null) return candidate
+        }
+        return null
+      })
+    )
   }
 
   async mapFile(): Promise<string> {

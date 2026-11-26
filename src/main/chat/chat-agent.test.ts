@@ -7,7 +7,7 @@ import type { ChatEvent } from '../../shared/chat-agent-api'
 import { ChatAgentSession } from './chat-agent'
 import { WorkspaceMapFile } from './workspace-map-file'
 import { isPlainObject } from '../../shared/plain-object'
-import { parseCassette } from '../../../tests/fixtures/acp/cassette.mjs'
+import { normalize, parseCassette } from '../../../tests/fixtures/acp/cassette.mjs'
 
 const fixtures = resolve(import.meta.dirname, '../../../tests/fixtures/acp')
 
@@ -106,7 +106,7 @@ describe('ChatAgentSession against recorded Claude Code', () => {
     expect(seen.at(-1)).toMatchObject({ kind: 'turn-end', stopReason: 'end_turn' })
     expect(seen).toContainEqual(expect.objectContaining({ kind: 'tool', status: 'completed' }))
     expect(await readFile(mapPath, 'utf8')).toBe(
-      '<!-- playbook -->\n- Run the tests with npm test.\n<!-- /playbook -->\n'
+      '<!-- playbook -->\n- Run the tests with `npm test`.\n<!-- /playbook -->\n'
     )
     chat.end()
     await chat.exited()
@@ -146,7 +146,37 @@ describe('ChatAgentSession against recorded Claude Code', () => {
   })
 })
 
+/** A streamed reply piece, as the adapter sends it. */
+const piece = (text: string, sessionUpdate = 'agent_message_chunk') => ({
+  from: 'agent',
+  message: {
+    jsonrpc: '2.0',
+    method: 'session/update',
+    params: { sessionId: 's', update: { sessionUpdate, content: { type: 'text', text } } }
+  }
+})
+/** The text of each streamed piece. */
+const texts = (entries: { message: unknown }[]) =>
+  entries.map(({ message }) => JSON.stringify(message).match(/"text":"([^"]*)"/)?.[1])
 describe('the recorded cassettes', () => {
+  it('replace the project folder even when a reply streams it in pieces', () => {
+    expect(
+      texts(
+        normalize(
+          [
+            piece('See /tmp/rec'),
+            piece('ord/repo/src/a'),
+            piece('.js:2 and '),
+            piece('/home/u'),
+            piece('ser/x', 'agent_thought_chunk'),
+            piece('. Done')
+          ],
+          { cwd: '/tmp/record/repo', home: '/home/user' }
+        )
+      )
+    ).toEqual(['See <cwd>/src/a', '.js:2 and ', '/home/u', 'ser/x', '. Done'])
+  })
+
   it('come from the installed ACP adapter', async () => {
     const manifest: unknown = JSON.parse(
       await readFile(

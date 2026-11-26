@@ -32,6 +32,63 @@ export function mapStrings(value, map) {
   return value
 }
 
+const STREAMED = new Set(['agent_message_chunk', 'agent_thought_chunk'])
+
+/** A streamed text piece's text, its kind and session; null for any other message. */
+const streamed = ({ from, message }) => {
+  const update = message.method === 'session/update' ? message.params?.update : undefined
+  if (from !== 'agent' || !STREAMED.has(update?.sessionUpdate)) return null
+  if (update.content?.type !== 'text' || typeof update.content.text !== 'string') return null
+  return { text: update.content.text, run: `${message.params.sessionId} ${update.sessionUpdate}` }
+}
+
+const withText = (entry, text) => {
+  const copy = structuredClone(entry)
+  copy.message.params.update.content.text = text
+  return copy
+}
+
+/**
+ * Joins the streamed pieces a path is split across (`/tmp/x/re` + `po/a.js`), so replacing it
+ * by a placeholder sees it whole; pieces that split no path stay as they were sent.
+ */
+function joinSplitPaths(entries, paths) {
+  const joined = []
+  let at = 0
+  while (at < entries.length) {
+    const first = streamed(entries[at])
+    if (first === null) {
+      joined.push(entries[at++])
+      continue
+    }
+    const run = []
+    while (at < entries.length && streamed(entries[at])?.run === first.run) run.push(entries[at++])
+    const texts = run.map((entry) => streamed(entry).text)
+    const starts = texts.map((_, index) => texts.slice(0, index).join('').length)
+    const whole = texts.join('')
+    // A path covering a piece's start joins that piece to the one before it.
+    const joinsPrevious = starts.map(() => false)
+    for (const path of paths) {
+      for (let found = whole.indexOf(path); found !== -1; found = whole.indexOf(path, found + 1))
+        starts.forEach((start, index) => {
+          if (start > found && start < found + path.length) joinsPrevious[index] = true
+        })
+    }
+    let current = texts[0]
+    let currentEntry = run[0]
+    for (let index = 1; index < run.length; index++) {
+      if (joinsPrevious[index]) current += texts[index]
+      else {
+        joined.push(withText(currentEntry, current))
+        current = texts[index]
+        currentEntry = run[index]
+      }
+    }
+    joined.push(withText(currentEntry, current))
+  }
+  return joined
+}
+
 /** Replaces run-specific values in recorded messages with placeholders. */
 export function normalize(entries, { cwd, home }) {
   const ids = new Map()
@@ -48,9 +105,10 @@ export function normalize(entries, { cwd, home }) {
       })
       .replace(ISO_TIME, '<time>')
       .replace(EMAIL, 'user@example.com')
-  return entries
-    .filter((entry) => !dropped(entry))
-    .map((entry) => ({ from: entry.from, message: mapStrings(entry.message, replace) }))
+  return joinSplitPaths(
+    entries.filter((entry) => !dropped(entry)),
+    [cwd, home].filter((path) => path !== '')
+  ).map((entry) => ({ from: entry.from, message: mapStrings(entry.message, replace) }))
 }
 
 /** Parses a cassette's text into its header and entries. */

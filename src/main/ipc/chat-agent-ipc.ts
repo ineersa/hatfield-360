@@ -1,6 +1,7 @@
 import {
   CHAT_AGENT_CHANNELS,
   CHAT_CONFIG_IDS,
+  CHAT_REFERENCE_CAP,
   type ChatConfigId
 } from '../../shared/chat-agent-api'
 import { chatAgentHost } from '../chat/chat-agent-host'
@@ -20,10 +21,13 @@ function configId(value: unknown): ChatConfigId {
   return found
 }
 
-const lineNumber = (value: unknown): number => {
-  if (typeof value !== 'number' || !Number.isInteger(value) || value < 1)
-    throw new Error('Expected a line')
-  return value
+function paths(value: unknown): string[] {
+  if (!Array.isArray(value) || value.length > CHAT_REFERENCE_CAP) throw new Error('Expected paths')
+  return value.map((path: unknown) => {
+    if (typeof path !== 'string' || path === '' || path.length > 4096 || path.includes('\0'))
+      throw new Error('Expected a path')
+    return path
+  })
 }
 
 export function registerChatAgentIpc(): void {
@@ -55,14 +59,7 @@ export function registerChatAgentIpc(): void {
     chatAgentHost.chat(id(chatId)).generateMap()
   })
   handleTrusted(CHAT_AGENT_CHANNELS.mapFile, () => chatAgentHost.mapFile())
-  handleTrusted(CHAT_AGENT_CHANNELS.resolveLink, (_event, chatId, path, line, endLine) => {
-    if (typeof path !== 'string' || path === '' || path.length > 4096 || path.includes('\0'))
-      throw new Error('Expected a path')
-    return chatAgentHost.resolveLink(
-      id(chatId),
-      path,
-      lineNumber(line),
-      endLine === null ? null : lineNumber(endLine)
-    )
-  })
+  handleTrusted(CHAT_AGENT_CHANNELS.resolvePaths, (_event, chatId, requested) =>
+    chatAgentHost.resolvePaths(id(chatId), paths(requested))
+  )
 }
