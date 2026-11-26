@@ -17,11 +17,14 @@ export type FileHit = {
 
 /** The most files one query returns. */
 export const FILE_HIT_LIMIT = 50
+/** The most paths one `findUnlistedPaths` call takes; more than a search lists. */
+export const UNLISTED_PATHS_LIMIT = 200
 /** Longer than any search box holds. */
 export const SEARCH_EVERYWHERE_QUERY_LIMIT = 1000
 
 export const SEARCH_EVERYWHERE_CHANNELS = {
-  findFiles: 'search-everywhere:find-files'
+  findFiles: 'search-everywhere:find-files',
+  findUnlisted: 'search-everywhere:find-unlisted'
 } as const
 
 export type SearchEverywhereApi = {
@@ -30,4 +33,9 @@ export type SearchEverywhereApi = {
    * dependency folders. A query overtaken by a newer one resolves empty.
    */
   findWorkspaceFiles: (query: string) => Promise<FileHit[]>
+  /**
+   * Which of `paths` Go to File doesn't list: ignored by git, in a dependency folder or outside the
+   * workspace, as JetBrains colours a library's or an ignored file's results.
+   */
+  findUnlistedPaths: (paths: string[]) => Promise<string[]>
 }

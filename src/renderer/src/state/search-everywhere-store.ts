@@ -14,6 +14,8 @@ type SearchEverywhereState = {
   query: string
   files: FileHit[]
   symbols: SymbolHit[]
+  /** The symbols' files Go to File doesn't list (git-ignored, dependencies, outside the workspace). */
+  unlisted: ReadonlySet<string>
   /** Whether results for `query` are still coming. */
   searching: boolean
   error: string | null
@@ -42,7 +44,7 @@ export const useSearchEverywhereStore = create<SearchEverywhereState>((set, get)
     symbolRequests = null
     const { query, kind, open } = get()
     if (!open || query.trim() === '') {
-      set({ files: [], symbols: [], searching: false, error: null })
+      set({ files: [], symbols: [], unlisted: new Set(), searching: false, error: null })
       return
     }
     const current = (): boolean => id === generation
@@ -55,8 +57,14 @@ export const useSearchEverywhereStore = create<SearchEverywhereState>((set, get)
     if (kind !== 'files') {
       const requests = new CancellationTokenSource()
       symbolRequests = requests
-      symbols = findWorkspaceSymbols(query, requests.token).then((lists) => {
-        if (current()) set({ symbols: rankSymbols(query, lists, kind === 'classes') })
+      symbols = findWorkspaceSymbols(query, requests.token).then(async (lists) => {
+        if (!current()) return
+        const ranked = rankSymbols(query, lists, kind === 'classes')
+        set({ symbols: ranked })
+        const unlisted = await window.desktop.findUnlistedPaths([
+          ...new Set(ranked.map((hit) => hit.path))
+        ])
+        if (current()) set({ unlisted: new Set(unlisted) })
       })
     }
     set({ searching: true, error: null })
@@ -75,6 +83,7 @@ export const useSearchEverywhereStore = create<SearchEverywhereState>((set, get)
     query: '',
     files: [],
     symbols: [],
+    unlisted: new Set(),
     searching: false,
     error: null,
     show: (kind) => {

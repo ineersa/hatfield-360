@@ -86,6 +86,7 @@ const desktopApi: DesktopApi = {
   startSearch: (id, query) => ipcRenderer.invoke(SEARCH_CHANNELS.start, id, query),
   cancelSearch: () => ipcRenderer.invoke(SEARCH_CHANNELS.cancel),
   findWorkspaceFiles: (query) => ipcRenderer.invoke(SEARCH_EVERYWHERE_CHANNELS.findFiles, query),
+  findUnlistedPaths: (paths) => ipcRenderer.invoke(SEARCH_EVERYWHERE_CHANNELS.findUnlisted, paths),
   subscribeSearch: (callback) => {
     const listener = (_event: unknown, event: SearchEvent): void => callback(event)
     ipcRenderer.on(SEARCH_CHANNELS.event, listener)

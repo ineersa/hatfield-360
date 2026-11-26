@@ -121,11 +121,14 @@ function FileItem({
 function SymbolItem({
   hit,
   folder,
+  unlisted,
   onChoose
 }: {
   hit: SymbolHit
   /** Where its file is, from the workspace folder. */
   folder: string
+  /** Ignored by git, a dependency or outside the workspace: coloured as JetBrains colours ignored files. */
+  unlisted: boolean
   onChoose: () => void
 }): React.JSX.Element {
   const file = hit.path.split(/[\\/]/).pop() ?? hit.path
@@ -139,14 +142,14 @@ function SymbolItem({
         .join('\n')}
     >
       <SymbolIcon kind={hit.kind} />
-      <span className="max-w-[40%] shrink-0 truncate">
+      <span className={cn('max-w-[40%] shrink-0 truncate', unlisted && 'text-file-ignored')}>
         <Highlighted text={hit.name} ranges={hit.ranges} />
       </span>
       {/* Short of room, the container gives way first, then the folder; the file and line stay. */}
       <span className="min-w-0 flex-1 basis-0 truncate type-hint">
         {hit.container === null ? null : shortContainer(hit.container)}
       </span>
-      <span className="flex min-w-0 pl-4 type-hint">
+      <span className={cn('flex min-w-0 pl-4 type-hint', unlisted && 'text-file-ignored')}>
         {folder === '' ? null : <StartTruncated>{`${folder}/`}</StartTruncated>}
         <span className="shrink-0">{at}</span>
       </span>
@@ -156,7 +159,8 @@ function SymbolItem({
 
 /** JetBrains' Search Everywhere: files, classes and symbols of the workspace, from one box. */
 export function SearchEverywhere(): React.JSX.Element {
-  const { open, kind, query, files, symbols, searching, error } = useSearchEverywhereStore()
+  const { open, kind, query, files, symbols, unlisted, searching, error } =
+    useSearchEverywhereStore()
   const close = useSearchEverywhereStore((state) => state.close)
   const setKind = useSearchEverywhereStore((state) => state.setKind)
   const setQuery = useSearchEverywhereStore((state) => state.setQuery)
@@ -212,6 +216,7 @@ export function SearchEverywhere(): React.JSX.Element {
       key={symbolKey(hit)}
       hit={hit}
       folder={folderLabel(hit.path, namedFolders, workspaceFolders > 1)}
+      unlisted={unlisted.has(hit.path)}
       onChoose={() => pick(hit)}
     />
   )

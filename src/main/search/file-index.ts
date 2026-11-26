@@ -113,7 +113,24 @@ export async function matchFiles(
   return best
 }
 
-type Indexed = { folder: FolderFiles; loaded: Promise<void>; stop: () => void }
+/** Which of `paths` none of `folders` lists; a path in a folder whose listing failed counts as listed. */
+export async function unlistedPaths(
+  paths: readonly string[],
+  folders: readonly { folder: FolderFiles; listed: boolean }[]
+): Promise<string[]> {
+  const isListed = async (path: string): Promise<boolean> => {
+    const real = await realpath(path).catch(() => path)
+    return folders.some(
+      ({ folder, listed }) =>
+        isPathInside(real, folder.root) &&
+        (!listed || folder.files.has(relative(folder.root, real).split(sep).join('/')))
+    )
+  }
+  const found = await Promise.all(paths.map(isListed))
+  return paths.filter((_, index) => found[index] !== true)
+}
+
+type Indexed = { folder: FolderFiles; loaded: Promise<void>; listed: boolean; stop: () => void }
 
 /** The workspace folders' files for Search Everywhere: listed on first use, then kept current. */
 class FileIndex {
@@ -151,29 +168,37 @@ class FileIndex {
     )
   }
 
+  async unlisted(paths: readonly string[]): Promise<string[]> {
+    const entries = [...this.indexed.values()]
+    await Promise.all(entries.map((entry) => entry.loaded))
+    return unlistedPaths(paths, entries)
+  }
+
   private index(root: string): Indexed {
     const folder = new FolderFiles(root)
     // Changes heard while the listing runs are applied after it, so none is lost or undone.
     const early: ProjectChange[] = []
-    let listed = false
+    let settled = false
     const watch = watchProject(root, (changes) => {
-      if (listed) folder.apply(changes)
+      if (settled) folder.apply(changes)
       else early.push(...changes)
     })
     // Listed once the watcher is up, so nothing changed between the two goes unseen.
-    const loaded = watch.ready
+    const entry: Indexed = { folder, loaded: Promise.resolve(), listed: false, stop: watch.stop }
+    entry.loaded = watch.ready
       .then(() => listFiles(root))
       .then((files) => {
         for (const file of files) folder.files.add(file)
+        entry.listed = true
       })
       .catch((error: unknown) =>
         console.warn(`Listing ${root} for Search Everywhere failed:`, error)
       )
       .finally(() => {
-        listed = true
+        settled = true
         folder.apply(early)
       })
-    return { folder, loaded, stop: watch.stop }
+    return entry
   }
 }
 

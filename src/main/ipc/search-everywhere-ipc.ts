@@ -1,6 +1,8 @@
+import { isAbsolute } from 'node:path'
 import {
   SEARCH_EVERYWHERE_CHANNELS,
-  SEARCH_EVERYWHERE_QUERY_LIMIT
+  SEARCH_EVERYWHERE_QUERY_LIMIT,
+  UNLISTED_PATHS_LIMIT
 } from '../../shared/search-everywhere-api'
 import { fileIndex } from '../search/file-index'
 import { workspaceStore } from '../workspace/workspace-store'
@@ -32,5 +34,15 @@ export function registerSearchEverywhereIpc(): void {
       throw new Error('Expected a query')
     await startIndex()
     return fileIndex.find(query)
+  })
+  handleTrusted(SEARCH_EVERYWHERE_CHANNELS.findUnlisted, async (_event, paths) => {
+    if (
+      !Array.isArray(paths) ||
+      paths.length > UNLISTED_PATHS_LIMIT ||
+      !paths.every((path) => typeof path === 'string' && isAbsolute(path))
+    )
+      throw new Error('Expected absolute paths')
+    await startIndex()
+    return fileIndex.unlisted(paths)
   })
 }

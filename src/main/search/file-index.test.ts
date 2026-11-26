@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { FolderFiles, listFiles, matchFiles } from './file-index'
+import { FolderFiles, listFiles, matchFiles, unlistedPaths } from './file-index'
 
 let root: string
 
@@ -40,6 +40,22 @@ describe('the Search Everywhere file index', () => {
       'src/AgentCore/Application/Pipeline/RunMessageProcessor.php',
       'src/AgentCore/Domain/Run/RunMessage.php'
     ])
+  })
+
+  it('tells which paths it leaves out: ignored by git, in dependency folders or outside', async () => {
+    const paths = [
+      'src/AgentCore/Domain/Run/RunMessage.php',
+      'build/RunMessageProcessor.php',
+      'vendor/acme/RunMessageProcessor.php',
+      '../elsewhere/Stub.php'
+    ].map((path) => join(root, path))
+    expect(await unlistedPaths(paths, [{ folder: await indexed(), listed: true }])).toEqual(
+      paths.slice(1)
+    )
+    // A folder that couldn't be listed doesn't mark all its files.
+    expect(await unlistedPaths(paths, [{ folder: new FolderFiles(root), listed: false }])).toEqual(
+      paths.slice(3)
+    )
   })
 
   it('follows files added and removed, and a removed folder with its files', async () => {
