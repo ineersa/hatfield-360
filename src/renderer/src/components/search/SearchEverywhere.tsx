@@ -203,6 +203,8 @@ export function SearchEverywhere(): React.JSX.Element {
           Find a workspace file, class or symbol and open it
         </DialogDescription>
         <Command
+          // Its Ctrl+N / Ctrl+J would take Go to Class's key on Linux.
+          vimBindings={false}
           shouldFilter={false}
           value={selected}
           onValueChange={(value) => setSelection({ among: firstKey, value })}

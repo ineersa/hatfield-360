@@ -47,12 +47,7 @@ function splitMatch(container: string, member: string, symbol: WorkspaceSymbol):
 const bestOf = (a: FuzzyMatch | null, b: FuzzyMatch | null): FuzzyMatch | null =>
   a === null ? b : b === null || a.score >= b.score ? a : b
 
-/**
- * Every server's symbols for `query`, merged: each one once (two servers, or one twice), ranked by
- * how well its name matches, best first. `RunMessageProcessor::process` matches `process` in a
- * container matching `RunMessageProcessor`, or a name that is itself qualified, as gopls gives
- * methods (`RunMessageProcessor.Process`, the package as container). `classesOnly` keeps the class-like kinds.
- */
+/** Every server's symbols for `query`, each once, best match first; `Type::member` narrows by container. */
 export function rankSymbols(
   query: string,
   lists: readonly (readonly WorkspaceSymbol[])[],

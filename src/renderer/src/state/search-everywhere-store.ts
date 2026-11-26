@@ -104,7 +104,7 @@ export const useSearchEverywhereStore = create<SearchEverywhereState>((set, get)
       run()
       useShellLayoutStore.getState().showFiles()
       const start = column === null ? 0 : column - 1
-      useEditorTabStore.getState().open(path, { line: line ?? 1, start, end: start, focus: true })
+      useEditorTabStore.getState().open(path, { line, start, end: start, focus: true })
     }
   }
 })

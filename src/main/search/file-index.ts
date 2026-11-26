@@ -70,32 +70,47 @@ export class FolderFiles {
 
 const yieldToEvents = (): Promise<void> => new Promise((resolve) => setImmediate(resolve))
 
-/**
- * The best `FILE_HIT_LIMIT` files of `folders` for `query`, matched a chunk at a time; stops early,
- * returning nothing, once `superseded` says a newer query came.
- */
+const byListing = (a: FileHit, b: FileHit): number =>
+  compareMatches({ score: a.score, text: a.relative }, { score: b.score, text: b.relative })
+
+/** Puts `hit` in the sorted `best` if it ranks among the first `FILE_HIT_LIMIT`. */
+function keepBest(best: FileHit[], hit: FileHit): void {
+  const last = best.at(-1)
+  if (best.length === FILE_HIT_LIMIT && last !== undefined && byListing(hit, last) >= 0) return
+  let low = 0
+  let high = best.length
+  while (low < high) {
+    const middle = (low + high) >>> 1
+    const other = best[middle]
+    if (other !== undefined && byListing(other, hit) <= 0) low = middle + 1
+    else high = middle
+  }
+  best.splice(low, 0, hit)
+  if (best.length > FILE_HIT_LIMIT) best.pop()
+}
+
+/** The best files for `query`, in chunks so a large workspace never stalls main; empty once `superseded`. */
 export async function matchFiles(
   query: string,
   folders: readonly FolderFiles[],
   superseded: () => boolean = () => false
 ): Promise<FileHit[]> {
-  const hits: FileHit[] = []
+  // Only the best few are kept: sorting every hit of a one-letter query would block main.
+  const best: FileHit[] = []
   let done = 0
   for (const folder of folders) {
     const name = basename(folder.root)
     for (const file of folder.files) {
       const match = fuzzyPathMatch(query, file)
       if (match !== null)
-        hits.push({ path: join(folder.root, file), relative: file, folder: name, ...match })
+        keepBest(best, { path: join(folder.root, file), relative: file, folder: name, ...match })
       if (++done % CHUNK === 0) {
         await yieldToEvents()
         if (superseded()) return []
       }
     }
   }
-  return hits
-    .toSorted((a, b) => compareMatches({ ...a, text: a.relative }, { ...b, text: b.relative }))
-    .slice(0, FILE_HIT_LIMIT)
+  return best
 }
 
 type Indexed = { folder: FolderFiles; loaded: Promise<void>; stop: () => void }
@@ -104,9 +119,16 @@ type Indexed = { folder: FolderFiles; loaded: Promise<void>; stop: () => void }
 class FileIndex {
   private readonly indexed = new Map<string, Indexed>()
   private latest = 0
+  private updates: Promise<void> = Promise.resolve()
 
-  /** Follows the workspace's folders: new ones are listed, removed ones forgotten. */
-  async setFolders(paths: readonly string[]): Promise<void> {
+  /** Follows the workspace's folders; one update at a time, so the latest read always wins. */
+  update(read: () => Promise<readonly string[]>): Promise<void> {
+    const next = this.updates.then(async () => this.setFolders(await read()))
+    this.updates = next.catch(() => undefined)
+    return next
+  }
+
+  private async setFolders(paths: readonly string[]): Promise<void> {
     const roots = await Promise.all(paths.map((path) => realpath(path).catch(() => null)))
     const wanted = new Set(roots.filter((root) => root !== null))
     for (const [root, entry] of this.indexed) {
@@ -138,7 +160,9 @@ class FileIndex {
       if (listed) folder.apply(changes)
       else early.push(...changes)
     })
-    const loaded = listFiles(root)
+    // Listed once the watcher is up, so nothing changed between the two goes unseen.
+    const loaded = watch.ready
+      .then(() => listFiles(root))
       .then((files) => {
         for (const file of files) folder.files.add(file)
       })

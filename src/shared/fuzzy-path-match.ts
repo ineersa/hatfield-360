@@ -49,12 +49,7 @@ const toRanges = (positions: number[]): MatchRanges => {
   return ranges
 }
 
-/**
- * How well `query` matches `text` (a path), or null when it doesn't: every query character, in
- * order, ignoring case. Path segments, `_`/`-`/`.` and camel-case humps start words, so
- * `RunMessProc` and `pipe/rmp` both find `Pipeline/RunMessageProcessor.php`; runs and matches in
- * the file name score higher. Spaces in the query are ignored.
- */
+/** How well `query` matches a path, as JetBrains matches `RunMessProc` or `pipe/rmp`; null when it doesn't. */
 export function fuzzyPathMatch(query: string, text: string): FuzzyMatch | null {
   const pattern = query.replace(/\s+/g, '')
   if (pattern === '') return null

@@ -288,10 +288,7 @@ const toSymbol = ({
   } satisfies WorkspaceSymbol
 }
 
-/**
- * Each running language server's `workspace/symbol` answer for `query`, one list per server; a
- * server that fails or isn't ready adds nothing. Cancelling `token` cancels the requests.
- */
+/** Each ready language server's `workspace/symbol` answer, one list per server; a failing one adds nothing. */
 export function findWorkspaceSymbols(
   query: string,
   token: CancellationToken

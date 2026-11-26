@@ -36,7 +36,8 @@ const newTab = (path: string): EditorTab => ({
 
 /** Where in a file to show once its tab does: a range on one line, columns from 0. */
 type EditorPosition = {
-  line: number
+  /** Null keeps the cursor the file already has, only showing it. */
+  line: number | null
   start: number
   end: number
   /** The editor takes the keys, as when a result is opened with Enter. */

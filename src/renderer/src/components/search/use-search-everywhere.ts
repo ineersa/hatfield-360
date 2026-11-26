@@ -1,11 +1,9 @@
 import { useEffect } from 'react'
+import { DoubleShiftPress } from '@/lib/double-shift-press'
 import { appCommandForKey } from '@/lib/keymap-match'
 import { useKeymapStore } from '@/state/keymap-store'
 import { useSearchEverywhereStore } from '@/state/search-everywhere-store'
 import type { SearchEverywhereKind } from '../../../../shared/search-everywhere-api'
-
-/** The longest pause between the two Shift presses, as in JetBrains. */
-const DOUBLE_PRESS_MS = 400
 
 const GO_TO: Partial<Record<string, SearchEverywhereKind>> = {
   'search-everywhere': 'all',
@@ -17,34 +15,14 @@ const GO_TO: Partial<Record<string, SearchEverywhereKind>> = {
 /** Search Everywhere on Shift Shift from anywhere in the window, and Go to File / Class / Symbol on their keys. */
 export function useSearchEverywhere(): void {
   useEffect(() => {
-    // A lone Shift press, released; another lone press soon after opens the popup.
-    let releasedAt: number | null = null
-    let alone = false
+    const press = new DoubleShiftPress()
     const onKeyDown = (event: KeyboardEvent): void => {
-      if (event.key !== 'Shift') {
-        alone = false
-        releasedAt = null
-        return
-      }
-      if (event.repeat) return
-      if (releasedAt !== null && event.timeStamp - releasedAt <= DOUBLE_PRESS_MS) {
-        releasedAt = null
-        alone = false
-        const store = useSearchEverywhereStore.getState()
-        if (!store.open) store.show('all')
-        return
-      }
-      alone = true
+      if (!press.keyDown(event)) return
+      const store = useSearchEverywhereStore.getState()
+      if (!store.open) store.show('all')
     }
-    const onKeyUp = (event: KeyboardEvent): void => {
-      if (event.key !== 'Shift') return
-      releasedAt = alone ? event.timeStamp : null
-      alone = false
-    }
-    const reset = (): void => {
-      releasedAt = null
-      alone = false
-    }
+    const onKeyUp = (event: KeyboardEvent): void => press.keyUp(event)
+    const reset = (): void => press.reset()
     // Capture, so the editor and terminals see the keys too but can't keep them from the popup.
     window.addEventListener('keydown', onKeyDown, true)
     window.addEventListener('keyup', onKeyUp, true)

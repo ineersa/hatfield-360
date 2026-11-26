@@ -65,4 +65,14 @@ describe('the Search Everywhere file index', () => {
     })
     expect(await matchFiles('RunMessage', [await indexed()], () => false)).toHaveLength(2)
   })
+
+  it('keeps the best 50 of many hits, in listing order', async () => {
+    const folder = new FolderFiles(root)
+    for (let index = 0; index < 120; index++)
+      folder.files.add(`src/deep/${'x'.repeat(index)}/a${index}.ts`)
+    const hits = await matchFiles('a', [folder])
+    expect(hits.map((hit) => hit.relative)).toEqual(
+      [...folder.files].toSorted((a, b) => a.length - b.length || a.localeCompare(b)).slice(0, 50)
+    )
+  })
 })

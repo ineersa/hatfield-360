@@ -12,10 +12,14 @@ const popup = (page: Page) => page.getByRole('dialog', { name: 'Search Everywher
 const searchBox = (page: Page) => popup(page).getByRole('combobox', { name: 'Search Everywhere' })
 const results = (page: Page) => popup(page).getByRole('option')
 
-/** Shift pressed twice on its own, as JetBrains opens Search Everywhere. */
-async function doubleShift(page: Page): Promise<void> {
-  await page.keyboard.press('Shift')
-  await page.keyboard.press('Shift')
+const mac = process.platform === 'darwin'
+
+/**
+ * Go to File's key. Shift Shift opens the same popup but within a time window, which a loaded
+ * machine can miss; its detection is unit-tested instead.
+ */
+async function goToFile(page: Page): Promise<void> {
+  await page.keyboard.press(mac ? 'Meta+Shift+KeyO' : 'Control+Shift+KeyN')
 }
 
 /** A git project with nested PHP files, a git-ignored build and a dependency holding a same-named file. */
@@ -39,7 +43,7 @@ async function makeProject(): Promise<[string, () => Promise<void>]> {
   return [app, cleanup]
 }
 
-test('Shift Shift finds a file from a path fragment and Enter opens it; Esc gives the keys back', async () => {
+test('Search Everywhere finds a file from a path fragment and Enter opens it; Esc gives the keys back', async () => {
   const [app, cleanProject] = await makeProject()
   const [userData, cleanUserData] = await seedWorkspace([{ path: app, kind: 'project' }])
   try {
@@ -50,15 +54,13 @@ test('Shift Shift finds a file from a path fragment and Enter opens it; Esc give
         await expect(item(page, 'app main')).toBeFocused()
 
         // Esc closes it and the file tree has the keys again.
-        await doubleShift(page)
+        await goToFile(page)
         await expect(searchBox(page)).toBeFocused()
-        // Shift Shift used to open the chat; New Chat has its own key now.
-        await expect(page.getByRole('complementary', { name: 'Chat panel' })).toHaveCount(0)
         await page.keyboard.press('Escape')
         await expect(popup(page)).toBeHidden()
         await expect(item(page, 'app main')).toBeFocused()
 
-        await doubleShift(page)
+        await goToFile(page)
         await searchBox(page).fill('Pipeline/RunMessProc')
         // The file first; neither the git-ignored build nor the dependency is listed.
         await expect(results(page)).toHaveText([
@@ -75,7 +77,7 @@ test('Shift Shift finds a file from a path fragment and Enter opens it; Esc give
         await expect(editor(page)).toHaveClass(/\bfocused\b/)
 
         // From the editor, too; a shorter fragment still puts the file first.
-        await doubleShift(page)
+        await goToFile(page)
         await expect(searchBox(page)).toHaveValue('Pipeline/RunMessProc')
         await searchBox(page).fill('RunMessProc')
         await expect(results(page).first()).toHaveText(/^RunMessageProcessor\.php/)
@@ -97,9 +99,7 @@ test('Go to File opens the popup on Files, and Tab moves between the kinds', asy
     await withApp(
       async (_app, page) => {
         await expect(page.getByRole('complementary', { name: 'Agents panel' })).toBeVisible()
-        await page.keyboard.press(
-          process.platform === 'darwin' ? 'Meta+Shift+KeyO' : 'Control+Shift+KeyN'
-        )
+        await goToFile(page)
         const selectedTab = popup(page).getByRole('tab', { selected: true })
         await expect(selectedTab).toHaveText('Files')
         await searchBox(page).fill('mproc')
@@ -109,6 +109,12 @@ test('Go to File opens the popup on Files, and Tab moves between the kinds', asy
         await expect(searchBox(page)).toBeFocused()
         await page.keyboard.press('Shift+Tab')
         await page.keyboard.press('Shift+Tab')
+        await expect(selectedTab).toHaveText('Classes')
+        // Go to Symbol's key switches the open popup, as does Go to Class's (Ctrl+N, which the
+        // list would otherwise take to move down).
+        await page.keyboard.press(mac ? 'Meta+Alt+KeyO' : 'Control+Alt+Shift+KeyN')
+        await expect(selectedTab).toHaveText('Symbols')
+        await page.keyboard.press(mac ? 'Meta+KeyO' : 'Control+KeyN')
         await expect(selectedTab).toHaveText('Classes')
       },
       { userDataDir: userData }
