@@ -10,6 +10,13 @@ type AgentTarget =
   | { recent: { generation: number; key: string } }
   | { restore: { generation: number; paneId: string } }
 export type AgentLaunch = { provider: AgentProvider; target: AgentTarget }
+export type AgentSchedule = {
+  /** Plain text, such as "Every 5 minutes" or a cron expression. */
+  label: string
+  recurring: boolean
+  /** Epoch milliseconds, or null when the provider can't predict it. */
+  nextRunAt: number | null
+}
 export type AgentSession = {
   id: string
   terminalId: string
@@ -26,6 +33,10 @@ export type AgentSession = {
   tool: string | null
   wait: 'permission' | 'question' | 'external-input' | null
   outcome: 'completed' | 'failed' | 'cancelled' | 'unknown' | null
+  /** Null when the provider doesn't report schedules. */
+  schedules: AgentSchedule[] | null
+  /** What started the latest reported turn. */
+  trigger: 'user' | 'schedule' | null
   updatedAt: number
 }
 export type AgentSnapshot = {
@@ -39,7 +50,9 @@ export type AgentNotification = {
   providerSessionId: string
   terminalId: string
   message:
-    | { kind: 'needs-input' | 'completed' | 'failed' }
+    | { kind: 'needs-input' | 'failed' }
+    /** `response` is the final assistant text the provider reported, up to 2,000 Unicode scalar values. */
+    | { kind: 'completed'; response: string | null }
     | { kind: 'explicit'; title: string; body: string }
 }
 export const AGENT_CHANNELS = {

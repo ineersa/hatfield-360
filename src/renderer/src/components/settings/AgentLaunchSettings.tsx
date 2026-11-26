@@ -92,6 +92,10 @@ export function AgentLaunchSettings(): React.JSX.Element {
       </p>
       <ProfileFields provider="hatfield" />
       <ProfileFields provider="claude" />
+      <p className="type-hint">
+        The workspace chat (Shift Shift) runs Claude Code&apos;s executable from this profile, with
+        its own login, but not its arguments.
+      </p>
     </section>
   )
 }

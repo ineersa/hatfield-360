@@ -2,13 +2,19 @@ import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { cssFontFamily } from '@/lib/css-font-family'
 import { useEditorScheme } from '@/lib/editor-scheme'
 import { useEditorTabStore } from '@/state/editor-tab-store'
+import { useFileTreeStore } from '@/state/file-tree-store'
 import { useSettingsStore } from '@/state/settings-store'
-import { setEditorCaret, setEditorSelectionSource } from '@/state/editor-selection'
+import {
+  setEditorCaret,
+  setEditorPromptContextSource,
+  setEditorSelectionSource
+} from '@/state/editor-selection'
 import { editorViewState, setEditorViewState } from '@/state/editor-view-states'
 import { editorDocument, saveDocument } from './editor-documents'
 import { editorColorTheme, type MenuColors } from './editor-color-theme'
 import { installEditorKeymap } from './editor-keymap'
 import { revealJumpTarget } from './editor-navigation'
+import type { LineRange } from '../../../../shared/file-tree-api'
 import { monaco, setColorTheme } from './monaco-environment'
 
 installEditorKeymap(() => {
@@ -57,6 +63,12 @@ function publishCaret(instance: monaco.editor.IStandaloneCodeEditor): void {
     lineSeparator: model.getEOL() === '\r\n' ? 'CRLF' : 'LF',
     indent: indentLabel(model.getOptions())
   })
+}
+
+/** The selected lines, or the caret's; a selection ending at a line's start leaves that line out. */
+function referencedLines(selection: monaco.Selection): LineRange {
+  const { startLineNumber: start, endLineNumber: end, endColumn } = selection
+  return { start, end: end > start && endColumn === 1 ? end - 1 : end }
 }
 
 /**
@@ -133,6 +145,20 @@ export function CodeEditor({
     instance.onDidChangeCursorSelection(() => publishCaret(instance))
     // Indentation is detected from the text once it loads.
     instance.onDidChangeModelOptions(() => publishCaret(instance))
+    // JetBrains' Copy Reference: the file from its root folder, with the caret's or selection's lines.
+    instance.addAction({
+      id: 'hatfield.editor.copyReference',
+      label: 'Copy Reference',
+      contextMenuGroupId: '9_cutcopypaste',
+      contextMenuOrder: 5,
+      run: () => {
+        const shown = shownPath.current
+        const selection = instance.getSelection()
+        if (shown && selection) {
+          useFileTreeStore.getState().copyPath(shown, 'relative', referencedLines(selection))
+        }
+      }
+    })
     editor.current = instance
     setEditorSelectionSource(() => {
       const selection = instance.getSelection()
@@ -141,8 +167,19 @@ export function CodeEditor({
       if (selection.startLineNumber !== selection.endLineNumber) return null
       return model.getValueInRange(selection)
     })
+    setEditorPromptContextSource(() => {
+      const model = instance.getModel()
+      const file = shownPath.current
+      if (!model || file === null) return { file: null, selection: null }
+      const selection = instance.getSelection()
+      if (!selection) return { file, selection: null }
+      // With nothing selected, the caret's line stands for the selection.
+      const text = selection.isEmpty() ? '' : model.getValueInRange(selection)
+      return { file, selection: { ...referencedLines(selection), text } }
+    })
     return () => {
       setEditorSelectionSource(null)
+      setEditorPromptContextSource(null)
       setEditorCaret(null)
       instance.dispose()
       editor.current = null

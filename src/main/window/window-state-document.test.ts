@@ -75,7 +75,8 @@ describe('parseShellLayout', () => {
         search: { width: 360, collapsed: true },
         git: { width: 180, collapsed: false }
       },
-      notificationsWidth: 400.4
+      notificationsWidth: 400.4,
+      chatWidth: 520
     }
     expect(parseShellLayout(layout)).toEqual({
       ...layout,
@@ -112,5 +113,13 @@ describe('parseShellLayout', () => {
     const expected = { ...DEFAULT_SHELL_LAYOUT, panels: { ...DEFAULT_SHELL_LAYOUT.panels, files } }
     expect(parseShellLayout(saved)).toEqual(expected)
     expect(parseShellLayout({ ...saved, notificationsWidth: 50 })).toEqual(expected)
+  })
+
+  it('gives a layout saved before the chat panel existed the default chat width', () => {
+    const { chatWidth: _unused, ...older } = DEFAULT_SHELL_LAYOUT
+    expect(parseShellLayout({ ...older, notificationsWidth: 500 })).toEqual({
+      ...DEFAULT_SHELL_LAYOUT,
+      notificationsWidth: 500
+    })
   })
 })

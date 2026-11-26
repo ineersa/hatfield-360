@@ -86,6 +86,8 @@ function newSession(
     tool: null,
     wait: null,
     outcome: null,
+    schedules: null,
+    trigger: null,
     updatedAt: Date.now()
   }
 }
@@ -211,6 +213,7 @@ export function trackAgentSessions(
         runningScripts: null,
         tool: null,
         wait: null,
+        schedules: null,
         updatedAt: Date.now()
       })
       const history = manualHistory.get(owner) ?? []
@@ -268,17 +271,30 @@ export function trackAgentSessions(
     const status = live?.turn?.status
     session.runningChildren = live?.activeSubagents ?? null
     session.runningScripts = live?.backgroundScripts ?? null
+    session.schedules =
+      live?.schedules?.map(({ label, recurring, nextRunAt }) => ({
+        label,
+        recurring,
+        nextRunAt
+      })) ?? null
+    // An unknown child count can't settle a completed turn, so a working session stays working until it's known.
+    const unsettled =
+      status === 'completed' && live?.activeSubagents === null && session.activity === 'working'
     session.activity =
-      status === 'working' || (live?.activeSubagents ?? 0) > 0
+      status === 'working' || (live?.activeSubagents ?? 0) > 0 || unsettled
         ? 'working'
         : (status === 'completed' && live?.activeSubagents === 0) ||
             status === 'failed' ||
-            status === 'cancelled'
+            status === 'cancelled' ||
+            (!status && (session.schedules?.length ?? 0) > 0)
           ? 'idle'
           : 'unknown'
     session.tool = status === 'working' ? (live?.tool ?? null) : null
     session.wait = live?.attention?.reason ?? null
-    if (live) session.outcome = status && status !== 'working' ? status : null
+    if (live) {
+      session.outcome = status && status !== 'working' ? status : null
+      session.trigger = live.turn ? (live.turn.trigger ?? 'user') : null
+    }
     session.updatedAt = Date.now()
     if (records.has(session.id)) changed(owner)
   })

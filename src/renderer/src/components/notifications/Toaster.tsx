@@ -43,6 +43,7 @@ function Toast({ notification }: { notification: AppNotification }): React.JSX.E
         closeLabel="Close"
         onClose={() => closeToast(id)}
         showTime={false}
+        scrollBody
       />
     </div>
   )

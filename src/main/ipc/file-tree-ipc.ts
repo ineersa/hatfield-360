@@ -20,6 +20,20 @@ async function workspacePath(path: unknown, roots: string[]): Promise<string> {
   return path
 }
 
+const isLine = (value: unknown): value is number =>
+  Number.isSafeInteger(value) && Number(value) >= 1
+
+/** A reference's `:12` or `:12-15`; nothing without lines. */
+function lineSuffix(lines: unknown): string {
+  if (lines === undefined) return ''
+  if (typeof lines !== 'object' || lines === null || !('start' in lines) || !('end' in lines)) {
+    throw new Error('Expected a line range')
+  }
+  const { start, end } = lines
+  if (!isLine(start) || !isLine(end) || end < start) throw new Error('Expected a line range')
+  return start === end ? `:${start}` : `:${start}-${end}`
+}
+
 export function registerFileTreeIpc(): void {
   const windows = new Map<WebContents, { watchers: DirectoryWatchers; paths: string[] }>()
 
@@ -53,13 +67,14 @@ export function registerFileTreeIpc(): void {
     await entry.watchers.set(paths, await rootPaths())
   })
 
-  handleTrusted(FILE_TREE_CHANNELS.copyPath, async (_event, path, form) => {
+  handleTrusted(FILE_TREE_CHANNELS.copyPath, async (_event, path, form, lines) => {
     if (form !== 'absolute' && form !== 'relative') throw new Error('Unknown path form')
+    const suffix = lineSuffix(lines)
     const roots = await rootPaths()
     const checked = await workspacePath(path, roots)
     const text = form === 'absolute' ? checked : rootRelativePath(checked, roots)
     if (text === null) throw new Error('A root folder has no relative path')
-    return clipboard.writeText(text)
+    return clipboard.writeText(text + suffix)
   })
 
   handleTrusted(FILE_TREE_CHANNELS.reveal, async (_event, path) => {

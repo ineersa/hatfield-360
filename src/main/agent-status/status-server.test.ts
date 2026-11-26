@@ -132,6 +132,63 @@ describe.skipIf(process.platform === 'win32')('agent status socket', () => {
     ).toEqual([accepted])
   })
 
+  it('validates schedules, turn triggers and responses, and replaces schedules with each snapshot', async () => {
+    await server.start()
+    const { event, start, send } = session(server)
+    const loop = {
+      id: 'loop',
+      label: 'Every 5 minutes',
+      recurring: true,
+      nextRunAt: 1_700_000_000_000
+    }
+    const invalid = [
+      { schedules: {} },
+      { schedules: [{ ...loop, prompt: '/loop 5m check' }] },
+      { schedules: [{ ...loop, label: 'x'.repeat(65) }] },
+      { schedules: [{ ...loop, nextRunAt: -1 }] },
+      { schedules: [{ ...loop, nextRunAt: 1.5 }] },
+      { schedules: [{ ...loop, recurring: 'yes' }] },
+      { schedules: [loop, loop] },
+      { schedules: Array.from({ length: 17 }, (_, index) => ({ ...loop, id: `job-${index}` })) },
+      { turn: { id: 'turn', status: 'working', trigger: 'cron' } },
+      { turn: { id: 'turn', status: 'completed', response: 'x'.repeat(2001) } },
+      { turn: { id: 'turn', status: 'completed', response: 42 } },
+      { turn: { id: 'turn', status: 'working', response: 'Not yet' } },
+      { turn: { id: 'turn', status: 'failed', response: 'Partial' } }
+    ]
+    expect(await send(...invalid.map((fields) => event(1, { ...start, ...fields })))).toEqual(
+      invalid.map(() => ({ ok: false, error: 'invalid' }))
+    )
+    const current = () => server.snapshot()[0]?.session?.telemetry
+    const sixteen = Array.from({ length: 16 }, (_, index) => ({ ...loop, id: `job-${index}` }))
+    expect(
+      await send(
+        event(1, {
+          ...start,
+          turn: { id: 'turn', status: 'working', trigger: 'schedule' },
+          schedules: sixteen
+        })
+      )
+    ).toEqual([accepted])
+    expect(current()).toMatchObject({
+      turn: { trigger: 'schedule' },
+      schedules: sixteen
+    })
+    expect(await send(event(2, { ...start, schedules: [{ ...loop, nextRunAt: null }] }))).toEqual([
+      accepted
+    ])
+    expect(current()?.schedules).toEqual([{ ...loop, nextRunAt: null }])
+    expect(await send(event(3, start))).toEqual([accepted])
+    expect(current()?.schedules).toBeNull()
+    const response = '🐕'.repeat(2000)
+    expect(
+      await send(
+        event(4, { ...start, turn: { id: 'turn', status: 'completed', trigger: 'user', response } })
+      )
+    ).toEqual([accepted])
+    expect(current()?.turn).toEqual({ id: 'turn', status: 'completed', trigger: 'user', response })
+  })
+
   it('validates and replaces conversation titles without changing ordering or event identity', async () => {
     await server.start()
     const { event, start, send } = session(server)

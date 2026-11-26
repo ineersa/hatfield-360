@@ -9,7 +9,17 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { notify } from '@/state/notification-store'
 import { cn } from '@/lib/class-names'
-import { Activity, Check, Copy, MessageCircle, SquareTerminal, Users, X } from 'lucide-react'
+import {
+  Activity,
+  AlarmClock,
+  Check,
+  Copy,
+  MessageCircle,
+  Repeat,
+  SquareTerminal,
+  Users,
+  X
+} from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import {
   AGENT_PROVIDERS,
@@ -46,8 +56,37 @@ function sessionDescription(session: AgentSession): string {
   if (session.process === 'unknown') return 'Process status unavailable'
   if (session.wait) return `Needs input: ${waitLabel(session)}`
   if (session.activity === 'working') return session.tool ? `Working · ${session.tool}` : 'Working'
-  if (session.activity === 'idle') return 'Idle'
+  if (session.activity === 'idle') return isScheduled(session) ? 'Scheduled' : 'Idle'
   return 'Activity not reported'
+}
+
+function isScheduled(session: AgentSession): boolean {
+  return session.process !== 'exited' && (session.schedules?.length ?? 0) > 0
+}
+
+function runTime(at: number): string {
+  const when = new Date(at)
+  const time = when.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  return when.toDateString() === new Date().toDateString()
+    ? time
+    : `${when.toLocaleDateString([], { weekday: 'short' })} ${time}`
+}
+
+function nextRun(session: AgentSession): number | null {
+  const times = (session.schedules ?? []).flatMap(({ nextRunAt }) =>
+    nextRunAt === null ? [] : [nextRunAt]
+  )
+  return times.length ? Math.min(...times) : null
+}
+
+function scheduleDetail(session: AgentSession): string[] {
+  return (session.schedules ?? []).map(({ label, recurring, nextRunAt }) =>
+    [
+      `Schedule: ${label}`,
+      recurring ? 'repeats' : 'runs once',
+      nextRunAt === null ? 'next run unknown' : `next ${runTime(nextRunAt)}`
+    ].join(', ')
+  )
 }
 
 function waitLabel(session: AgentSession): string {
@@ -65,19 +104,22 @@ export const statuses = {
   working: { icon: Activity, color: 'text-info', label: 'Working' },
   attention: { icon: MessageCircle, color: 'text-warning', label: 'Needs input' },
   idle: { icon: Check, color: 'text-success', label: 'Idle' },
+  scheduled: { icon: AlarmClock, color: 'text-foreground', label: 'Scheduled' },
   stopped: { icon: X, color: 'text-error', label: 'Stopped' }
 } as const
 
+// A failed iteration of a pending schedule will run again, so the session isn't stopped.
 function isStopped(session: AgentSession): boolean {
   return (
     session.process === 'exited' ||
     (session.activity === 'idle' &&
       !session.wait &&
+      !isScheduled(session) &&
       (session.outcome === 'failed' || session.outcome === 'cancelled'))
   )
 }
 
-export type SessionFilter = keyof typeof statuses
+export type SessionFilter = Exclude<keyof typeof statuses, 'scheduled'>
 export function matchesStatus(session: AgentSession, filter: SessionFilter): boolean {
   if (session.process === 'exited') return filter === 'stopped'
   switch (filter) {
@@ -134,15 +176,23 @@ export function AgentSessionRows({ sessions }: { sessions: AgentSession[] }): Re
             ? 'attention'
             : session.activity === 'unknown'
               ? null
-              : session.activity
+              : session.activity === 'idle' && isScheduled(session)
+                ? 'scheduled'
+                : session.activity
         const status = state ? statuses[state] : null
-        const label = status?.label
+        const next = state === 'scheduled' ? nextRun(session) : null
+        const label = next === null ? status?.label : `${status?.label} · next ${runTime(next)}`
+        const scheduleCount = session.schedules?.length ?? 0
+        const repeatCount =
+          state === 'scheduled' ? (scheduleCount > 1 ? scheduleCount : 0) : scheduleCount
         const accessibleName = [providerIdentity, title, label].filter(Boolean).join(' · ')
         const detail = [
           providerIdentity,
           title,
           state === 'stopped' ? 'Stopped' : sessionDescription(session),
-          session.outcome && `Last foreground response: ${outcomes[session.outcome].toLowerCase()}`,
+          session.outcome &&
+            `Last ${session.trigger === 'schedule' ? 'scheduled run' : 'foreground response'}: ${outcomes[session.outcome].toLowerCase()}`,
+          ...scheduleDetail(session),
           session.runningChildren !== null && `Active agents: ${session.runningChildren}`,
           session.runningScripts !== null && `Background scripts: ${session.runningScripts}`,
           session.worktree && session.worktree !== session.cwd && `Worktree: ${session.worktree}`,
@@ -188,12 +238,21 @@ export function AgentSessionRows({ sessions }: { sessions: AgentSession[] }): Re
                             displayName
                           )}
                         </span>
-                        {status || session.runningChildren || session.runningScripts ? (
+                        {status ||
+                        session.runningChildren ||
+                        session.runningScripts ||
+                        repeatCount ? (
                           <span className="type-hint flex min-w-0 items-center gap-2.5 text-muted-foreground">
                             {status ? (
                               <span className={cn('flex min-w-0 items-center gap-1', status.color)}>
                                 <status.icon className="size-3.5 shrink-0" aria-hidden />
                                 <span className="truncate">{label}</span>
+                              </span>
+                            ) : null}
+                            {repeatCount ? (
+                              <span className="flex shrink-0 items-center gap-0.5">
+                                <Repeat role="img" aria-label="Schedules" className="size-3.5" />
+                                {repeatCount}
                               </span>
                             ) : null}
                             {session.runningChildren ? (

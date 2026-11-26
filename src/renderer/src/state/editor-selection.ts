@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import type { PromptContext } from '../../../shared/chat-references'
 
 /** Reads the editor's selection; set by the editor while it exists, which loads with the first file. */
 let source: (() => string | null) | null = null
@@ -9,6 +10,17 @@ export function setEditorSelectionSource(next: (() => string | null) | null): vo
 
 /** The text selected in the editor while it has the keys, when it is on one line; else null. */
 export const focusedEditorSelection = (): string | null => source?.() ?? null
+
+/** Reads what `@file` and `@selection` in a chat prompt stand for; set like the selection source. */
+let promptContextSource: (() => PromptContext) | null = null
+
+export function setEditorPromptContextSource(next: (() => PromptContext) | null): void {
+  promptContextSource = next
+}
+
+/** The editor's file and selection for a chat prompt; nothing while no editor exists. */
+export const editorPromptContext = (): PromptContext =>
+  promptContextSource?.() ?? { file: null, selection: null }
 
 /** Where the editor's caret is, from 1, how much is selected, and how the file is laid out. */
 export type EditorCaret = {

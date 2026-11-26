@@ -229,6 +229,13 @@
       }
     }
   ],
-  "ignorePatterns": ["out/**", "release/**", ".claude/skills/**", ".agents/skills/impeccable/**"],
+  "ignorePatterns": [
+    "out/**",
+    "release/**",
+    // The sample project the chat cassettes were recorded in, not app code.
+    "tests/fixtures/acp/repo/**",
+    ".claude/skills/**",
+    ".agents/skills/impeccable/**"
+  ],
   "jsPlugins": ["./config/oxlint/ipc-boundary-plugin.mjs", "./config/oxlint/theme-roles-plugin.mjs"]
 }

@@ -18,6 +18,7 @@ function NotificationItem({ notification }: { notification: AppNotification }): 
         closeLabel="Dismiss"
         onClose={() => dismiss(notification.id)}
         showTime
+        scrollBody={false}
       />
     </li>
   )
