@@ -7,7 +7,7 @@ import { homedir } from 'node:os'
 import { delimiter, dirname, isAbsolute, join, parse } from 'node:path'
 import { promisify } from 'node:util'
 import { realRoots } from '../files/path-containment'
-import { ignoredFolders } from '../git/git-ignore'
+import { gitIgnoreRules } from '../git/ignore-rules'
 import { intelephenseExclude } from './intelephense-exclude'
 import { indexNeedsClearing } from './intelephense-index'
 import { isPythonLibraryFolder, libraryFoldersBesideHome } from './library-folders'
@@ -137,7 +137,7 @@ async function intelephenseConfiguration(
     }
   }
   const storagePath = join(storage, 'intelephense')
-  const exclude = intelephenseExclude(root, await ignoredFolders(root))
+  const exclude = intelephenseExclude(root, await gitIgnoreRules(root))
   const clearCache = await indexNeedsClearing(storagePath, root, exclude)
   return {
     initializationOptions: {

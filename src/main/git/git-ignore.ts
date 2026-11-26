@@ -20,18 +20,6 @@ export async function ignoredNames(folder: string, names: string[]): Promise<Set
  * nothing when git can't say.
  */
 export async function ignoredPaths(folder: string): Promise<string[]> {
-  return (await ignoredEntries(folder)).map((path) => join(folder, path.replace(/\/$/, '')))
-}
-
-/** The wholly ignored folders of `ignoredPaths`, without its single files. */
-export async function ignoredFolders(folder: string): Promise<string[]> {
-  return (await ignoredEntries(folder))
-    .filter((path) => path.endsWith('/'))
-    .map((path) => join(folder, path.slice(0, -1)))
-}
-
-/** `git ls-files`' ignored entries, relative with `/`; a folder's ends with `/`. */
-async function ignoredEntries(folder: string): Promise<string[]> {
   try {
     const output = await runGit(folder, [
       'ls-files',
@@ -41,7 +29,10 @@ async function ignoredEntries(folder: string): Promise<string[]> {
       '--directory',
       '-z'
     ])
-    return output.split('\0').filter((path) => path !== '')
+    return output
+      .split('\0')
+      .filter((path) => path !== '')
+      .map((path) => join(folder, path.replace(/\/$/, '')))
   } catch {
     return []
   }
