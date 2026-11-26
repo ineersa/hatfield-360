@@ -125,7 +125,10 @@ test('the Commit panel lists changes, commits checked files, amends, and commits
         await include(page, 'b.txt').click()
         await message(page).fill('Remove b')
         await page.getByRole('button', { name: 'Commit and Push' }).click()
-        // Status is read again once the push is done.
+        // Nothing is left to push only once the push is done: status read earlier still counts the commits.
+        await expect(
+          changes(page).getByRole('treeitem', { name: 'app' })
+        ).toHaveAccessibleDescription('branch main')
         await expect(changes(page).getByText('No changes')).toBeVisible()
         expect(gitOutput(remote, 'log', '--format=%s', 'main')).toBe(
           'Remove b\nChange a, add new\nAdd files\nfirst'
