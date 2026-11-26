@@ -14,7 +14,7 @@ import {
 } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { DirectoryListing } from '../../src/shared/file-tree-api'
-import { lines, openFile, tab } from './editor-page'
+import { editor, lines, openFile, tab } from './editor-page'
 import { makeTempDir, requireFolderPermissions, saveScreenshot, withApp } from './launch-app'
 import { CLIPBOARD_TAG, keepUserClipboard } from './user-clipboard'
 import { seedWorkspace } from './workspace-seed'
@@ -690,6 +690,57 @@ test('rows are selected as ranges and all at once, and can be renamed and moved 
   } finally {
     await cleanUserData()
     await cleanDataHome()
+    await cleanProjects()
+  }
+})
+
+test('New File and New Folder create entries from the context menu', async () => {
+  const [projects, cleanProjects] = await makeProjectsDir()
+  const root = join(projects, 'notes')
+  await mkdir(join(root, 'drafts'), { recursive: true })
+  await writeFile(join(root, 'a.md'), 'a')
+  const [userData, cleanUserData] = await seedWorkspace([{ path: root, kind: 'folder' }])
+  try {
+    await withApp(
+      async (_app, page) => {
+        await showView(page, 'Files')
+        await item(page, 'notes').click()
+
+        // A refused name keeps the dialog open and says why.
+        await contextMenu(page, item(page, 'drafts'), 'New File…')
+        const newFile = page.getByRole('alertdialog', { name: 'New File' })
+        const fileName = newFile.getByRole('textbox', { name: 'File name' })
+        await expect(fileName).toBeFocused()
+        await fileName.fill('../a.md')
+        await page.keyboard.press('Enter')
+        await expect(newFile.getByRole('alert')).toHaveText('".." is not a valid name')
+
+        // A nested name creates its folders; the file opens in the editor, ready to type in.
+        await fileName.fill('ideas/today.md')
+        await page.keyboard.press('Enter')
+        await expect(newFile).toHaveCount(0)
+        await expect(tab(page, 'today.md')).toHaveAttribute('aria-selected', 'true')
+        await expect(item(page, 'today.md')).toHaveAttribute('aria-selected', 'true')
+        await expect(editor(page).getByRole('textbox')).toBeFocused()
+        await page.keyboard.type('hello')
+        await expect(tab(page, 'today.md, unsaved')).toBeVisible()
+        await page.keyboard.press('ControlOrMeta+KeyS')
+        await expect(tab(page, 'today.md')).toBeVisible()
+        expect(await readFile(join(root, 'drafts', 'ideas', 'today.md'), 'utf8')).toBe('hello')
+
+        // On a file, it creates beside it.
+        await contextMenu(page, item(page, 'a.md'), 'New Folder…')
+        const newFolder = page.getByRole('alertdialog', { name: 'New Folder' })
+        await newFolder.getByRole('textbox', { name: 'Folder name' }).fill('archive')
+        await saveScreenshot(page, 'file-tree-new-folder')
+        await newFolder.getByRole('button', { name: 'Create' }).click()
+        await expect(item(page, 'archive')).toHaveAttribute('aria-selected', 'true')
+        expect((await readdir(root)).toSorted()).toEqual(['a.md', 'archive', 'drafts'])
+      },
+      { userDataDir: userData }
+    )
+  } finally {
+    await cleanUserData()
     await cleanProjects()
   }
 })

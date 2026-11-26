@@ -80,6 +80,8 @@ const desktopApi: DesktopApi = {
   revealPath: (path) => ipcRenderer.invoke(FILE_TREE_CHANNELS.reveal, path),
   trashPaths: (paths) => ipcRenderer.invoke(FILE_TREE_CHANNELS.trash, paths),
   renamePath: (path, name) => ipcRenderer.invoke(FILE_TREE_CHANNELS.rename, path, name),
+  createEntry: (folder, name, kind) =>
+    ipcRenderer.invoke(FILE_TREE_CHANNELS.create, folder, name, kind),
   subscribeDirectoryChanges: (callback) => {
     const listener = (_event: unknown, paths: string[]): void => callback(paths)
     ipcRenderer.on(FILE_TREE_CHANNELS.changed, listener)

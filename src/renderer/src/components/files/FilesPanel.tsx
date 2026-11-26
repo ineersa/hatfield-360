@@ -20,6 +20,7 @@ import {
   EyeOff,
   FolderInput,
   FolderMinus,
+  FilePlus,
   FolderOpen,
   FolderPlus,
   FolderX,
@@ -31,6 +32,7 @@ import {
 } from 'lucide-react'
 import { type KeyboardEvent, type ReactNode, useEffect, useMemo, useRef, useState } from 'react'
 import { FileTreeIcon } from '@/components/icons/FileTreeIcon'
+import { Input } from '@/components/ui/input'
 import { RootFolderIcon } from '@/components/icons/RootFolderIcon'
 import { OpenTerminalMenuContent } from '@/components/terminal/OpenTerminalMenuContent'
 import {
@@ -181,6 +183,8 @@ type RowState = {
   onContextMenu: () => void
   /** Runs Find in Folder… on this row, or on the selection it is part of. */
   onFindInFolder: () => void
+  /** Asks for the name of a new file or folder to create in `folder`. */
+  onCreate: (folder: string, kind: DirectoryEntry['kind']) => void
 }
 
 function TreeRow({
@@ -354,6 +358,30 @@ function useAfterMenu(): {
   }
 }
 
+/** New File… and New Folder…, creating in `folder`, once the menu has closed. */
+function CreateItems({
+  folder,
+  onCreate,
+  choose
+}: {
+  folder: string
+  onCreate: RowState['onCreate']
+  choose: (action: () => void) => void
+}): React.JSX.Element {
+  return (
+    <>
+      <ContextMenuItem onSelect={() => choose(() => onCreate(folder, 'file'))}>
+        <FilePlus aria-hidden />
+        New File…
+      </ContextMenuItem>
+      <ContextMenuItem onSelect={() => choose(() => onCreate(folder, 'directory'))}>
+        <FolderPlus aria-hidden />
+        New Folder…
+      </ContextMenuItem>
+    </>
+  )
+}
+
 function FindInFolderItem({ onSelect }: { onSelect: () => void }): React.JSX.Element {
   const keymap = useKeymapStore((state) => state.shell)
   return (
@@ -417,6 +445,8 @@ function RootRow({
         >
           {missing ? null : (
             <>
+              <CreateItems folder={root.path} onCreate={state.onCreate} choose={afterMenu.choose} />
+              <ContextMenuSeparator />
               <FindInFolderItem onSelect={() => afterMenu.choose(state.onFindInFolder)} />
               <ContextMenuSeparator />
               <PathItems path={root.path} relative={false} />
@@ -471,6 +501,8 @@ function WorktreeRow({
           disabled={false}
           onCloseAutoFocus={afterMenu.onCloseAutoFocus}
         >
+          <CreateItems folder={worktree.path} onCreate={state.onCreate} choose={afterMenu.choose} />
+          <ContextMenuSeparator />
           <FindInFolderItem onSelect={() => afterMenu.choose(state.onFindInFolder)} />
           <ContextMenuSeparator />
           <PathItems path={worktree.path} relative={false} />
@@ -565,6 +597,12 @@ function EntryRow({
           disabled={false}
           onCloseAutoFocus={afterMenu.onCloseAutoFocus}
         >
+          <CreateItems
+            folder={directory ? entry.path : folder}
+            onCreate={state.onCreate}
+            choose={afterMenu.choose}
+          />
+          <ContextMenuSeparator />
           {directory ? (
             <>
               <FindInFolderItem onSelect={() => afterMenu.choose(state.onFindInFolder)} />
@@ -713,6 +751,96 @@ function DeleteDialog({
   )
 }
 
+/** Asks for the name of a new file or folder in `folder`; `/` in the name creates folders on the way. */
+function CreateDialog({
+  folder,
+  kind,
+  onClose
+}: {
+  folder: string
+  kind: DirectoryEntry['kind']
+  onClose: () => void
+}): React.JSX.Element {
+  const create = useFileTreeStore((state) => state.create)
+  const [name, setName] = useState('')
+  const [problem, setProblem] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  const what = kind === 'file' ? 'File' : 'Folder'
+  const created = useRef<string | null>(null)
+  const submit = (): void => {
+    if (busy || name.trim() === '') return
+    setBusy(true)
+    void create(folder, name, kind).then((result) => {
+      setBusy(false)
+      if (!result.ok) {
+        setProblem(result.message)
+        return
+      }
+      created.current = result.path
+      onClose()
+    })
+  }
+  return (
+    <AlertDialog open onOpenChange={(open) => !open && onClose()}>
+      <AlertDialogContent
+        // Once the dialog is gone (its focus trap would take focus back), a new file opens to be
+        // written in and the tree shows where it is; a new folder's row takes focus.
+        onCloseAutoFocus={(event) => {
+          const path = created.current
+          if (path === null) return
+          event.preventDefault()
+          useFileTreeStore.getState().select(path, kind !== 'file')
+          if (kind === 'file')
+            useEditorTabStore.getState().open(path, { line: 1, start: 0, end: 0, focus: true })
+        }}
+      >
+        <AlertDialogTitle>{`New ${what}`}</AlertDialogTitle>
+        <AlertDialogDescription className="truncate" title={folder}>
+          {`In ${folder}`}
+        </AlertDialogDescription>
+        <div className="flex flex-col gap-1.5">
+          <Input
+            aria-label={`${what} name`}
+            aria-invalid={problem !== null}
+            autoFocus
+            spellCheck={false}
+            placeholder={kind === 'file' ? 'name.ext or folder/name.ext' : 'name or folder/name'}
+            value={name}
+            onChange={(event) => {
+              setName(event.target.value)
+              setProblem(null)
+            }}
+            onKeyDown={(event) => {
+              if (event.key !== 'Enter') return
+              event.preventDefault()
+              submit()
+            }}
+          />
+          {problem ? (
+            <p role="alert" className="type-hint text-error">
+              {problem}
+            </p>
+          ) : null}
+        </div>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogAction
+            primary
+            disabled={busy || name.trim() === ''}
+            onClick={(event) => {
+              // It stays open until main has created the entry, to show why it couldn't.
+              event.preventDefault()
+              submit()
+            }}
+          >
+            Create
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  )
+}
+
 function HeaderButton({
   label,
   pressed,
@@ -782,6 +910,10 @@ export function FilesPanel(): React.JSX.Element {
   const [renamingItem, setRenamingItem] = useState<string | null>(null)
   const [renamingValue, setRenamingValue] = useState('')
   const [deleting, setDeleting] = useState<DirectoryEntry[] | null>(null)
+  const [creating, setCreating] = useState<{
+    folder: string
+    kind: DirectoryEntry['kind']
+  } | null>(null)
   const typeAhead = useRef({ text: '', at: 0 })
 
   const folders = workspace?.folders
@@ -923,7 +1055,13 @@ export function FilesPanel(): React.JSX.Element {
   // Select Opened File: once the file's row shows, it is selected and scrolled into view.
   useEffect(() => {
     if (!locatedShown || !locating) return
-    selectOnly(tree, tree.getItemInstance(locating.key))
+    const item = tree.getItemInstance(locating.key)
+    if (locating.focus) selectOnly(tree, item)
+    else {
+      item.setFocused()
+      tree.setSelectedItems([item.getId()])
+      void item.scrollTo({ block: 'nearest' })
+    }
     locateDone()
   }, [locatedShown, locating, locateDone, tree])
 
@@ -1028,7 +1166,8 @@ export function FilesPanel(): React.JSX.Element {
       onContextMenu: () => {
         if (!item.isSelected()) selectOnly(tree, item)
       },
-      onFindInFolder: () => useSearchStore.getState().findInFiles(searchScope(tree, item))
+      onFindInFolder: () => useSearchStore.getState().findInFiles(searchScope(tree, item)),
+      onCreate: (folder, kind) => setCreating({ folder, kind })
     }
     switch (row.type) {
       case 'root':
@@ -1155,6 +1294,7 @@ export function FilesPanel(): React.JSX.Element {
         </div>
       )}
       {deleting ? <DeleteDialog entries={deleting} onClose={() => setDeleting(null)} /> : null}
+      {creating ? <CreateDialog {...creating} onClose={() => setCreating(null)} /> : null}
     </>
   )
 }
