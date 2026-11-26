@@ -173,29 +173,35 @@ export class ChatAgentSession {
       )
       this.mapSessionId = session.sessionId
       this.mapReply = ''
-      const model = this.configOptions.find((option) => option.id === 'model')?.currentValue
-      if (model) {
-        await agent.request('session/set_config_option', {
-          sessionId: session.sessionId,
-          configId: 'model',
-          value: model
-        })
+      try {
+        await this.runMapTurn(agent, session.sessionId)
+      } finally {
+        this.mapSessionId = null
+        await agent
+          .request('session/close', { sessionId: session.sessionId })
+          .catch(() => undefined)
       }
-      const response = await agent.request('session/prompt', {
-        sessionId: session.sessionId,
-        prompt: [{ type: 'text', text: MAP_PROMPT }]
+    })().catch((error: unknown) => this.turnFailed(error))
+  }
+
+  private async runMapTurn(agent: ClientContext, sessionId: string): Promise<void> {
+    const model = this.configOptions.find((option) => option.id === 'model')?.currentValue
+    if (model) {
+      await agent.request('session/set_config_option', {
+        sessionId,
+        configId: 'model',
+        value: model
       })
-      this.mapSessionId = null
-      if (response.stopReason === 'end_turn' && this.mapReply.trim()) {
-        const file = await this.setup.mapFile.writeMap(this.mapReply)
-        this.send({ kind: 'map-written', file })
-      }
-      this.send({ kind: 'turn-end', stopReason: response.stopReason })
-      await agent.request('session/close', { sessionId: session.sessionId }).catch(() => undefined)
-    })().catch((error: unknown) => {
-      this.mapSessionId = null
-      this.turnFailed(error)
+    }
+    const response = await agent.request('session/prompt', {
+      sessionId,
+      prompt: [{ type: 'text', text: MAP_PROMPT }]
     })
+    if (response.stopReason === 'end_turn' && this.mapReply.trim()) {
+      const file = await this.setup.mapFile.writeMap(this.mapReply)
+      this.send({ kind: 'map-written', file })
+    }
+    this.send({ kind: 'turn-end', stopReason: response.stopReason })
   }
 
   /** Ends the chat and its agent process. */
@@ -250,7 +256,11 @@ export class ChatAgentSession {
           this.mapReply += params.update.content.text
         if (params.sessionId !== this.sessionId && params.sessionId !== this.mapSessionId) return
         for (const body of chatEventsFor(params.update)) {
-          if (body.kind === 'config') this.configOptions = body.configOptions
+          if (body.kind === 'config') {
+            // The map session's settings aren't the chat's.
+            if (params.sessionId !== this.sessionId) continue
+            this.configOptions = body.configOptions
+          }
           this.send(body)
         }
       })

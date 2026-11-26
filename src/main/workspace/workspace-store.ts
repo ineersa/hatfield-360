@@ -24,6 +24,7 @@ import {
   WORKSPACE_FILE_EXTENSION,
   withWorkspaceExtension,
   writeWorkspaceFile,
+  copyInstructionsFile,
   defaultInstructionsFile
 } from './workspace-file'
 
@@ -240,12 +241,16 @@ class WorkspaceStore {
       if (workspace.problem) throw new Error(workspace.problem)
       const target = withWorkspaceExtension(file)
       if (target === this.defaultFile()) throw new Error('Choose another place for the workspace.')
-      // The copy keeps using the same map file, rather than a new empty one beside it.
-      const instructions = workspace.instructions ?? defaultInstructionsFile(workspace.file)
-      await writeWorkspaceFile(target, { ...workspace, instructions })
+      // The copy starts with the map's contents in a file of its own, beside the new workspace file.
+      await copyInstructionsFile(
+        workspace.instructions ?? defaultInstructionsFile(workspace.file),
+        defaultInstructionsFile(target)
+      )
+      const { instructions: _source, ...copy } = workspace
+      await writeWorkspaceFile(target, copy)
       await this.switchTo(
         session,
-        { ...workspace, file: target, isDefault: false, instructions },
+        { ...copy, file: target, isDefault: false },
         remembered(session.state, target),
         true
       )

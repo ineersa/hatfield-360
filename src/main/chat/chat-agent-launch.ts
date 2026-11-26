@@ -1,6 +1,6 @@
-import { execFile } from 'node:child_process'
+import { spawn } from 'node:child_process'
+import { homedir } from 'node:os'
 import { basename, dirname, isAbsolute, join } from 'node:path'
-import { promisify } from 'node:util'
 import type { AgentProfile } from '../../shared/agent-api'
 import { defaultShell } from '../terminal/default-shell'
 import { terminalEnvironment } from '../terminal/terminal-environment'
@@ -50,21 +50,46 @@ export async function resolveClaude(profile: AgentProfile, cwd: string): Promise
     ...(basename(shell.file) === 'fish' ? ['--'] : ['hatfield-360']),
     executable
   ]
-  try {
-    const { stdout } = await promisify(execFile)(shell.file, args, {
-      cwd,
-      timeout: LOOKUP_TIMEOUT_MS,
-      env: terminalEnvironment(process.env, { platform: process.platform, appVersion: '' })
-    })
-    // Interactive startup files may print first; the path is the last line.
-    const found = stdout.trim().split('\n').at(-1)?.trim()
-    if (found && isAbsolute(found)) return found
-  } catch {
-    // Not found, or the shell failed: reported below.
-  }
+  const found = lookedUpPath(await lastLineOf(shell.file, args, cwd))
+  if (found !== null) return found
   throw new Error(
     `Claude Code ("${executable}") wasn't found on your shell's PATH. Install it, or set its path in Settings → Agent launch profiles.`
   )
+}
+
+/**
+ * The executable a `command -v` line names: a path, or an alias's command (Claude's local install
+ * adds `alias claude=~/.claude/local/claude`).
+ */
+export function lookedUpPath(line: string | null): string | null {
+  const alias = line?.match(/^(?:alias\s+)?[^\s=/]+=(?<value>.+)$/)?.groups?.['value']
+  const command = alias === undefined ? line : alias.replace(/^(['"])(.*)\1$/, '$2').split(/\s+/)[0]
+  if (!command) return null
+  const path = command.startsWith('~/') ? join(homedir(), command.slice(2)) : command
+  return isAbsolute(path) ? path : null
+}
+
+/**
+ * The last line a shell lookup prints (startup files may print first), or null when it fails. Its
+ * stdin is closed, so a startup prompt gets EOF, and it's killed outright: an interactive shell
+ * ignores SIGTERM.
+ */
+function lastLineOf(file: string, args: string[], cwd: string): Promise<string | null> {
+  return new Promise((resolve) => {
+    const child = spawn(file, args, {
+      cwd,
+      stdio: ['ignore', 'pipe', 'ignore'],
+      env: terminalEnvironment(process.env, { platform: process.platform, appVersion: '' })
+    })
+    let stdout = ''
+    child.stdout.setEncoding('utf8').on('data', (chunk: string) => (stdout += chunk))
+    const timer = setTimeout(() => child.kill('SIGKILL'), LOOKUP_TIMEOUT_MS)
+    child.on('error', () => resolve(null))
+    child.on('close', (code) => {
+      clearTimeout(timer)
+      resolve(code === 0 ? (stdout.trim().split('\n').at(-1)?.trim() ?? null) : null)
+    })
+  })
 }
 
 /** The adapter run on Electron's Node, with the given Claude Code and without API keys. */
