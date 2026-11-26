@@ -24,8 +24,7 @@ pnpm record:chat-cassettes answer     # just one
 
 This runs real Claude Code on Haiku and costs a few cents. It needs:
 
-- `claude` on your shell's PATH, logged in (the chat never uses `ANTHROPIC_API_KEY`);
-- Claude Code's sandbox: on Linux `bubblewrap` and `socat`.
+- `claude` on your shell's PATH, logged in (the chat never uses `ANTHROPIC_API_KEY`).
 
 The scripts in `scripts/record-chat-cassettes.ts` say what each session does. Re-record after
 upgrading the adapter: a unit test fails while a cassette's `adapter` differs from the installed
