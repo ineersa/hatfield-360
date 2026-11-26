@@ -9,6 +9,10 @@ import type { TERMINAL_THEMES } from './themes/terminal-theme-catalog'
 export type Settings = {
   'agents.hatfield': AgentProfile
   'agents.claude': AgentProfile
+  /** The workspace chat's model for a new chat: the last one chosen in the panel. */
+  'chat.model': string
+  /** The workspace chat's reasoning effort for a new chat: the last one chosen in the panel. */
+  'chat.effort': string
   'notifications.agentSounds': boolean
   'notifications.completedSound': AgentSound
   'notifications.needsInputSound': AgentSound
@@ -59,6 +63,8 @@ const MONOSPACE_FONTS =
 export const DEFAULT_SETTINGS: Settings = {
   'agents.hatfield': { executable: 'hatfield', args: [] },
   'agents.claude': { executable: 'claude', args: [] },
+  'chat.model': 'haiku',
+  'chat.effort': 'medium',
   'notifications.agentSounds': true,
   'notifications.completedSound': 'chime',
   'notifications.needsInputSound': 'double-ring',

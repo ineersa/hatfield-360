@@ -55,7 +55,8 @@ export function parseShellLayout(value: unknown): ShellLayout | null {
     panels: { agents, files, search, git },
     // Layouts saved before the panel existed lack it, and shouldn't lose their side panels for it.
     notificationsWidth:
-      panelWidth(value.notificationsWidth) ?? DEFAULT_SHELL_LAYOUT.notificationsWidth
+      panelWidth(value.notificationsWidth) ?? DEFAULT_SHELL_LAYOUT.notificationsWidth,
+    chatWidth: panelWidth(value.chatWidth) ?? DEFAULT_SHELL_LAYOUT.chatWidth
   }
 }
 

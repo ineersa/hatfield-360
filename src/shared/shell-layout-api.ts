@@ -10,6 +10,8 @@ export type ShellLayout = {
   panels: Record<ShellViewId, SidePanelLayout>
   /** The notifications panel on the right; it shares the side panels' width range. */
   notificationsWidth: number
+  /** The workspace chat panel on the right, opened with Shift Shift. */
+  chatWidth: number
 }
 
 /** Stored side panel widths; a narrow window still caps the panel on screen. */
@@ -25,7 +27,8 @@ export const DEFAULT_SHELL_LAYOUT: ShellLayout = {
     search: DEFAULT_PANEL,
     git: DEFAULT_PANEL
   },
-  notificationsWidth: 380
+  notificationsWidth: 380,
+  chatWidth: 440
 }
 
 export const SHELL_LAYOUT_CHANNELS = {

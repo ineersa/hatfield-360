@@ -27,6 +27,7 @@ Two columns, JetBrains-style, not Orca's three columns (no right-hand file/proje
 - **Side panel**: content depends on the view; resizable and collapsible.
 - **Main area**: content depends on the view.
 - Each view keeps its own state (open tabs, splits, selection) when you switch away and back.
+- **Workspace chat** (right, Shift Shift from anywhere): Claude Code over ACP, for questions about the workspace's projects ("where is X implemented") and small jobs. It is a tool window over any view, like the notifications panel, not a third column. It runs the user's own `claude` with its login (never an API key), Haiku at medium effort by default, and reads the workspace map file (`<workspace>.workspace.md`) as its instructions; Generate Workspace Map writes that file's map section, and the chat saves learnings to its playbook section.
 
 ## Views (first implementation)
 

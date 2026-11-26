@@ -2,6 +2,8 @@ import { workspaceStore } from './workspace/workspace-store'
 import { registerLanguageServerIpc } from './ipc/language-server-ipc'
 import { languageServerSessions } from './language-servers/language-server-sessions'
 import { registerAgentIpc } from './ipc/agent-ipc'
+import { registerChatAgentIpc } from './ipc/chat-agent-ipc'
+import { chatAgentHost } from './chat/chat-agent-host'
 import { app, BrowserWindow } from 'electron'
 import { agentStatusServer } from './agent-status/status-server'
 import { separateDevAppData } from './app-data-folder'
@@ -49,6 +51,7 @@ void app.whenReady().then(async () => {
   registerTerminalIpc()
   registerWebLinkIpc()
   registerAgentIpc()
+  registerChatAgentIpc()
   registerLanguageServerIpc()
   installAppMenu()
   followAppTheme()
@@ -74,6 +77,7 @@ app.on('before-quit', (event) => {
   // Unsaved edits are saved or discarded first; a cancelled quit leaves everything running.
   if (quitWaitsForUnsavedChanges()) return
   quitting = true
+  chatAgentHost.end()
   // Teardown changes live agent mappings; finish accepted checkpoints before ending processes.
   void workspaceStore
     .freezeTerminals()

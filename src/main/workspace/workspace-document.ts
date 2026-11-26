@@ -10,6 +10,8 @@ export type WorkspaceDocument = {
   version: typeof WORKSPACE_DOCUMENT_VERSION
   terminals?: TerminalLayout
   folders: { path: string; kind: WorkspaceFolderKind }[]
+  /** The chat's workspace map file, relative to the workspace file or absolute; a default when absent. */
+  instructions?: string
 }
 
 export type ParsedWorkspaceDocument =
@@ -47,12 +49,18 @@ export function parseWorkspaceDocument(text: string): ParsedWorkspaceDocument {
       read.set(folder.path, folder.kind === 'folder' ? 'folder' : 'project')
   }
   const terminals = parseTerminalLayout(data.terminals, false, true)
+  // A path the user broke is dropped, so the chat falls back to the default map file.
+  const instructions =
+    typeof data.instructions === 'string' && data.instructions.trim() !== ''
+      ? data.instructions
+      : undefined
   return {
     status: 'ok',
     document: {
       version: WORKSPACE_DOCUMENT_VERSION,
       ...(terminals ? { terminals } : {}),
-      folders: [...read].map(([path, kind]) => ({ path, kind }))
+      folders: [...read].map(([path, kind]) => ({ path, kind })),
+      ...(instructions === undefined ? {} : { instructions })
     }
   }
 }
