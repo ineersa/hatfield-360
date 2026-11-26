@@ -14,7 +14,7 @@
   --activity-bar-width: calc(var(--app-font-size) * 56 / 13);
   /* Grows with the window to fit agent responses, from JetBrains' ~380px balloon, within the main area. */
   --toast-width: min(
-    clamp(calc(var(--app-font-size) * 380 / 13), 32vw, calc(var(--app-font-size) * 720 / 13)),
+    clamp(calc(var(--app-font-size) * 440 / 13), 40vw, calc(var(--app-font-size) * 880 / 13)),
     calc(100vw - var(--activity-bar-width) - var(--tool-stripe-width) - 2 * var(--island-gap))
   );
   /* A long toast body scrolls inside its toast, so a few toasts still fit the window. */

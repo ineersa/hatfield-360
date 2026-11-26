@@ -8,6 +8,8 @@ export type AppNotification = {
   severity: NotificationSeverity
   title: string
   body?: string
+  /** Rendered as Markdown below the body: an agent's reply, never the app's own text. */
+  markdown?: string
   action?: { label: string; run: () => void }
   /** When it was raised, in ms since the epoch. */
   time: number

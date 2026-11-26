@@ -30,7 +30,9 @@ const settle = (status) => {
     id,
     status,
     ...(trigger ? { trigger } : {}),
-    ...(status === 'completed' ? { response: 'Reviewed <3> files.\n  All checks pass.' } : {})
+    ...(status === 'completed'
+      ? { response: 'Reviewed **<3> files**.\n\n- All checks pass\n- Run `pnpm verify`' }
+      : {})
   }
 }
 const print = (message) => process.stdout.write(`${message}\n`)
