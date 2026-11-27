@@ -39,7 +39,7 @@ export type SourceControlAction =
   | 'delete-branch'
 
 /** A branch to switch to: a local one, or a remote one through its local tracking branch. */
-export type SwitchTarget = { kind: 'local' | 'remote'; name: string }
+type SwitchTarget = { kind: 'local' | 'remote'; name: string }
 
 /** The Switch, New Branch or Delete Branch dialog, and what it last heard from main. */
 export type BranchDialog =
