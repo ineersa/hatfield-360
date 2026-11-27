@@ -164,7 +164,8 @@ export async function listHatfieldCatalog(
   folders: WorkspaceView['folders'],
   projects: ProjectWorktrees[],
   profile: AgentProfile,
-  now = Date.now()
+  now = Date.now(),
+  shell?: ShellCommand
 ): Promise<RecentCatalog> {
   const entries = new Map<string, RecentConversation>()
   const errors = new Set<string>()
@@ -182,7 +183,7 @@ export async function listHatfieldCatalog(
     let offset = 0
     try {
       for (;;) {
-        const command = hatfieldCatalogCommand(profile, cwd, since, offset)
+        const command = hatfieldCatalogCommand(profile, cwd, since, offset, shell)
         const { stdout } = await execute(command.file, command.args, {
           encoding: 'utf8',
           env: { ...process.env, ...profile.env },

@@ -9,6 +9,7 @@ import {
   parseHatfieldCatalog
 } from './hatfield-catalog'
 import { conversationKey, matchingConversationKeys } from '../../shared/recent-conversation'
+import type { AgentProfile } from '../../shared/agent-api'
 
 const now = Date.parse('2026-11-26T00:00:00Z')
 
@@ -189,6 +190,10 @@ async function withProject(
   }
 }
 
+// Bash without startup files, so the developer's own shell and its startup output don't matter.
+const read = (folders: Parameters<typeof listHatfieldCatalog>[0], profile: AgentProfile) =>
+  listHatfieldCatalog(folders, [], profile, undefined, { file: '/bin/bash', args: ['--norc'] })
+
 describe('listHatfieldCatalog with a real command', () => {
   it('runs the profile with its environment and a home-relative argument', async () => {
     await withProject(async (project, folders) => {
@@ -201,7 +206,7 @@ console.log(JSON.stringify({ version: 1, scope: { cwd }, nextOffset: null, sessi
   displayTitle: process.env.PROFILE_SENTINEL + ' ' + process.argv[2]
 }] }))\n`
       )
-      const result = await listHatfieldCatalog(folders, [], {
+      const result = await read(folders, {
         executable: process.execPath,
         args: [script, '~/tilde'],
         env: { PROFILE_SENTINEL: 'from-profile' }
@@ -215,7 +220,7 @@ console.log(JSON.stringify({ version: 1, scope: { cwd }, nextOffset: null, sessi
 
   it('names why the command failed instead of a bare could-not-read', async () => {
     await withProject(async (project, folders) => {
-      const missing = await listHatfieldCatalog(folders, [], {
+      const missing = await read(folders, {
         executable: join(project, 'missing-hatfield'),
         args: [],
         env: {}
@@ -226,7 +231,7 @@ console.log(JSON.stringify({ version: 1, scope: { cwd }, nextOffset: null, sessi
       )
       const noisy = join(project, 'noisy.mjs')
       await writeFile(noisy, "console.log('Welcome back!')\n")
-      const notJson = await listHatfieldCatalog(folders, [], {
+      const notJson = await read(folders, {
         executable: process.execPath,
         args: [noisy],
         env: {}
@@ -236,7 +241,7 @@ console.log(JSON.stringify({ version: 1, scope: { cwd }, nextOffset: null, sessi
       ])
       const failing = join(project, 'failing.mjs')
       await writeFile(failing, "console.error('database is locked'); process.exit(3)\n")
-      const failed = await listHatfieldCatalog(folders, [], {
+      const failed = await read(folders, {
         executable: process.execPath,
         args: [failing],
         env: {}

@@ -11,16 +11,22 @@ export function expandHome(value: string, home = homedir()): string {
   return value.startsWith('~/') ? join(home, value.slice(2)) : value
 }
 
-/**
- * The profile run through the user's interactive shell from `cwd`, so its startup files set PATH.
- * With `quietStartup`, what the startup files print goes to stderr and only the program writes to
- * stdout (file descriptor 3 carries the real stdout past the startup), for a protocol on stdio.
- */
+type AgentShellOptions = {
+  /**
+   * For a protocol on stdio: the caller parks the real stdout on file descriptor 3 and stdin on 4,
+   * so startup files print to stderr and read nothing, and the program gets both back.
+   */
+  quietStartup?: boolean
+  /** Variables removed after the startup files ran, which may have exported them. */
+  unsetEnv?: readonly string[]
+}
+
+/** The profile run through the user's interactive shell from `cwd`, so its startup files set PATH. */
 export function agentShellCommand(
   profile: Pick<AgentProfile, 'executable' | 'args'>,
   cwd: string,
   shell = defaultShell(process.env, process.platform),
-  { quietStartup = false } = {}
+  { quietStartup = false, unsetEnv = [] }: AgentShellOptions = {}
 ): ShellCommand {
   const executable = expandHome(profile.executable)
   const args = profile.args.map((arg) => expandHome(arg))
@@ -29,7 +35,7 @@ export function agentShellCommand(
       !isAbsolute(executable) && /[\\/]/.test(executable) ? resolve(cwd, executable) : executable
     return { file, args }
   }
-  const restore = quietStartup ? ' 1>&3 3>&-' : ''
+  const restore = quietStartup ? ' 1>&3 3>&- 0<&4 4<&-' : ''
   switch (basename(shell.file)) {
     case 'bash':
     case 'zsh':
@@ -38,7 +44,7 @@ export function agentShellCommand(
         args: [
           ...shell.args,
           '-ic',
-          `cd -- "$1" && shift && exec -- "$@"${restore}`,
+          `${unsetEnv.map((name) => `unset ${name}; `).join('')}cd -- "$1" && shift && exec -- "$@"${restore}`,
           'hatfield-360',
           cwd,
           executable,
@@ -51,7 +57,7 @@ export function agentShellCommand(
         args: [
           ...shell.args,
           '-ic',
-          `cd -- $argv[1]; and exec -- $argv[2..-1]${restore}`,
+          `${unsetEnv.map((name) => `set -e ${name}; `).join('')}cd -- $argv[1]; and exec -- $argv[2..-1]${restore}`,
           '--',
           cwd,
           executable,

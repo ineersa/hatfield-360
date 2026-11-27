@@ -126,6 +126,9 @@ describe('parseSettings', () => {
     expect(refused({ executable: 'claude', args: [], env: { FOO: 'two\nlines' } })).toThrow(
       'env "FOO" must be text on one line'
     )
+    expect(refused({ executable: 'claude', args: [], env: { DEBUG: 1 } })).toThrow(
+      'env "DEBUG" must be a string'
+    )
     expect(refused({ executable: 'claude', args: [], env: ['FOO=bar'] })).toThrow(
       'an env object of strings'
     )

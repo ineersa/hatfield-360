@@ -20,9 +20,12 @@ describe('expandHome', () => {
 it('runs a profile with a home-relative script and keeps the startup quiet when asked', () => {
   const zsh = { file: '/bin/zsh', args: [] }
   const profile = { executable: 'php', args: ['~/bin/hatfield.phar', '~user'] }
-  const quiet = agentShellCommand(profile, '/projects/app', zsh, { quietStartup: true })
+  const quiet = agentShellCommand(profile, '/projects/app', zsh, {
+    quietStartup: true,
+    unsetEnv: ['ANTHROPIC_API_KEY']
+  })
   expect(quiet.args.slice(1)).toEqual([
-    'cd -- "$1" && shift && exec -- "$@" 1>&3 3>&-',
+    'unset ANTHROPIC_API_KEY; cd -- "$1" && shift && exec -- "$@" 1>&3 3>&- 0<&4 4<&-',
     'hatfield-360',
     '/projects/app',
     'php',

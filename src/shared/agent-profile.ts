@@ -59,7 +59,8 @@ export function checkAgentProfile(raw: unknown): { value: AgentProfile } | { pro
   for (const [name, value] of Object.entries(rawEnv)) {
     const nameProblem = environmentNameProblem(name)
     if (nameProblem) return { problem: `env ${nameProblem}` }
-    if (typeof value !== 'string' || value.length > MAX_TEXT || hasControl(value))
+    if (typeof value !== 'string') return { problem: `env "${name}" must be a string` }
+    if (value.length > MAX_TEXT || hasControl(value))
       return { problem: `env "${name}" must be text on one line` }
     env[name] = value
   }
