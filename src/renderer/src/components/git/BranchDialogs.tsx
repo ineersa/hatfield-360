@@ -15,7 +15,7 @@ import { type BranchDialog, useSourceControlStore } from '@/state/source-control
 import type { SwitchPreview } from '../../../../shared/branch-api'
 
 const GIT_OUTPUT =
-  'type-hint max-h-40 w-full overflow-auto rounded-component border border-border p-2 font-mono break-words whitespace-pre-wrap text-foreground select-text'
+  'type-hint max-h-40 w-full overflow-auto rounded-component border border-input-border bg-input p-2 font-mono break-words whitespace-pre-wrap text-input-foreground select-text'
 
 /** The switch's preview, read from main once the dialog opens. */
 function useSwitchPreview(

@@ -10,6 +10,8 @@ export type HunkTab = {
   root: string
   /** "Review · app": what the strip shows and the tab is named by. */
   title: string
+  /** Counts restarts: a new value remounts the pane, which starts hunk afresh. */
+  run: number
 }
 
 type HunkTabState = {
@@ -31,6 +33,11 @@ type HunkTabState = {
   startFailed: (id: string, error: unknown) => void
   /** Removes the tab; its hunk ends as the tab unmounts. */
   closeTab: (id: string) => void
+  /**
+   * Starts the root's Log tab's hunk afresh, in place: `hunk log` reads the history once, so a
+   * commit, pull, switch or other ref change would otherwise not show. Review watches on its own.
+   */
+  reloadLog: (root: string) => void
   activateTab: (id: string) => void
   dismissMissing: () => void
 }
@@ -87,7 +94,8 @@ export const useHunkTabStore = create<HunkTabState>((set, get) => {
         id: crypto.randomUUID(),
         kind,
         root,
-        title: `${KIND_LABEL[kind]} · ${name}`
+        title: `${KIND_LABEL[kind]} · ${name}`,
+        run: 0
       }
       set((state) => ({ tabs: [...state.tabs, tab], pending: new Set([...state.pending, tab.id]) }))
     },
@@ -105,6 +113,15 @@ export const useHunkTabStore = create<HunkTabState>((set, get) => {
         notify({ severity: 'error', title: "Couldn't start hunk", body: mainErrorMessage(error) })
     },
     closeTab: remove,
+    reloadLog: (root) =>
+      set((state) => {
+        const tab = tabFor(state.tabs, 'log', root)
+        // One still starting reads the history as it is now.
+        if (tab === undefined || state.pending.has(tab.id)) return state
+        return {
+          tabs: state.tabs.map((each) => (each === tab ? { ...tab, run: tab.run + 1 } : each))
+        }
+      }),
     activateTab: (id) => set({ activeTabId: id }),
     dismissMissing: () => set({ missing: false })
   }

@@ -157,7 +157,7 @@ export function HunkTabs({
       <div className="relative flex min-h-0 flex-1 flex-col">
         {tabs.map((tab) => (
           <HunkTabBody
-            key={tab.id}
+            key={`${tab.id}:${tab.run}`}
             tab={tab}
             active={tab.id === activeTabId}
             pending={pending.has(tab.id)}

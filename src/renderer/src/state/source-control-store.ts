@@ -15,6 +15,7 @@ import {
   pullPlan
 } from '@/components/git/commit-plan'
 import { mainErrorMessage } from '@/lib/main-error-message'
+import { useHunkTabStore } from './hunk-tab-store'
 import type { BranchStart, LostCommit, SwitchTarget } from '../../../shared/branch-api'
 import type {
   ChangedFile,
@@ -61,6 +62,15 @@ export type BranchDialog =
       /** Git refused the branch as unmerged: its output and the commits only that branch holds. */
       refused: { output: string; commits: LostCommit[]; more: number } | null
     }
+
+const reloadLog = (root: string): void => useHunkTabStore.getState().reloadLog(root)
+
+/** `outcome`, once the group's Log tab, if any, has been told to reload when git changed something. */
+async function reloadingLog(group: GitGroup, outcome: Promise<GitOutcome>): Promise<GitOutcome> {
+  const result = await outcome
+  if (result.ok) reloadLog(group.root)
+  return result
+}
 
 /** Files of one working tree an action works on. */
 export type FileTargets = { group: GitGroup; files: ChangedFile[] }[]
@@ -442,6 +452,7 @@ export const useSourceControlStore = create<SourceControlState>((set, get, store
               amend
             })
             if (fail('Commit', group.name, outcome)) break
+            reloadLog(group.root)
             committed += 1
             uncheck(group.root, files)
             if (
@@ -466,14 +477,22 @@ export const useSourceControlStore = create<SourceControlState>((set, get, store
           for (const group of targets) {
             if (get().cancelling) break
             current = group.name
-            if (fail('Pull', group.name, await window.desktop.pullBranch(group.root))) break
+            const outcome = await window.desktop.pullBranch(group.root)
+            reloadLog(group.root)
+            if (fail('Pull', group.name, outcome)) break
           }
         },
         () => `Pull failed in ${current}`
       )
     },
-    push: (group) => actOn('push', 'Push', group, () => window.desktop.pushBranch(group.root)),
-    fetch: (group) => actOn('fetch', 'Fetch', group, () => window.desktop.fetchRemote(group.root)),
+    push: (group) =>
+      actOn('push', 'Push', group, () =>
+        reloadingLog(group, window.desktop.pushBranch(group.root))
+      ),
+    fetch: (group) =>
+      actOn('fetch', 'Fetch', group, () =>
+        reloadingLog(group, window.desktop.fetchRemote(group.root))
+      ),
     addToVcs: async (group, files) => {
       if (files.length === 0) return
       await actOn('add', 'Add', group, async () => {
@@ -513,7 +532,7 @@ export const useSourceControlStore = create<SourceControlState>((set, get, store
       const { operation } = group
       if (operation === null) return
       await actOn('abort', 'Abort', group, () =>
-        window.desktop.abortGitOperation(group.root, operation.kind)
+        reloadingLog(group, window.desktop.abortGitOperation(group.root, operation.kind))
       )
     },
     branchesOpen: null,
@@ -529,7 +548,7 @@ export const useSourceControlStore = create<SourceControlState>((set, get, store
     switchBranch: async (group, branch) => {
       set({ branchesOpen: null, branchDialog: null })
       await actOn('switch-branch', `Switch to ${branch.name}`, group, () =>
-        window.desktop.switchBranch(group.root, branch)
+        reloadingLog(group, window.desktop.switchBranch(group.root, branch))
       )
     },
     createBranch: async (name, switchTo) => {
@@ -545,6 +564,7 @@ export const useSourceControlStore = create<SourceControlState>((set, get, store
             start,
             switchTo
           })
+          if (outcome.ok) reloadLog(group.root)
           if (get().branchDialog !== dialog) return
           set({
             branchDialog: outcome.ok
@@ -563,6 +583,7 @@ export const useSourceControlStore = create<SourceControlState>((set, get, store
         'delete-branch',
         async (fail) => {
           const outcome = await window.desktop.deleteBranch(group.root, name, force)
+          if (outcome.ok) reloadLog(group.root)
           if (!outcome.ok && outcome.unmerged) {
             const refused = { output: outcome.output, ...outcome.unmerged }
             set({ branchDialog: { ...dialog, refused } })

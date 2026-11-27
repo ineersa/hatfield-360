@@ -1,8 +1,8 @@
 import { expect, test, type Page } from '@playwright/test'
-import { writeFile } from 'node:fs/promises'
+import { chmod, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { changes, commitFixture, git, gitOutput, row, showGit } from './git-repository'
-import { saveScreenshot, withApp } from './launch-app'
+import { makeTempDir, saveScreenshot, withApp } from './launch-app'
 
 const popup = (page: Page) => page.getByRole('dialog', { name: 'Branches of app' })
 const options = (page: Page) =>
@@ -214,6 +214,49 @@ test("a switch git refuses shows git's output and changes nothing; the repositor
       { userDataDir: fixture.userData, env: fixture.env }
     )
   } finally {
+    await fixture.cleanup()
+  }
+})
+
+test('an open Log tab starts hunk again after a switch, so it shows the new branch', async () => {
+  const fixture = await commitFixture()
+  const { repo } = fixture
+  git(repo, 'branch', 'feature')
+  const [bin, cleanBin] = await makeTempDir('bin')
+  const [home, cleanHome] = await makeTempDir('home')
+  // Says which branch it found checked out, then waits, as hunk does.
+  await writeFile(
+    join(bin, 'hunk'),
+    '#!/bin/sh\necho "fake hunk $1 on $(git branch --show-current)"\nread reply\n'
+  )
+  await chmod(join(bin, 'hunk'), 0o755)
+  try {
+    await withApp(
+      async (_app, page) => {
+        await showGit(page)
+        await changes(page).getByRole('button', { name: 'Log app' }).click()
+        const log = page.getByRole('tabpanel', { name: 'Log · app' }).locator('.xterm-rows')
+        await expect(log).toContainText('fake hunk log on main')
+
+        await openBranches(page)
+        await search(page).fill('feature')
+        await page.keyboard.press('Enter')
+        await confirmSwitch(page, 'feature').getByRole('button', { name: 'Switch' }).click()
+        await expect(row(page, 'app')).toHaveAccessibleDescription(/^branch feature/)
+        await expect(log).toContainText('fake hunk log on feature')
+        await expect(log).not.toContainText('on main')
+        await expect(page.getByRole('main', { name: 'Git' }).getByRole('tab')).toHaveText([
+          'Log · app'
+        ])
+      },
+      {
+        userDataDir: fixture.userData,
+        env: { ...fixture.env, PATH: `${bin}:/usr/bin:/bin`, HOME: home, SHELL: '/bin/bash' }
+      }
+    )
+  } finally {
+    await cleanHome()
+    await cleanBin()
     await fixture.cleanup()
   }
 })
