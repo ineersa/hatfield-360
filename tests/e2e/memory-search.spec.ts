@@ -106,6 +106,8 @@ test('Search Memory opens over a focused terminal, keeps its keys from the shell
         await page.getByRole('listitem', { name: PROJECT }).click({ button: 'right' })
         await page.getByRole('menuitem', { name: 'Search Memory…' }).click()
         await expect(dialog(page)).toBeVisible()
+        // Keys typed before the field has focus would go nowhere.
+        await expect(input).toBeFocused()
         await page.keyboard.type('anything')
         await dialog(page).getByRole('button', { name: 'Open Settings' }).click()
         await expect(dialog(page)).toBeHidden()
