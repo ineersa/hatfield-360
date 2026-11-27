@@ -140,12 +140,18 @@ test(
               await expect(live('001')).toBeVisible()
               await expect(page.getByRole('tab')).toHaveCount(1)
               await expect(panes).toHaveCount(1)
+              // A running conversation leaves Recent.
+              await expect(row(1)).toHaveCount(0)
+              await expect(
+                page.getByRole('button', { name: 'Recent 26', exact: true })
+              ).toBeVisible()
 
               await row(2).click({ button: 'right' })
               await menu.getByRole('menuitem', { name: 'Resume in Split' }).click()
               await expect(live('002')).toBeVisible()
               await expect(page.getByRole('tab')).toHaveCount(1)
               await expect(panes).toHaveCount(2)
+              await expect(row(2)).toHaveCount(0)
               await expect(panes.nth(1).locator('.xterm-rows')).toContainText(
                 `Directory: ${worktree}`
               )

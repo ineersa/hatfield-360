@@ -56,3 +56,21 @@ export function matchingConversationKeys(
   }
   return keys
 }
+
+/** The conversations not already running in a pane: a resumed one leaves Recent while it runs. */
+export function withoutRunning(
+  recent: readonly RecentConversation[],
+  live: readonly AgentSession[],
+  scopeAliases: ReadonlyMap<string, string>
+): RecentConversation[] {
+  const running = new Set<string>()
+  for (const session of live) {
+    if (session.process !== 'running') continue
+    for (const key of matchingConversationKeys(session, scopeAliases)) running.add(key)
+  }
+  if (running.size === 0) return [...recent]
+  return recent.filter((entry) => {
+    const key = conversationKey(entry, scopeAliases)
+    return key === null || !running.has(key)
+  })
+}

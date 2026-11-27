@@ -2,7 +2,8 @@ import { recentCatalogScope, useRecentSessionStore } from '@/state/recent-sessio
 import { RecentSessions } from './RecentSessions'
 import {
   RECENT_CONVERSATION_MS,
-  type RecentConversation
+  type RecentConversation,
+  withoutRunning
 } from '../../../../shared/recent-conversation'
 import { HidePanelButton } from '@/components/shell/HidePanelButton'
 import { AgentAttention } from './AgentAttention'
@@ -350,9 +351,11 @@ export function WorkspacePanel(): React.JSX.Element {
   const currentCatalog =
     catalog?.key === JSON.stringify([generation, catalogScope]) ? catalog : null
   const catalogError = currentCatalog?.errors.join(' ')
-  const recent = (currentCatalog?.sessions ?? []).filter(
-    (entry) => entry.lastModified > now - RECENT_CONVERSATION_MS
-  )
+  const recent = withoutRunning(
+    currentCatalog?.sessions ?? [],
+    sessions,
+    currentCatalog?.scopeAliases ?? new Map<string, string>()
+  ).filter((entry) => entry.lastModified > now - RECENT_CONVERSATION_MS)
   const otherRecent = recent.filter(
     (entry) => !folders.some((folder) => !folder.missing && folder.path === entry.project)
   )
