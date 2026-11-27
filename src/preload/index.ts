@@ -89,6 +89,8 @@ const desktopApi: DesktopApi = {
   ignoreUntrackedFile: (root, path) =>
     ipcRenderer.invoke(SOURCE_CONTROL_CHANNELS.ignoreUntracked, root, path),
   launchHunk: (request) => ipcRenderer.invoke(SOURCE_CONTROL_CHANNELS.launchHunk, request),
+  abortGitOperation: (root, operation) =>
+    ipcRenderer.invoke(SOURCE_CONTROL_CHANNELS.abortOperation, root, operation),
   cancelSourceControlAction: () => ipcRenderer.invoke(SOURCE_CONTROL_CHANNELS.cancel),
   listDirectory: (path) => ipcRenderer.invoke(FILE_TREE_CHANNELS.list, path),
   watchDirectories: (paths) => ipcRenderer.invoke(FILE_TREE_CHANNELS.watch, paths),

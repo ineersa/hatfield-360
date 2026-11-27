@@ -7,7 +7,13 @@ import {
   toggleFilesChecks,
   trackedFiles
 } from '@/components/git/change-tree-rows'
-import { amendTarget, commitPlan, gitGroups, pullPlan } from '@/components/git/commit-plan'
+import {
+  amendTarget,
+  commitPlan,
+  concludesOperation,
+  gitGroups,
+  pullPlan
+} from '@/components/git/commit-plan'
 import { mainErrorMessage } from '@/lib/main-error-message'
 import type {
   ChangedFile,
@@ -26,6 +32,7 @@ export type SourceControlAction =
   | 'rollback'
   | 'add'
   | 'ignore'
+  | 'abort'
 
 /** Files of one working tree an action works on. */
 export type FileTargets = { group: GitGroup; files: ChangedFile[] }[]
@@ -53,8 +60,11 @@ type SourceControlState = {
   failure: ActionFailure | null
   message: string
   amend: boolean
-  /** The last commit message Amend put in the empty box, and whose: it follows Amend's target while untouched. */
-  amendFilled: { root: string; message: string } | null
+  /**
+   * Text the app put in the empty box, whose and from where: Amend's last commit message, or the
+   * message git prepared for concluding an operation. It follows its source while untouched.
+   */
+  filled: { root: string; message: string; by: 'amend' | 'operation' } | null
   /**
    * Reads every group's status again; quietly unless `shown`, which spins Refresh. Reads asked
    * for while one runs share a single read after it.
@@ -92,7 +102,9 @@ type SourceControlState = {
   addToVcs: (group: GitGroup, files: ChangedFile[]) => Promise<void>
   /** Ignores an untracked file in its root's .gitignore. */
   ignore: (group: GitGroup, file: ChangedFile) => Promise<void>
-  /** Stops the running commit, push, pull, fetch, rollback or add, with its hooks and ssh. */
+  /** Aborts the group's merge, cherry-pick, revert or rebase. */
+  abort: (group: GitGroup) => Promise<void>
+  /** Stops the running commit, push, pull, fetch, rollback, add or abort, with its hooks and ssh. */
   cancel: () => Promise<void>
   dismissFailure: () => void
 }
@@ -103,11 +115,35 @@ function amendRoot(state: SourceControlState): GitGroup | null {
   return target === null || target === 'several' ? null : target.group
 }
 
-/** Whether the box holds nothing the user wrote: empty, or Amend's own text left as it was. */
+/** Whether the box holds nothing the user wrote: empty, or the app's own text left as it was. */
 const untouched = (state: SourceControlState): boolean =>
-  state.amendFilled === null
-    ? state.message.trim() === ''
-    : state.message === state.amendFilled.message
+  state.filled === null ? state.message.trim() === '' : state.message === state.filled.message
+
+/** The message git prepared for the operation Commit concludes, when it commits in that repository only. */
+function operationMessage(state: SourceControlState): { root: string; message: string } | null {
+  const { work } = commitPlan(
+    state.groups ?? [],
+    state.checked,
+    state.selected?.root ?? null,
+    false
+  )
+  // A commit in another repository as well would carry the merge's message there too.
+  const [only] = work
+  const message = only?.group.operation?.message
+  return work.length === 1 && only && concludesOperation(only.group) && message
+    ? { root: only.group.root, message }
+    : null
+}
+
+/** Conflicted files of merges, cherry-picks and reverts: they can't be left out of the commit that concludes one. */
+const conflictKeys = (groups: readonly SourceControlGroup[]): string[] =>
+  gitGroups(groups)
+    .filter(concludesOperation)
+    .flatMap((group) =>
+      group.files
+        .filter((file) => file.kind === 'conflicted')
+        .map((file) => fileKey(group.root, file.path))
+    )
 
 const toggled = (keys: ReadonlySet<string>, key: string): Set<string> => {
   const next = new Set(keys)
@@ -134,11 +170,18 @@ export const useSourceControlStore = create<SourceControlState>((set, get, store
         const groups = await window.desktop.getSourceControlStatus()
         // A read asked for meanwhile follows at once and has the newer word.
         if (queued) return
-        set((state) => ({
-          groups,
-          checked: keepListedChecks(state.checked, groups, trackedFiles),
-          toAdd: keepListedChecks(state.toAdd, groups, addableFiles)
-        }))
+        set((state) => {
+          // A file that just became conflicted starts checked; unchecking it later is the user's call.
+          const before = new Set(conflictKeys(state.groups ?? []))
+          const conflicted = conflictKeys(groups).filter((key) => !before.has(key))
+          const checked =
+            conflicted.length === 0 ? state.checked : new Set([...state.checked, ...conflicted])
+          return {
+            groups,
+            checked: keepListedChecks(checked, groups, trackedFiles),
+            toAdd: keepListedChecks(state.toAdd, groups, addableFiles)
+          }
+        })
       } catch (error) {
         if (!queued)
           set({ failure: { title: 'Reading the changes failed', output: mainErrorMessage(error) } })
@@ -159,7 +202,7 @@ export const useSourceControlStore = create<SourceControlState>((set, get, store
     if (
       !state.amend ||
       group === null ||
-      state.amendFilled?.root === group.root ||
+      (state.filled?.by === 'amend' && state.filled.root === group.root) ||
       !untouched(state)
     )
       return
@@ -173,7 +216,7 @@ export const useSourceControlStore = create<SourceControlState>((set, get, store
         now.message === state.message &&
         amendRoot(now)?.root === group.root
       )
-        set({ message: last, amendFilled: { root: group.root, message: last } })
+        set({ message: last, filled: { root: group.root, message: last, by: 'amend' } })
     } catch (error) {
       set({
         failure: {
@@ -217,15 +260,32 @@ export const useSourceControlStore = create<SourceControlState>((set, get, store
     await get().refresh()
   }
 
-  // Amend's text follows its target: files checked elsewhere, another row selected, files gone.
+  /**
+   * Puts the message git prepared for the operation Commit concludes in the box while it holds
+   * nothing the user wrote, and takes it out again once no operation is to be concluded.
+   */
+  const fillOperation = (): void => {
+    const state = get()
+    if (state.amend || !untouched(state)) return
+    const prepared = operationMessage(state)
+    if (prepared === null) {
+      if (state.filled?.by === 'operation') set({ message: '', filled: null })
+      return
+    }
+    if (state.filled?.root !== prepared.root || state.filled.message !== prepared.message)
+      set({ message: prepared.message, filled: { ...prepared, by: 'operation' } })
+  }
+
+  // The box's text follows its source: files checked elsewhere, another row selected, files gone.
   store.subscribe((state, previous) => {
     if (
-      state.amend &&
-      (state.checked !== previous.checked ||
-        state.selected !== previous.selected ||
-        state.groups !== previous.groups)
+      state.checked !== previous.checked ||
+      state.selected !== previous.selected ||
+      state.groups !== previous.groups ||
+      state.amend !== previous.amend
     )
-      void fillAmend()
+      if (state.amend) void fillAmend()
+      else fillOperation()
   })
 
   const uncheck = (root: string, files: ChangedFile[]): void =>
@@ -266,7 +326,7 @@ export const useSourceControlStore = create<SourceControlState>((set, get, store
     failure: null,
     message: '',
     amend: false,
-    amendFilled: null,
+    filled: null,
     refresh: async (shown = false) => {
       if (shown) {
         if (get().running) return
@@ -308,16 +368,16 @@ export const useSourceControlStore = create<SourceControlState>((set, get, store
     setMessage: (message) => set({ message }),
     setAmend: async (amend) => {
       if (amend) {
-        set({ amend: true, amendFilled: null })
+        set({ amend: true })
         await fillAmend()
         return
       }
       // Amend's own text goes with it; anything the user wrote stays.
-      set((state) => ({
-        amend: false,
-        amendFilled: null,
-        message: state.amendFilled !== null && untouched(state) ? '' : state.message
-      }))
+      set((state) =>
+        state.filled?.by === 'amend'
+          ? { amend: false, filled: null, message: untouched(state) ? '' : state.message }
+          : { amend: false }
+      )
     },
     commit: async (push) => {
       const { groups, checked, selected, message, amend } = get()
@@ -348,7 +408,7 @@ export const useSourceControlStore = create<SourceControlState>((set, get, store
             )
               break
           }
-          if (committed === work.length) set({ message: '', amend: false, amendFilled: null })
+          if (committed === work.length) set({ message: '', amend: false, filled: null })
         },
         () => `${push ? 'Commit and Push' : 'Commit'} failed in ${current}`
       )
@@ -404,6 +464,13 @@ export const useSourceControlStore = create<SourceControlState>((set, get, store
           }
         },
         () => `Rollback failed in ${current}`
+      )
+    },
+    abort: async (group) => {
+      const { operation } = group
+      if (operation === null) return
+      await actOn('abort', 'Abort', group, () =>
+        window.desktop.abortGitOperation(group.root, operation.kind)
       )
     },
     cancel: async () => {

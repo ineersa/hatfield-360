@@ -3,6 +3,7 @@ import { isPlainObject } from '../../shared/plain-object'
 import { type GitOutcome, SOURCE_CONTROL_CHANNELS } from '../../shared/source-control-api'
 import { sourceControlStatus, workingTreeOf } from '../git/source-control-groups'
 import {
+  abortOperation,
   addUntrackedFiles,
   commitChanges,
   fetchRemote,
@@ -101,6 +102,11 @@ export function registerSourceControlIpc(): void {
   handleTrusted(SOURCE_CONTROL_CHANNELS.ignoreUntracked, async (_event, root, path) =>
     ignoreUntrackedFile((await workingTree(root)).root, path)
   )
+
+  handleTrusted(SOURCE_CONTROL_CHANNELS.abortOperation, async (event, request, operation) => {
+    const { root } = await workingTree(request)
+    return cancellable(event.sender, root, (signal) => abortOperation(root, operation, signal))
+  })
 
   handleTrusted(SOURCE_CONTROL_CHANNELS.cancel, (event) => {
     runningActions.get(event.sender.id)?.abort()

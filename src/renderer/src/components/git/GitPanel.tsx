@@ -22,6 +22,7 @@ import { ChangesLoading, ChangesTree } from './ChangesTree'
 import { pullPlan } from './commit-plan'
 import { CommitBox } from './CommitBox'
 import { RollbackDialog } from './RollbackDialog'
+import { AbortOperationDialog } from './AbortOperationDialog'
 
 const ICON = 'size-4.5'
 
@@ -44,7 +45,9 @@ export function GitPanel(): React.JSX.Element {
   const expandAll = useSourceControlStore((state) => state.expandAll)
   const collapseAll = useSourceControlStore((state) => state.collapseAll)
   const dismissFailure = useSourceControlStore((state) => state.dismissFailure)
+  const abort = useSourceControlStore((state) => state.abort)
   const [rollingBack, setRollingBack] = useState<FileTargets | null>(null)
+  const [aborting, setAborting] = useState<GitGroup | null>(null)
   const [trashing, setTrashing] = useState<{ group: GitGroup; files: ChangedFile[] } | null>(null)
 
   // Opening the panel, folders added or removed, and branches or worktrees git reports read it again.
@@ -132,6 +135,7 @@ export function GitPanel(): React.JSX.Element {
           rows={rows}
           onRollback={setRollingBack}
           onTrash={(group, files) => setTrashing({ group, files })}
+          onAbort={setAborting}
         />
       )}
       {failure ? <ActionFailureNotice failure={failure} onDismiss={dismissFailure} /> : null}
@@ -141,6 +145,14 @@ export function GitPanel(): React.JSX.Element {
           targets={rollingBack}
           onConfirm={() => void rollback(rollingBack)}
           onClose={() => setRollingBack(null)}
+        />
+      ) : null}
+      {aborting?.operation ? (
+        <AbortOperationDialog
+          name={aborting.name}
+          operation={aborting.operation.kind}
+          onConfirm={() => void abort(aborting)}
+          onClose={() => setAborting(null)}
         />
       ) : null}
       {trashing ? (

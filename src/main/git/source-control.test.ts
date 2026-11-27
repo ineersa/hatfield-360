@@ -16,6 +16,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import {
+  abortOperation,
   addUntrackedFiles,
   commitChanges,
   diffBase,
@@ -337,7 +338,7 @@ async function conflictingPull(name: string): Promise<string> {
 describe('commitChanges during a merge, cherry-pick or rebase', () => {
   it('concludes a merge Pull stopped on: the checked paths are staged and the merge committed', async () => {
     const repo = await conflictingPull('merge')
-    expect((await readWorkingTreeStatus(repo)).operation).toBe('merge')
+    expect((await readWorkingTreeStatus(repo)).operation?.kind).toBe('merge')
     expect(await changes(repo)).toEqual([
       'conflicted shared.ts',
       'modified kept.ts',
@@ -382,7 +383,7 @@ describe('commitChanges during a merge, cherry-pick or rebase', () => {
       output: 'shared.ts still has conflict markers: resolve them first.'
     })
     expect(git(repo, 'rev-parse', 'HEAD')).toBe(head)
-    expect((await readWorkingTreeStatus(repo)).operation).toBe('merge')
+    expect((await readWorkingTreeStatus(repo)).operation?.kind).toBe('merge')
   })
 
   it('concludes a cherry-pick in a linked worktree, whose markers live in its own git dir', async () => {
@@ -396,7 +397,7 @@ describe('commitChanges during a merge, cherry-pick or rebase', () => {
     write(tree, 'shared.ts', 'target\n')
     git(tree, 'commit', '-q', '-am', 'Target')
     expect(() => git(tree, 'cherry-pick', 'picked')).toThrow('Command failed')
-    expect((await readWorkingTreeStatus(tree)).operation).toBe('cherry-pick')
+    expect((await readWorkingTreeStatus(tree)).operation?.kind).toBe('cherry-pick')
     expect((await readWorkingTreeStatus(repo)).operation).toBeNull()
     write(tree, 'shared.ts', 'both\n')
 
@@ -424,7 +425,7 @@ describe('commitChanges during a merge, cherry-pick or rebase', () => {
     write(repo, 'other.ts', 'changed\n')
     const head = git(repo, 'rev-parse', 'HEAD')
 
-    expect((await readWorkingTreeStatus(repo)).operation).toBe('rebase')
+    expect((await readWorkingTreeStatus(repo)).operation?.kind).toBe('rebase')
     expect(
       await commitChanges(repo, { paths: ['other.ts'], message: 'Mid-rebase', amend: false })
     ).toEqual({
@@ -433,6 +434,87 @@ describe('commitChanges during a merge, cherry-pick or rebase', () => {
         'A rebase is in progress: continue it (git rebase --continue) or abort it (git rebase --abort) in a terminal.'
     })
     expect(git(repo, 'rev-parse', 'HEAD')).toBe(head)
+  })
+})
+
+describe('an operation in progress', () => {
+  it("tells what a Pull is merging, git's prepared message and the conflicts left", async () => {
+    const repo = await conflictingPull('merge-state')
+    // Git names a remote by its URL without `.git`.
+    const remote = join(root, 'merge-state')
+
+    expect((await readWorkingTreeStatus(repo)).operation).toEqual({
+      kind: 'merge',
+      merging: 'origin/main',
+      message: `Merge branch 'main' of ${remote}`,
+      conflicts: 1
+    })
+    write(repo, 'shared.ts', 'resolved\n')
+    expect((await readWorkingTreeStatus(repo)).operation).toMatchObject({ conflicts: 0 })
+    rmSync(join(repo, '.git', 'MERGE_MSG'))
+    expect((await readWorkingTreeStatus(repo)).operation).toMatchObject({ message: null })
+  })
+
+  it('aborts a merge: HEAD and the merged files are back, a change made before it is kept', async () => {
+    const repo = await conflictingPull('merge-abort')
+    const head = git(repo, 'rev-parse', 'HEAD')
+    write(repo, 'shared.ts', 'resolved\n')
+
+    const result = await abortOperation(repo, 'merge')
+
+    expect(result.ok).toBe(true)
+    expect(git(repo, 'rev-parse', 'HEAD')).toBe(head)
+    expect(existsSync(join(repo, '.git', 'MERGE_HEAD'))).toBe(false)
+    expect(read(repo, 'shared.ts')).toBe('ours\n')
+    expect(read(repo, 'other.ts')).toBe('other.ts\n')
+    expect(await changes(repo)).toEqual(['modified kept.ts'])
+    expect((await readWorkingTreeStatus(repo)).operation).toBeNull()
+  })
+
+  it('aborts a cherry-pick, and refuses to abort what is not in progress', async () => {
+    const repo = makeRepo('cherry-pick-abort', ['shared.ts'])
+    git(repo, 'checkout', '-q', '-b', 'picked')
+    write(repo, 'shared.ts', 'picked\n')
+    git(repo, 'commit', '-q', '-am', 'To pick')
+    git(repo, 'checkout', '-q', 'main')
+    write(repo, 'shared.ts', 'main\n')
+    git(repo, 'commit', '-q', '-am', 'Main')
+    const head = git(repo, 'rev-parse', 'HEAD')
+    expect(() => git(repo, 'cherry-pick', 'picked')).toThrow('Command failed')
+
+    expect(await abortOperation(repo, 'merge')).toEqual({
+      ok: false,
+      output: 'A cherry-pick is in progress, not a merge: nothing was aborted.'
+    })
+    expect((await abortOperation(repo, 'cherry-pick')).ok).toBe(true)
+    expect(git(repo, 'rev-parse', 'HEAD')).toBe(head)
+    expect(await changes(repo)).toEqual([])
+    expect(await abortOperation(repo, 'cherry-pick')).toEqual({
+      ok: false,
+      output: 'No merge, cherry-pick, revert or rebase is in progress.'
+    })
+  })
+
+  it('aborts a rebase of the apply backend, and takes a stopped git am for no rebase', async () => {
+    const repo = makeRepo('rebase-apply', ['shared.ts'])
+    git(repo, 'checkout', '-q', '-b', 'topic')
+    write(repo, 'shared.ts', 'topic\n')
+    git(repo, 'commit', '-q', '-am', 'Topic')
+    const patch = git(repo, 'format-patch', '-1', '--stdout', 'HEAD')
+    git(repo, 'checkout', '-q', 'main')
+    write(repo, 'shared.ts', 'main\n')
+    git(repo, 'commit', '-q', '-am', 'Main')
+    git(repo, 'checkout', '-q', 'topic')
+    const head = git(repo, 'rev-parse', 'HEAD')
+    expect(() => git(repo, 'rebase', '--apply', 'main')).toThrow('Command failed')
+    expect((await readWorkingTreeStatus(repo)).operation?.kind).toBe('rebase')
+
+    expect((await abortOperation(repo, 'rebase')).ok).toBe(true)
+    expect(git(repo, 'rev-parse', 'HEAD')).toBe(head)
+    git(repo, 'checkout', '-q', 'main')
+    writeFileSync(join(root, 'topic.patch'), patch)
+    expect(() => git(repo, 'am', join(root, 'topic.patch'))).toThrow('Command failed')
+    expect((await readWorkingTreeStatus(repo)).operation).toBeNull()
   })
 })
 

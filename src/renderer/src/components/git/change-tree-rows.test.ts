@@ -104,6 +104,24 @@ describe('changeTreeRows', () => {
     expect(rows[1]).toMatchObject({ depth: 1 })
   })
 
+  it('puts the notice of a merge first in the group and its conflicted files before the rest', () => {
+    const merging: GitGroup = {
+      ...lib,
+      operation: { kind: 'merge', merging: null, message: null, conflicts: 1 },
+      files: [file('/lib', 'a.ts'), file('/lib', 'b.ts', 'conflicted'), file('/lib', 'c.ts')]
+    }
+    expect(shape(changeTreeRows([merging], new Set(), new Set()))).toEqual([
+      ['group', '/lib'],
+      ['operation', '/lib\0operation\0'],
+      ['file', '/lib\0b.ts'],
+      ['file', '/lib\0a.ts'],
+      ['file', '/lib\0c.ts']
+    ])
+    expect(shape(changeTreeRows([merging], new Set(['/lib']), new Set()))).toEqual([
+      ['group', '/lib']
+    ])
+  })
+
   it('shows only the Unversioned Files row for a group with nothing but untracked files', () => {
     expect(shape(changeTreeRows([fresh], new Set(), new Set()))).toEqual([
       ['group', '/fresh'],

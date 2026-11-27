@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { ChangedFile, GitOperation } from '../../../../shared/source-control-api'
 import { fileKey, type GitGroup } from './change-tree-rows'
-import { amendTarget, commitPlan, pullPlan } from './commit-plan'
+import { amendTarget, commitLabel, commitPlan, pullPlan } from './commit-plan'
 
 const file = (root: string, path: string): ChangedFile => ({
   path,
@@ -27,7 +27,8 @@ const repo = (
   upstream,
   ahead: upstream === null ? null : 0,
   behind: upstream === null ? null : 0,
-  operation,
+  operation:
+    operation === null ? null : { kind: operation, merging: null, message: null, conflicts: 0 },
   files: [file(root, 'a.ts')]
 })
 
@@ -64,18 +65,55 @@ describe('commitPlan', () => {
     ).toEqual(['/app', '/lib'])
   })
 
-  it('says a commit concludes a merge, and leaves a rebase to the terminal', () => {
+  it('names the repository whose merge a commit concludes, and leaves a rebase to the terminal', () => {
     const merging = repo('/app', { operation: 'merge' })
     const rebasing = repo('/lib', { operation: 'rebase' })
 
-    expect(commitPlan([merging], checkedIn('/app'), null, false).note).toBe(
-      'Committing concludes the merge in app and includes everything the merge already staged.'
+    expect(commitPlan([merging, repo('/lib')], checkedIn('/app'), null, false).note).toBe(
+      'Concludes the merge in app.'
     )
+    expect(commitPlan([merging], checkedIn('/app'), null, false).note).toBeNull()
     expect(commitPlan([merging, rebasing], checkedIn('/app', '/lib'), null, false)).toEqual({
       work: [],
       blocked: 'A rebase is in progress in lib: finish it in a terminal',
       note: null
     })
+  })
+
+  it('concludes the one merge in progress with nothing checked, but not one of two', () => {
+    const merging = repo('/app', { operation: 'merge' })
+
+    expect(commitPlan([merging, repo('/lib')], new Set(), null, false).work).toEqual([
+      { group: merging, files: [] }
+    ])
+    expect(
+      commitPlan([merging, repo('/lib', { operation: 'revert' })], new Set(), null, false).work
+    ).toEqual([])
+  })
+
+  it('blocks Amend on a repository in the middle of a merge', () => {
+    expect(commitPlan([repo('/app', { operation: 'merge' })], new Set(), null, true)).toEqual({
+      work: [],
+      blocked: "Amend isn't available during the merge in app",
+      note: null
+    })
+  })
+})
+
+describe('commitLabel', () => {
+  it('says Commit Merge when it concludes one merge, and Commit otherwise', () => {
+    const merging = repo('/app', { operation: 'merge' })
+
+    expect(commitLabel([{ group: merging, files: [] }])).toBe('Commit Merge')
+    expect(commitLabel([{ group: repo('/app', { operation: 'cherry-pick' }), files: [] }])).toBe(
+      'Commit'
+    )
+    expect(
+      commitLabel([
+        { group: merging, files: [] },
+        { group: repo('/lib'), files: [] }
+      ])
+    ).toBe('Commit')
   })
 })
 

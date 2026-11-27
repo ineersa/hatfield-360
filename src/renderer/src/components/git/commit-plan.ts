@@ -1,9 +1,6 @@
-import type {
-  ChangedFile,
-  GitOperation,
-  SourceControlGroup
-} from '../../../../shared/source-control-api'
+import type { ChangedFile, SourceControlGroup } from '../../../../shared/source-control-api'
 import { checkedFilesByGroup, type GitGroup, trackedFiles } from './change-tree-rows'
+import { OPERATION_NAMES } from './operation-notice'
 
 /** Files of one working tree a commit works on. */
 type CommitWork = { group: GitGroup; files: ChangedFile[] }
@@ -28,17 +25,15 @@ export function amendTarget(
   return group ? { group, files: [] } : null
 }
 
-/** Each operation as the commit box speaks of it. */
-const OPERATION_NAMES: Record<GitOperation, string> = {
-  merge: 'merge',
-  'cherry-pick': 'cherry-pick',
-  revert: 'revert',
-  rebase: 'rebase'
-}
+/** A merge, cherry-pick or revert a commit concludes in the group; a rebase is finished in a terminal. */
+export const concludesOperation = (group: GitGroup): boolean =>
+  group.operation !== null && group.operation.kind !== 'rebase'
 
 /**
- * What Commit works on now: each group with checked files, or Amend's one group. `blocked` says
- * why it can't run; `note` what committing does beyond the checked files.
+ * What Commit works on now: each group with checked files, or Amend's one group; with nothing
+ * checked, the one group whose merge, cherry-pick or revert a commit would conclude. `blocked`
+ * says why it can't run; `note` names the repository whose operation it concludes when the
+ * workspace has several.
  */
 export function commitPlan(
   groups: readonly SourceControlGroup[],
@@ -53,23 +48,50 @@ export function commitPlan(
       blocked: 'Amend works on one repository at a time: check files in only one',
       note: null
     }
-  const work = amend ? (target ? [target] : []) : checkedFilesByGroup(groups, checked, trackedFiles)
-  const rebasing = work.find(({ group }) => group.operation === 'rebase')
+  if (target?.group.operation)
+    return {
+      work: [],
+      blocked: `Amend isn't available during the ${OPERATION_NAMES[target.group.operation.kind].noun} in ${target.group.name}`,
+      note: null
+    }
+  const checkedWork = checkedFilesByGroup(groups, checked, trackedFiles)
+  const concludable = gitGroups(groups).filter(concludesOperation)
+  const work = amend
+    ? target
+      ? [target]
+      : []
+    : checkedWork.length === 0 && concludable.length === 1 && concludable[0]
+      ? [{ group: concludable[0], files: [] }]
+      : checkedWork
+  const rebasing = work.find(({ group }) => group.operation?.kind === 'rebase')
   if (rebasing)
     return {
       work: [],
       blocked: `A rebase is in progress in ${rebasing.group.name}: finish it in a terminal`,
       note: null
     }
-  const concluding = work.filter(({ group }) => group.operation !== null)
+  const concluding = work.filter(({ group }) => concludesOperation(group))
   const note =
-    concluding
-      .map(({ group }) => {
-        const operation = OPERATION_NAMES[group.operation ?? 'merge']
-        return `Committing concludes the ${operation} in ${group.name} and includes everything the ${operation} already staged.`
-      })
-      .join(' ') || null
+    gitGroups(groups).length > 1
+      ? concluding
+          .map(
+            ({ group }) =>
+              `Concludes the ${OPERATION_NAMES[group.operation?.kind ?? 'merge'].noun} in ${group.name}.`
+          )
+          .join(' ') || null
+      : null
   return { work, blocked: null, note }
+}
+
+/**
+ * The Commit button's label: what it does when it concludes one group's merge or revert. A
+ * cherry-pick keeps the plain label, whose longer name wouldn't fit beside Commit and Push.
+ */
+export function commitLabel(work: readonly CommitWork[]): string {
+  const [only] = work
+  if (work.length !== 1 || only === undefined) return 'Commit'
+  const kind = only.group.operation?.kind
+  return kind === 'merge' ? 'Commit Merge' : kind === 'revert' ? 'Commit Revert' : 'Commit'
 }
 
 /** Why `git pull` can't run in the group, as the group menu shows it, or null when it can. */

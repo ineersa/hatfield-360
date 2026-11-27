@@ -74,48 +74,116 @@ const pathspecInput = (paths: string[]): string =>
 /** The marker each operation leaves in the git dir while it waits to be concluded, rebase first. */
 const OPERATION_MARKERS: [GitOperation, string][] = [
   ['rebase', 'rebase-merge'],
-  ['rebase', 'rebase-apply'],
+  // `git am` keeps its state in rebase-apply too, without this file: it is no rebase.
+  ['rebase', 'rebase-apply/rebasing'],
   ['merge', 'MERGE_HEAD'],
   ['cherry-pick', 'CHERRY_PICK_HEAD'],
   ['revert', 'REVERT_HEAD']
 ]
 
+/** Where each named file of the working tree's git dir is (a linked worktree has its own); null where git can't say. */
+async function gitDirPaths(root: string, names: string[]): Promise<(string | null)[]> {
+  const result = await query(root, ['rev-parse', ...names.flatMap((name) => ['--git-path', name])])
+  const paths = result.exitCode === 0 ? result.stdout.split('\n') : []
+  return names.map((_name, index) => {
+    const path = paths[index]
+    return path ? resolve(root, path) : null
+  })
+}
+
+const exists = (path: string | null): Promise<boolean> =>
+  path === null
+    ? Promise.resolve(false)
+    : access(path).then(
+        () => true,
+        () => false
+      )
+
+const readText = (path: string | null): Promise<string | null> =>
+  path === null ? Promise.resolve(null) : readFile(path, 'utf8').catch(() => null)
+
 /** The merge, cherry-pick, revert or rebase under way in the working tree, as git's own markers say. */
 async function operationInProgress(root: string): Promise<GitOperation | null> {
-  // `--git-path` finds a linked worktree's own git dir, where its markers live.
-  const result = await query(root, [
-    'rev-parse',
-    ...OPERATION_MARKERS.flatMap(([, marker]) => ['--git-path', marker])
-  ])
-  if (result.exitCode !== 0) return null
-  const paths = result.stdout.split('\n')
-  const present = await Promise.all(
-    OPERATION_MARKERS.map(async (_marker, index) => {
-      const path = paths[index]
-      return path
-        ? access(resolve(root, path)).then(
-            () => true,
-            () => false
-          )
-        : false
-    })
+  const paths = await gitDirPaths(
+    root,
+    OPERATION_MARKERS.map(([, marker]) => marker)
   )
+  const present = await Promise.all(paths.map(exists))
   return OPERATION_MARKERS.find((_marker, index) => present[index])?.[0] ?? null
+}
+
+/** A line git writes where it couldn't merge: `<<<<<<< ours` or `>>>>>>> theirs`. */
+const CONFLICT_MARKER = /^(?:<{7}|>{7})(?: |$)/m
+
+/** The conflicted files among `files` still holding conflict markers: staging one would mark it resolved. */
+async function unresolvedConflicts(files: ChangedFile[]): Promise<ChangedFile[]> {
+  const conflicted = files.filter((file) => file.kind === 'conflicted')
+  const marked = await Promise.all(
+    conflicted.map(async (file) => CONFLICT_MARKER.test((await readText(file.absolutePath)) ?? ''))
+  )
+  return conflicted.filter((_file, index) => marked[index])
+}
+
+/**
+ * The commit message git prepared for concluding a merge, cherry-pick or revert (MERGE_MSG), with
+ * its comment lines (the list of conflicts) taken out as git would; null when it has none.
+ */
+async function preparedCommitMessage(root: string): Promise<string | null> {
+  const [path = null] = await gitDirPaths(root, ['MERGE_MSG'])
+  const text = await readText(path)
+  if (text === null) return null
+  // stripspace knows the configured comment character.
+  const stripped = await runGitWithOutput(root, ['stripspace', '--strip-comments'], {
+    input: text,
+    parsed: true
+  })
+  const message = stripped.exitCode === 0 ? stripped.stdout.replace(/\n+$/, '') : ''
+  return message === '' ? null : message
+}
+
+/**
+ * The branch being merged: the one local branch pointing at MERGE_HEAD, else the one
+ * remote-tracking branch (`origin/main` after a pull); null when none or several do, or the merge
+ * takes several heads.
+ */
+async function mergedBranch(root: string): Promise<string | null> {
+  const [path = null] = await gitDirPaths(root, ['MERGE_HEAD'])
+  const heads = ((await readText(path)) ?? '').trim().split(/\s+/)
+  const [head] = heads
+  if (heads.length !== 1 || head === undefined || !/^[0-9a-f]{40,64}$/.test(head)) return null
+  const refs = await query(root, [
+    'for-each-ref',
+    `--points-at=${head}`,
+    '--format=%(refname)',
+    'refs/heads',
+    'refs/remotes'
+  ])
+  if (refs.exitCode !== 0) return null
+  const names = refs.stdout.split('\n').filter((ref) => ref !== '' && !ref.endsWith('/HEAD'))
+  for (const prefix of ['refs/heads/', 'refs/remotes/']) {
+    const matching = names.filter((ref) => ref.startsWith(prefix))
+    if (matching.length > 1) return null
+    if (matching[0] !== undefined) return matching[0].slice(prefix.length)
+  }
+  return null
 }
 
 /** The branch, its upstream and every changed file of the working tree at `root`. */
 export async function readWorkingTreeStatus(root: string): Promise<WorkingTreeStatus> {
-  const [status, operation] = await Promise.all([
+  const [status, kind] = await Promise.all([
     query(root, [...STATUS_ARGS]),
     operationInProgress(root)
   ])
   if (status.exitCode !== 0) throw new Error(status.output.trim() || 'git status failed')
   const { entries, ...branch } = parseStatus(status.stdout)
-  return {
-    ...branch,
-    operation,
-    files: entries.map((entry) => ({ ...entry, absolutePath: join(root, entry.path) }))
-  }
+  const files = entries.map((entry) => ({ ...entry, absolutePath: join(root, entry.path) }))
+  if (kind === null) return { ...branch, operation: null, files }
+  const [merging, message, conflicts] = await Promise.all([
+    kind === 'merge' ? mergedBranch(root) : null,
+    kind === 'rebase' ? null : preparedCommitMessage(root),
+    unresolvedConflicts(files)
+  ])
+  return { ...branch, operation: { kind, merging, message, conflicts: conflicts.length }, files }
 }
 
 /**
@@ -178,18 +246,6 @@ async function withMessageFile<T>(
   }
 }
 
-/** A line git writes where it couldn't merge: `<<<<<<< ours` or `>>>>>>> theirs`. */
-const CONFLICT_MARKER = /^(?:<{7}|>{7})(?: |$)/m
-
-/** The first checked conflicted file still holding conflict markers; staging it would mark it resolved. */
-async function unresolvedConflict(root: string, files: ChangedFile[]): Promise<string | null> {
-  for (const file of files.filter((each) => each.kind === 'conflicted')) {
-    const text = await readFile(file.absolutePath, 'utf8').catch(() => '')
-    if (CONFLICT_MARKER.test(text)) return file.path
-  }
-  return null
-}
-
 /**
  * Commits the paths as they are in the working tree, leaving every other change (staged or not)
  * where it was. An untracked file is refused: it is added to version control first. During a
@@ -223,9 +279,12 @@ export async function commitChanges(
   const pathspecs = [...new Set([...known, ...paths])]
   const amend = request.amend ? ['--amend'] : []
   if (operation !== null) {
-    const conflict = await unresolvedConflict(root, files)
-    if (conflict !== null)
-      return { ok: false, output: `${conflict} still has conflict markers: resolve them first.` }
+    const [conflict] = await unresolvedConflicts(files)
+    if (conflict !== undefined)
+      return {
+        ok: false,
+        output: `${conflict.path} still has conflict markers: resolve them first.`
+      }
     if (pathspecs.length > 0) {
       const staged = await run(
         root,
@@ -401,4 +460,32 @@ export async function rollbackChanges(
       signal
     )
   )
+}
+
+const ABORTABLE = new Set<unknown>([
+  'merge',
+  'cherry-pick',
+  'revert',
+  'rebase'
+] satisfies GitOperation[])
+
+/**
+ * `git merge|cherry-pick|revert|rebase --abort`, once the operation the user saw is the one under
+ * way: anything else, or nothing in progress, is refused before git runs.
+ */
+export async function abortOperation(
+  root: string,
+  requested: unknown,
+  signal?: AbortSignal
+): Promise<GitOutcome> {
+  if (!ABORTABLE.has(requested)) throw new Error('Invalid git operation.')
+  const operation = await operationInProgress(root)
+  if (operation === null)
+    return { ok: false, output: 'No merge, cherry-pick, revert or rebase is in progress.' }
+  if (operation !== requested)
+    return {
+      ok: false,
+      output: `A ${operation} is in progress, not a ${String(requested)}: nothing was aborted.`
+    }
+  return outcome(await run(root, [operation, '--abort'], undefined, signal))
 }

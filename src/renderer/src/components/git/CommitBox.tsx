@@ -4,7 +4,8 @@ import { PRIMARY_BUTTON, SECONDARY_BUTTON } from '@/components/ui/action-button-
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { rendererPlatform } from '@/lib/shortcut-keys'
 import { useSourceControlStore } from '@/state/source-control-store'
-import { amendTarget, commitPlan, gitGroups } from './commit-plan'
+import { amendTarget, commitLabel, commitPlan, concludesOperation, gitGroups } from './commit-plan'
+import { OPERATION_NAMES } from './operation-notice'
 
 /** The message box's id, for Commit File… to put focus in it. */
 export const COMMIT_MESSAGE_ID = 'commit-message'
@@ -74,34 +75,49 @@ export function CommitBox(): React.JSX.Element {
     gitGroups(groups).length > 1 && target !== null && target !== 'several'
       ? `Amend last commit in ${target.group.name}`
       : 'Amend'
+  // Git can't amend in the middle of an operation: it would leave it half done.
+  const amendBlocked =
+    target !== null && target !== 'several' && target.group.operation !== null
+      ? `Amend isn't available during the ${OPERATION_NAMES[target.group.operation.kind].noun} in ${target.group.name}`
+      : null
+  const concluding = plan.work.filter(({ group }) => concludesOperation(group))
   const blocked =
     plan.blocked ??
     (message.trim() === ''
       ? 'Write a commit message'
-      : checkedCount === 0 && !amend
+      : plan.work.length === 0
         ? 'Check the files to commit'
         : running !== null
           ? 'Wait for the current action to finish'
           : null)
   const files = checkedCount === 1 ? '1 file' : `${checkedCount} files`
+  const [concluded] = concluding
   const what = amend
     ? checkedCount === 0
       ? 'Change the last commit’s message'
       : `Amend the last commit with ${files}`
-    : `Commit ${files}`
+    : concluding.length === 1 && concluded?.group.operation
+      ? `Conclude the ${OPERATION_NAMES[concluded.group.operation.kind].noun} in ${concluded.group.name}: commit everything it staged${checkedCount === 0 ? '' : ` and ${files}`}`
+      : `Commit ${files}`
 
   return (
     <div className="flex shrink-0 flex-col gap-2 border-t border-separator p-2">
-      <label className="type-body flex w-fit items-center gap-2 select-none">
-        <input
-          type="checkbox"
-          checked={amend}
-          disabled={running !== null}
-          onChange={(event) => void setAmend(event.target.checked)}
-          className="accent-primary"
-        />
-        {amendLabel}
-      </label>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <label className="type-body flex w-fit items-center gap-2 select-none has-disabled:text-muted-foreground">
+            <input
+              type="checkbox"
+              checked={amend}
+              disabled={running !== null || (amendBlocked !== null && !amend)}
+              aria-description={amendBlocked ?? undefined}
+              onChange={(event) => void setAmend(event.target.checked)}
+              className="accent-primary"
+            />
+            {amendLabel}
+          </label>
+        </TooltipTrigger>
+        {amendBlocked === null ? null : <TooltipContent side="top">{amendBlocked}</TooltipContent>}
+      </Tooltip>
       <Textarea
         id={COMMIT_MESSAGE_ID}
         aria-label="Commit message"
@@ -120,7 +136,7 @@ export function CommitBox(): React.JSX.Element {
       {plan.note === null ? null : <p className="type-hint">{plan.note}</p>}
       <div className="flex flex-wrap items-center gap-2">
         <CommitButton
-          label="Commit"
+          label={commitLabel(plan.work)}
           className={PRIMARY_BUTTON}
           busy={running === 'commit'}
           blocked={blocked}

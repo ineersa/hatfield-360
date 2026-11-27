@@ -499,7 +499,8 @@ test('Amend works on one repository at a time, a failed push keeps the message f
   }
 })
 
-test("a conflicting Pull's merge is shown and concluded from the Commit panel", async () => {
+/** `commitFixture` whose app has a commit of its own and is behind one on the remote changing a.txt too: Pull conflicts. */
+async function conflictingPullFixture(): Promise<Awaited<ReturnType<typeof commitFixture>>> {
   const fixture = await commitFixture()
   const { repo, remote } = fixture
   const projects = join(repo, '..')
@@ -511,34 +512,90 @@ test("a conflicting Pull's merge is shown and concluded from the Commit panel", 
   git(other, 'push', '-q')
   await writeFile(join(repo, 'a.txt'), 'ours\n')
   git(repo, 'commit', '-q', '-am', 'Ours')
+  return fixture
+}
+
+const operationNotice = (page: Page) =>
+  changes(page).getByRole('treeitem', { name: 'Merge in progress', exact: true })
+
+/** Pulls app, whose merge stops on the conflict in a.txt. */
+async function pullIntoConflict(page: Page): Promise<void> {
+  await showGit(page)
+  await page.getByRole('button', { name: 'Pull', exact: true }).click()
+  await expect(
+    page.getByRole('alert').filter({ hasText: 'Pull failed in app' }).getByLabel('Git output')
+  ).toContainText('CONFLICT (content): Merge conflict in a.txt')
+}
+
+test("a conflicting Pull's merge is shown in its group and concluded with git's message", async () => {
+  const fixture = await conflictingPullFixture()
+  const { repo, remote } = fixture
   try {
     await withApp(
       async (_app, page) => {
-        await showGit(page)
+        await pullIntoConflict(page)
         const app = changes(page).getByRole('treeitem', { name: 'app' })
-        await page.getByRole('button', { name: 'Pull', exact: true }).click()
-        await expect(
-          page.getByRole('alert').filter({ hasText: 'Pull failed in app' }).getByLabel('Git output')
-        ).toContainText('CONFLICT (content): Merge conflict in a.txt')
-        await expect(app).toHaveAccessibleDescription('branch main, merging, 1 to push, 1 to pull')
-        await expect(app).toContainText('Merging')
+        await expect(app).toHaveAccessibleDescription(
+          'branch main, merge in progress, 1 to push, 1 to pull'
+        )
+        await expect(app).toContainText('main')
+        await expect(operationNotice(page)).toHaveAccessibleDescription(
+          'Merging origin/main into main. 1 file with conflicts: resolve it, then commit.'
+        )
         await expect(row(page, 'a.txt')).toHaveAccessibleDescription('conflicted')
+        await expect(include(page, 'a.txt')).toBeChecked()
+        await expect(page.getByRole('checkbox', { name: 'Amend' })).toBeDisabled()
 
         await writeFile(join(repo, 'a.txt'), 'ours and theirs\n')
-        await include(page, 'a.txt').click()
-        await expect(
-          page.getByText(
-            'Committing concludes the merge in app and includes everything the merge already staged.'
-          )
-        ).toBeVisible()
+        await page.getByRole('button', { name: 'Refresh', exact: true }).click()
+        await expect(operationNotice(page)).toHaveAccessibleDescription(
+          'Merging origin/main into main. No conflicts left: commit to conclude the merge.'
+        )
+        // Git names the remote by its path without `.git`.
+        await expect(message(page)).toHaveValue(`Merge branch 'main' of ${remote.slice(0, -4)}`)
         await saveScreenshot(page, 'git-merging')
-        await message(page).fill('Merge theirs')
-        await commitButton(page).click()
+        await page.getByRole('button', { name: 'Commit Merge', exact: true }).click()
 
         await expect(app).toHaveAccessibleDescription('branch main, 2 to push')
+        await expect(operationNotice(page)).toHaveCount(0)
         await expect(changes(page).getByText('No changes')).toBeVisible()
-        expect(gitOutput(repo, 'log', '-1', '--format=%P %s').split(' ')).toHaveLength(4)
+        expect(gitOutput(repo, 'log', '-1', '--format=%P').split(' ')).toHaveLength(2)
+        expect(gitOutput(repo, 'log', '-1', '--format=%s')).toBe(
+          `Merge branch 'main' of ${remote.slice(0, -4)}`
+        )
         expect(gitOutput(repo, 'show', 'HEAD:c.txt')).toBe('c.txt from the other clone')
+      },
+      { userDataDir: fixture.userData, env: fixture.env }
+    )
+  } finally {
+    await fixture.cleanup()
+  }
+})
+
+test("Abort in a conflicting Pull's notice puts app back as it was before the merge, once confirmed", async () => {
+  const fixture = await conflictingPullFixture()
+  const { repo } = fixture
+  const head = gitOutput(repo, 'rev-parse', 'HEAD')
+  try {
+    await withApp(
+      async (_app, page) => {
+        await pullIntoConflict(page)
+        expect(
+          await page.evaluate(
+            "window.desktop.abortGitOperation('/', 'merge').then(() => 'aborted', (error) => error.message)"
+          )
+        ).toContain('Choose a git repository in the current workspace.')
+
+        await operationNotice(page).getByRole('button', { name: 'Abort the merge in app…' }).click()
+        const dialog = page.getByRole('alertdialog', { name: 'Abort the merge in app?' })
+        await expect(dialog.getByRole('button', { name: 'Cancel' })).toBeFocused()
+        await dialog.getByRole('button', { name: 'Abort Merge' }).click()
+
+        await expect(operationNotice(page)).toHaveCount(0)
+        await expect(changes(page).getByText('No changes')).toBeVisible()
+        expect(gitOutput(repo, 'rev-parse', 'HEAD')).toBe(head)
+        expect(gitOutput(repo, 'status', '--porcelain')).toBe('')
+        expect(existsSync(join(repo, '.git', 'MERGE_HEAD'))).toBe(false)
       },
       { userDataDir: fixture.userData, env: fixture.env }
     )

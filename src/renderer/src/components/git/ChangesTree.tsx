@@ -7,13 +7,16 @@ import {
   GitBranch,
   GitCompareArrows,
   History,
-  type LucideIcon
+  type LucideIcon,
+  TriangleAlert
 } from 'lucide-react'
 import { type KeyboardEvent, type ReactNode, useRef } from 'react'
 import { FileTreeIcon } from '@/components/icons/FileTreeIcon'
 import { RootFolderIcon } from '@/components/icons/RootFolderIcon'
 import { treeIndent, treeRowClass } from '@/components/tree/tree-row-style'
 import { useLoadingShown } from '@/components/tree/use-loading-delay'
+import { SECONDARY_BUTTON } from '@/components/ui/action-button-classes'
+import { Alert, AlertTitle } from '@/components/ui/alert'
 import { ContextMenu, ContextMenuTrigger } from '@/components/ui/context-menu'
 import { Spinner } from '@/components/ui/spinner'
 import {
@@ -31,7 +34,6 @@ import { useSourceControlStore } from '@/state/source-control-store'
 import type {
   ChangedFile,
   ChangeKind,
-  GitOperation,
   HunkKind,
   SourceControlGroup
 } from '../../../../shared/source-control-api'
@@ -48,6 +50,7 @@ import {
 } from './change-tree-rows'
 import { FileRowMenu, GroupMenu, type RowMenuRequests, UnversionedMenu } from './ChangeRowMenus'
 import { COMMIT_MESSAGE_ID } from './CommitBox'
+import { OPERATION_NAMES, operationNotice } from './operation-notice'
 
 /** Each kind's letter and colour; the letter and its description carry it, never the colour alone. */
 export const CHANGE_KINDS: Record<ChangeKind, { letter: string; label: string; text: string }> = {
@@ -59,24 +62,20 @@ export const CHANGE_KINDS: Record<ChangeKind, { letter: string; label: string; t
   conflicted: { letter: 'C', label: 'conflicted', text: 'text-vcs-conflicted' }
 }
 
-/** What the group row says git is in the middle of, next to the branch. */
-const OPERATION_STATES: Record<GitOperation, string> = {
-  merge: 'Merging',
-  'cherry-pick': 'Cherry-picking',
-  revert: 'Reverting',
-  rebase: 'Rebasing'
-}
-
 const nameOf = (path: string): string => path.slice(path.lastIndexOf('/') + 1)
 const folderOf = (path: string): string => path.slice(0, Math.max(0, path.lastIndexOf('/')))
 
-const isNavigable = (row: ChangeRow): boolean =>
-  row.type === 'group' || row.type === 'file' || row.type === 'unversioned'
+const isNavigable = (row: ChangeRow): boolean => row.type !== 'note' && row.type !== 'error'
 
 const rootOf = (row: ChangeRow): string =>
-  row.type === 'group' || row.type === 'file' || row.type === 'unversioned'
-    ? row.group.root
-    : row.key
+  row.type === 'note' || row.type === 'error' ? row.key : row.group.root
+
+/** Keys that move through the tree even from a row's button, so focus never gets stuck there. */
+const NAVIGATION_KEYS = new Set(['ArrowDown', 'ArrowUp', 'ArrowLeft', 'ArrowRight', 'Home', 'End'])
+
+/** "merge in progress", as the group row describes it to assistive tech. */
+const operationDescription = (group: GitGroup): string | null =>
+  group.operation === null ? null : `${OPERATION_NAMES[group.operation.kind].noun} in progress`
 
 /** "1 file", "3 files". */
 const fileCount = (count: number): string => (count === 1 ? '1 file' : `${count} files`)
@@ -198,9 +197,11 @@ function syncSummary(group: GitGroup): string {
 
 function GroupRowContent({
   group,
+  expanded,
   checked
 }: {
   group: SourceControlGroup
+  expanded: boolean
   checked: ReadonlySet<string>
 }): React.JSX.Element {
   const toggleGroup = useSourceControlStore((state) => state.toggleGroup)
@@ -222,35 +223,30 @@ function GroupRowContent({
         />
       ) : null}
       <RootFolderIcon className="size-4.5 shrink-0" />
-      <span className="type-project-row ml-1 max-w-1/2 shrink-0 truncate">{group.name}</span>
-      {/* A merge or other operation under way takes the branch's place: the row has no room for both. */}
-      <span
-        className={cn(
-          'type-hint ml-1 flex min-w-0 shrink items-center gap-1',
-          group.operation !== null && 'text-vcs-conflicted'
-        )}
-      >
+      {/* Both give way on a narrow row, the branch first; the counts and buttons go below a width (all are in the tooltip and menu). */}
+      <span className="type-project-row ml-1 max-w-1/2 min-w-0 truncate">{group.name}</span>
+      <span className="type-hint ml-1 flex min-w-3.5 shrink-[4] items-center gap-1 overflow-hidden">
         <GitBranch className="size-3.5 shrink-0" aria-hidden />
-        <span className="truncate">
-          {group.operation === null
-            ? (group.branch ?? 'detached')
-            : OPERATION_STATES[group.operation]}
-        </span>
+        <span className="truncate">{group.branch ?? 'detached'}</span>
       </span>
+      {/* Unfolded, the notice under the row says it; folded, this keeps it in sight without crowding the branch. */}
+      {group.operation === null || expanded ? null : (
+        <TriangleAlert className="ml-1 size-3.5 shrink-0 text-warning" aria-hidden />
+      )}
       {group.ahead ? (
-        <span className="type-hint ml-1 flex shrink-0 items-center tabular-nums">
+        <span className="type-hint ml-1 flex shrink-0 items-center tabular-nums @max-[220px]:hidden">
           <ArrowUp className="size-3" aria-hidden />
           {group.ahead}
         </span>
       ) : null}
       {group.behind ? (
-        <span className="type-hint ml-0.5 flex shrink-0 items-center tabular-nums">
+        <span className="type-hint ml-0.5 flex shrink-0 items-center tabular-nums @max-[220px]:hidden">
           <ArrowDown className="size-3" aria-hidden />
           {group.behind}
         </span>
       ) : null}
       {sync ? <span className="sr-only">{sync}</span> : null}
-      <span className="ml-auto flex shrink-0 items-center gap-0.5 pl-1">
+      <span className="ml-auto flex shrink-0 items-center gap-0.5 pl-1 @max-[260px]:hidden">
         <HunkButton kind="review" group={group} icon={GitCompareArrows} />
         <HunkButton kind="log" group={group} icon={History} />
       </span>
@@ -270,11 +266,7 @@ function groupTip(group: SourceControlGroup): ReactNode {
           : `Tracking ${group.upstream}${sync ? ` · ${sync}` : ''}`}
       </span>
       {group.operation === null ? null : (
-        <span className="text-tooltip-muted-foreground">
-          {group.operation === 'rebase'
-            ? 'Rebasing: finish it in a terminal'
-            : `${OPERATION_STATES[group.operation]}: committing concludes it`}
-        </span>
+        <span className="text-tooltip-muted-foreground">{operationNotice(group)?.title}</span>
       )}
     </span>
   )
@@ -427,12 +419,16 @@ function withMenu(
 export function ChangesTree({
   rows,
   onRollback,
-  onTrash
+  onTrash,
+  onAbort
 }: {
   rows: ChangeRow[]
   onRollback: RowMenuRequests['onRollback']
   onTrash: RowMenuRequests['onTrash']
+  /** Asks to confirm aborting the group's operation. */
+  onAbort: (group: GitGroup) => void
 }): React.JSX.Element {
+  const running = useSourceControlStore((state) => state.running)
   const checked = useSourceControlStore((state) => state.checked)
   const toAdd = useSourceControlStore((state) => state.toAdd)
   const selected = useSourceControlStore((state) => state.selected)
@@ -478,7 +474,11 @@ export function ChangesTree({
 
   /** The row a file or Unversioned Files row hangs under. */
   const parentOf = (row: ChangeRow): ChangeRow | undefined => {
-    if (row.type === 'unversioned' || (row.type === 'file' && row.depth === 1))
+    if (
+      row.type === 'unversioned' ||
+      row.type === 'operation' ||
+      (row.type === 'file' && row.depth === 1)
+    )
       return navigable.find((each) => each.key === row.group.root)
     if (row.type === 'file')
       return navigable.find((each) => each.type === 'unversioned' && each.group === row.group)
@@ -486,7 +486,7 @@ export function ChangesTree({
   }
 
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>): void => {
-    if (event.target instanceof HTMLButtonElement) return
+    if (event.target instanceof HTMLButtonElement && !NAVIGATION_KEYS.has(event.key)) return
     const index = navigable.findIndex((row) => row.key === tabbable)
     const row = navigable[index]
     if (!row) return
@@ -601,7 +601,10 @@ export function ChangesTree({
     }
     if (row.type === 'group')
       return (
-        <div key={row.key} className="sticky top-0 z-10 -mx-2 bg-island px-2 not-first:mt-1.5">
+        <div
+          key={row.key}
+          className="@container sticky top-0 z-10 -mx-2 bg-island px-2 not-first:mt-1.5"
+        >
           {withMenu(
             row.key,
             <GroupMenu group={row.group} />,
@@ -615,7 +618,7 @@ export function ChangesTree({
                 row.group.status === 'git'
                   ? [
                       `branch ${row.group.branch ?? 'detached'}`,
-                      row.group.operation && OPERATION_STATES[row.group.operation].toLowerCase(),
+                      operationDescription(row.group),
                       syncSummary(row.group)
                     ]
                       .filter(Boolean)
@@ -632,11 +635,70 @@ export function ChangesTree({
                 className={cn('size-4 shrink-0 text-muted-foreground', row.expanded && 'rotate-90')}
                 aria-hidden
               />
-              <GroupRowContent group={row.group} checked={checked} />
+              <GroupRowContent group={row.group} expanded={row.expanded} checked={checked} />
             </div>
           )}
         </div>
       )
+    if (row.type === 'operation') {
+      const { group } = row
+      const notice = operationNotice(group)
+      if (notice === null) return <div key={row.key} />
+      const noun = group.operation === null ? '' : OPERATION_NAMES[group.operation.kind].noun
+      const blocked = running !== null
+      return (
+        <Alert
+          {...common}
+          key={row.key}
+          role="treeitem"
+          aria-level={2}
+          aria-label={notice.title}
+          aria-description={[notice.detail, notice.status].filter(Boolean).join(' ')}
+          className={cn(
+            'my-1 shrink-0 cursor-default gap-x-2 border-warning-border bg-warning-background px-2.5 py-2 outline-none select-none focus-visible:ring-1 focus-visible:ring-ring',
+            isSelected && 'group-focus-within/tree:ring-1 group-focus-within/tree:ring-ring'
+          )}
+          onClick={() => choose(row)}
+        >
+          <TriangleAlert className="text-warning" aria-hidden />
+          <div className="col-start-2 flex min-w-0 flex-wrap items-start justify-between gap-x-2 gap-y-1.5">
+            <div className="flex min-w-0 flex-[1_1_9rem] flex-col gap-0.5">
+              <AlertTitle className="type-section-title line-clamp-none break-words">
+                {notice.title}
+              </AlertTitle>
+              {notice.detail === null ? null : (
+                <p className="type-hint break-words">{notice.detail}</p>
+              )}
+              <p className="type-hint break-words text-foreground" aria-live="polite">
+                {notice.status}
+              </p>
+            </div>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  tabIndex={row.key === tabbable ? 0 : -1}
+                  aria-label={`Abort the ${noun} in ${group.name}…`}
+                  aria-disabled={blocked || undefined}
+                  aria-busy={running === 'abort' || undefined}
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    if (!blocked) onAbort(group)
+                  }}
+                  className={cn(SECONDARY_BUTTON, 'shrink-0')}
+                >
+                  {running === 'abort' ? <Spinner className="size-4" aria-hidden /> : null}
+                  Abort
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">
+                {blocked ? 'Wait for the current action to finish' : `Abort the ${noun}…`}
+              </TooltipContent>
+            </Tooltip>
+          </div>
+        </Alert>
+      )
+    }
     if (row.type === 'unversioned') {
       const { group, files } = row
       return withMenu(

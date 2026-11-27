@@ -8,6 +8,9 @@ export const fileKey = (root: string, path: string): string => `${root}\0${path}
 /** The Unversioned Files row of a group; no path holds `\0`, so no file shares it. */
 const unversionedKey = (root: string): string => `${root}\0unversioned\0`
 
+/** The notice of a group's operation in progress. */
+const operationKey = (root: string): string => `${root}\0operation\0`
+
 export const isUntracked = (file: ChangedFile): boolean => file.kind === 'untracked'
 
 /** The changes that can be committed: an untracked file is added to version control first. */
@@ -26,6 +29,8 @@ export type ChangeRow =
   /** `depth` 2 is under the group's Unversioned Files row. */
   | { type: 'file'; key: string; group: GitGroup; file: ChangedFile; depth: 1 | 2 }
   | { type: 'unversioned'; key: string; group: GitGroup; files: ChangedFile[]; expanded: boolean }
+  /** The merge, cherry-pick, revert or rebase under way in the group, above its files. */
+  | { type: 'operation'; key: string; group: GitGroup }
   /** Says why a group lists no files: none changed, not git, or git failed. */
   | { type: 'note'; key: string; note: 'clean' | 'not-git' }
   | { type: 'error'; key: string; message: string }
@@ -33,9 +38,16 @@ export type ChangeRow =
 const fileRows = (group: GitGroup, files: ChangedFile[], depth: 1 | 2): ChangeRow[] =>
   files.map((file) => ({ type: 'file', key: fileKey(group.root, file.path), group, file, depth }))
 
+/** Conflicted files first, the rest in git's order: during an operation they are what blocks the commit. */
+const conflictsFirst = (files: ChangedFile[]): ChangedFile[] => [
+  ...files.filter((file) => file.kind === 'conflicted'),
+  ...files.filter((file) => file.kind !== 'conflicted')
+]
+
 /**
- * Each group's row, followed (unless folded) by its tracked changes and then its Unversioned
- * Files row, folded unless its root is in `unversionedOpen`, or a row saying why it has none.
+ * Each group's row, followed (unless folded) by the notice of an operation in progress, its
+ * tracked changes (conflicted first during an operation) and then its Unversioned Files row,
+ * folded unless its root is in `unversionedOpen`, or a row saying why it has none.
  */
 export function changeTreeRows(
   groups: readonly SourceControlGroup[],
@@ -50,7 +62,10 @@ export function changeTreeRows(
     if (group.status === 'not-git') return [head, { type: 'note', key: inner, note: 'not-git' }]
     if (group.status === 'error')
       return [head, { type: 'error', key: inner, message: group.message }]
-    if (group.files.length === 0) return [head, { type: 'note', key: inner, note: 'clean' }]
+    const notice: ChangeRow[] =
+      group.operation === null ? [] : [{ type: 'operation', key: operationKey(group.root), group }]
+    if (group.files.length === 0)
+      return [head, ...notice, { type: 'note', key: inner, note: 'clean' }]
     const untracked = untrackedFiles(group)
     const open = unversionedOpen.has(group.root)
     const unversioned: ChangeRow[] =
@@ -66,7 +81,9 @@ export function changeTreeRows(
             },
             ...(open ? fileRows(group, untracked, 2) : [])
           ]
-    return [head, ...fileRows(group, trackedFiles(group), 1), ...unversioned]
+    const tracked =
+      group.operation === null ? trackedFiles(group) : conflictsFirst(trackedFiles(group))
+    return [head, ...notice, ...fileRows(group, tracked, 1), ...unversioned]
   })
 }
 

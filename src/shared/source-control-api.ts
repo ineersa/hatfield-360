@@ -21,6 +21,17 @@ export type ChangedFile = {
 /** What git is in the middle of: a commit then concludes a merge, cherry-pick or revert; a rebase is finished in a terminal. */
 export type GitOperation = 'merge' | 'cherry-pick' | 'revert' | 'rebase'
 
+/** A merge, cherry-pick, revert or rebase waiting to be concluded or aborted. */
+export type GitOperationState = {
+  kind: GitOperation
+  /** A merge's branch (`origin/main`) when exactly one branch points at what is merged; else null. */
+  merging: string | null
+  /** The message git prepared for concluding it (MERGE_MSG without its comments); null for a rebase or when git wrote none. */
+  message: string | null
+  /** Conflicted files still holding conflict markers: what the commit waits for. */
+  conflicts: number
+}
+
 type SourceControlGroupBase = {
   /** The workspace project folder the group belongs to. */
   project: string
@@ -44,7 +55,7 @@ export type SourceControlGroup =
       ahead: number | null
       behind: number | null
       /** A merge, cherry-pick, revert or rebase waiting to be concluded; null when none is. */
-      operation: GitOperation | null
+      operation: GitOperationState | null
       /** Untracked files are listed one by one; only a nested repository is listed as a folder. */
       files: ChangedFile[]
     })
@@ -91,6 +102,7 @@ export const SOURCE_CONTROL_CHANNELS = {
   fetch: 'source-control:fetch',
   addUntracked: 'source-control:add-untracked',
   ignoreUntracked: 'source-control:ignore-untracked',
+  abortOperation: 'source-control:abort-operation',
   launchHunk: 'source-control:launch-hunk',
   cancel: 'source-control:cancel'
 } as const
@@ -123,7 +135,13 @@ export type SourceControlApi = {
    */
   ignoreUntrackedFile: (root: string, path: string) => Promise<void>
   /**
-   * Stops the commit, push, pull, fetch, rollback or add this window is running, with its hooks and
+   * `git <operation> --abort` in the root: a merge, cherry-pick or revert puts back the files it
+   * changed, a rebase returns the branch and working tree to where they were. Refused before git
+   * runs when nothing is in progress or another operation than `operation` is.
+   */
+  abortGitOperation: (root: string, operation: GitOperation) => Promise<GitOutcome>
+  /**
+   * Stops the commit, push, pull, fetch, rollback, add or abort this window is running, with its hooks and
    * ssh; that call resolves `{ ok: false, cancelled: true }`. Nothing running: nothing happens.
    */
   cancelSourceControlAction: () => Promise<void>
