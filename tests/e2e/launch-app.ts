@@ -4,7 +4,7 @@ import {
   type ElectronApplication,
   type Page
 } from '@playwright/test'
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 
@@ -17,6 +17,23 @@ const launchTarget = packagedExecutable ? { executablePath: packagedExecutable }
 export async function makeTempDir(prefix: string): Promise<[string, () => Promise<void>]> {
   const dir = await mkdtemp(join(tmpdir(), `hatfield-e2e-${prefix}-`))
   return [dir, () => rm(dir, { recursive: true, force: true })]
+}
+
+/**
+ * A Hatfield command no machine has, as on the release runners. Otherwise the app runs the user's
+ * own `hatfield session:list` in every test project, which writes a `.hatfield` folder into it.
+ */
+const NO_AGENT_SETTINGS = {
+  'agents.hatfield': { executable: 'hatfield-360-e2e-no-agent', args: [] }
+}
+
+/** Settings for a launch whose test wrote none; a test's own settings.json is left as it is. */
+async function isolateAgents(userDataDir: string): Promise<void> {
+  await writeFile(join(userDataDir, 'settings.json'), JSON.stringify(NO_AGENT_SETTINGS), {
+    flag: 'wx'
+  }).catch((error: unknown) => {
+    if (!(error instanceof Error && 'code' in error && error.code === 'EEXIST')) throw error
+  })
 }
 
 /** Whether the app under test is the packaged executable (release smoke tests) rather than the build. */
@@ -39,6 +56,7 @@ export async function withApp(
     options.userDataDir === undefined
       ? await makeTempDir('user-data')
       : [options.userDataDir, async () => {}]
+  if (ownDir !== null) await isolateAgents(ownDir)
   // Test terminals run the user's real shell: keep what they type out of the user's history.
   const [historyDir, cleanHistory] = await makeTempDir('shell-history')
   const app = await electron.launch({
