@@ -1,0 +1,167 @@
+import { expect, test, type Page } from '@playwright/test'
+import { writeFile } from 'node:fs/promises'
+import { join } from 'node:path'
+import { changes, commitFixture, git, gitOutput, row, showGit } from './git-repository'
+import { saveScreenshot, withApp } from './launch-app'
+
+const popup = (page: Page) => page.getByRole('dialog', { name: 'Branches of app' })
+const options = (page: Page) =>
+  popup(page).getByRole('listbox', { name: 'Branches' }).getByRole('option')
+const option = (page: Page, name: string) => options(page).filter({ hasText: name })
+const search = (page: Page) => popup(page).getByRole('combobox', { name: 'Search branches' })
+const openBranches = (page: Page) =>
+  changes(page).getByRole('button', { name: 'Branches of app' }).click()
+const current = (repo: string): string => gitOutput(repo, 'branch', '--show-current')
+const branches = (repo: string): string[] =>
+  gitOutput(repo, 'for-each-ref', '--format=%(refname:short)', 'refs/heads').split('\n')
+/** The project's row in the Agents view's workspace list, which names its branch. */
+const workspaceRow = (page: Page) =>
+  page.getByRole('list', { name: 'Workspace folders' }).locator(':scope > li[aria-label]')
+
+test('the branch popup lists, filters and switches branches, and creates and deletes them', async () => {
+  const fixture = await commitFixture()
+  const { repo } = fixture
+  git(repo, 'branch', 'feature')
+  git(repo, 'branch', 'merged-work')
+  git(repo, 'switch', '-q', '-c', 'wip')
+  await writeFile(join(repo, 'wip.txt'), 'wip\n')
+  git(repo, 'add', 'wip.txt')
+  git(repo, 'commit', '-q', '-m', 'Work in progress')
+  git(repo, 'switch', '-q', 'main')
+  // A branch only the remote has.
+  git(repo, 'push', '-q', 'origin', 'main:shared')
+  try {
+    await withApp(
+      async (_app, page) => {
+        await showGit(page)
+        const app = row(page, 'app')
+        await expect(app).toHaveAccessibleDescription('branch main')
+
+        await openBranches(page)
+        await expect(options(page)).toHaveText([
+          'New Branch…',
+          'main',
+          'feature',
+          'merged-work',
+          'wip',
+          'origin/main',
+          'origin/shared'
+        ])
+        await expect(option(page, 'main').first()).toHaveAccessibleName('main, current')
+        await saveScreenshot(page, 'git-branches')
+        await search(page).fill('feat')
+        await expect(options(page)).toHaveText(['feature'])
+        await page.keyboard.press('Enter')
+        await expect(popup(page)).toHaveCount(0)
+        await expect(app).toHaveAccessibleDescription('branch feature')
+        expect(current(repo)).toBe('feature')
+
+        // A remote branch becomes a local branch tracking it.
+        await openBranches(page)
+        await option(page, 'origin/shared').click()
+        await expect(app).toHaveAccessibleDescription('branch shared')
+        expect(gitOutput(repo, 'rev-parse', '--abbrev-ref', '@{upstream}')).toBe('origin/shared')
+
+        // New Branch… starts at the current branch and switches to the new one.
+        await openBranches(page)
+        await option(page, 'New Branch…').click()
+        const dialog = page.getByRole('alertdialog', { name: 'New Branch' })
+        await expect(dialog).toContainText('In app, from the current branch, shared')
+        await dialog.getByRole('textbox', { name: 'Branch name' }).fill('main')
+        await dialog.getByRole('button', { name: 'Create' }).click()
+        await expect(dialog.getByRole('alert')).toHaveText('A branch named main already exists.')
+        await dialog.getByRole('textbox', { name: 'Branch name' }).fill('topic/new')
+        await dialog.getByRole('button', { name: 'Create' }).click()
+        await expect(dialog).toHaveCount(0)
+        await expect(app).toHaveAccessibleDescription('branch topic/new')
+        expect(current(repo)).toBe('topic/new')
+
+        // Right Arrow lists a branch's other actions; a merged branch is deleted once confirmed.
+        await openBranches(page)
+        await search(page).fill('merged')
+        await page.keyboard.press('ArrowRight')
+        const actions = popup(page).getByRole('listbox', { name: 'Actions for merged-work' })
+        await expect(actions.getByRole('option')).toHaveText([
+          'Switch to merged-work',
+          'New Branch from merged-work…',
+          'Delete merged-work…'
+        ])
+        await actions.getByRole('option', { name: 'Delete merged-work…' }).click()
+        const confirm = page.getByRole('alertdialog', { name: 'Delete branch merged-work?' })
+        await confirm.getByRole('button', { name: 'Delete', exact: true }).click()
+        await expect(confirm).toHaveCount(0)
+        expect(branches(repo)).not.toContain('merged-work')
+
+        // An unmerged branch names the commit it would lose and needs Force Delete.
+        await openBranches(page)
+        await search(page).fill('wip')
+        await page.keyboard.press('ArrowRight')
+        await page.keyboard.press('End')
+        await page.keyboard.press('Enter')
+        await page
+          .getByRole('alertdialog', { name: 'Delete branch wip?' })
+          .getByRole('button', { name: 'Delete', exact: true })
+          .click()
+        const refused = page.getByRole('alertdialog', { name: 'wip is not fully merged' })
+        await expect(
+          refused.getByRole('list', { name: 'Commits that would be lost' })
+        ).toContainText('Work in progress')
+        expect(branches(repo)).toContain('wip')
+        await saveScreenshot(page, 'git-branch-unmerged')
+        await refused.getByRole('button', { name: 'Force Delete' }).click()
+        await expect(refused).toHaveCount(0)
+        expect(branches(repo)).not.toContain('wip')
+
+        // The workspace list follows the switches.
+        await page
+          .getByRole('navigation', { name: 'Views' })
+          .getByRole('button', { name: 'Agents', exact: true })
+          .click()
+        await expect(workspaceRow(page)).toHaveText(['apptopic/new'])
+      },
+      { userDataDir: fixture.userData, env: fixture.env }
+    )
+  } finally {
+    await fixture.cleanup()
+  }
+})
+
+test("a switch git refuses shows git's output and changes nothing; the repository menu opens the branches", async () => {
+  const fixture = await commitFixture()
+  const { repo } = fixture
+  git(repo, 'switch', '-q', '-c', 'other')
+  await writeFile(join(repo, 'a.txt'), 'other\n')
+  git(repo, 'commit', '-q', '-am', 'Change a on other')
+  git(repo, 'switch', '-q', 'main')
+  await writeFile(join(repo, 'a.txt'), 'mine\n')
+  git(repo, 'switch', '-q', '--detach')
+  try {
+    await withApp(
+      async (_app, page) => {
+        await showGit(page)
+        const app = row(page, 'app')
+        await expect(app).toHaveAccessibleDescription(/^branch detached/)
+        await app.click({ button: 'right' })
+        await page.getByRole('menuitem', { name: 'Branches…' }).click()
+        await expect(popup(page)).toContainText('HEAD is detached at')
+        await search(page).fill('other')
+        await page.keyboard.press('Enter')
+        await expect(
+          page.getByRole('alert').filter({ hasText: 'Switch to other failed in app' })
+        ).toContainText('a.txt')
+        expect(gitOutput(repo, 'branch', '--show-current')).toBe('')
+        await expect(app).toHaveAccessibleDescription(/^branch detached/)
+
+        // From a detached HEAD a branch can be switched to.
+        await openBranches(page)
+        await search(page).fill('main')
+        await page.keyboard.press('Enter')
+        await expect(app).toHaveAccessibleDescription(/^branch main/)
+        expect(current(repo)).toBe('main')
+      },
+      { userDataDir: fixture.userData, env: fixture.env }
+    )
+  } finally {
+    await fixture.cleanup()
+  }
+})

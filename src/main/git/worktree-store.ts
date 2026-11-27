@@ -141,6 +141,11 @@ export class WorktreeStore {
     if (await this.refresh(folder)) this.emit()
   }
 
+  /** Lists the project's worktrees again now, as after a branch switch, without waiting for its watch. */
+  async relist(folder: string): Promise<void> {
+    if (await this.refresh(folder)) this.emit()
+  }
+
   private async refresh(folder: string): Promise<boolean> {
     const project = this.projects.get(folder)
     if (!project) return false

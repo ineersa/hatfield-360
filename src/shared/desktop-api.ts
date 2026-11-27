@@ -1,4 +1,5 @@
 import type { AgentApi } from './agent-api'
+import type { BranchApi } from './branch-api'
 import type { ChatAgentApi } from './chat-agent-api'
 import type { EditorApi } from './editor-api'
 import type { FilesSessionApi } from './files-session-api'
@@ -39,6 +40,7 @@ export type DesktopApi = WorkspaceApi &
   WebLinkApi &
   WorktreeApi &
   SourceControlApi &
+  BranchApi &
   FileTreeApi &
   SearchApi &
   SearchEverywhereApi &

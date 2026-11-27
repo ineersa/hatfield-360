@@ -4,7 +4,6 @@ import {
   ChevronRight,
   CircleAlert,
   FilePlus,
-  GitBranch,
   GitCompareArrows,
   History,
   type LucideIcon,
@@ -48,6 +47,7 @@ import {
   isUntracked,
   trackedFiles
 } from './change-tree-rows'
+import { BranchPopover } from './BranchPopover'
 import { FileRowMenu, GroupMenu, type RowMenuRequests, UnversionedMenu } from './ChangeRowMenus'
 import { COMMIT_MESSAGE_ID } from './CommitBox'
 import { OPERATION_NAMES, operationNotice } from './operation-notice'
@@ -225,10 +225,7 @@ function GroupRowContent({
       <RootFolderIcon className="size-4.5 shrink-0" />
       {/* Both give way on a narrow row, the branch first; the counts and buttons go below a width (all are in the tooltip and menu). */}
       <span className="type-project-row ml-1 max-w-1/2 min-w-0 truncate">{group.name}</span>
-      <span className="type-hint ml-1 flex min-w-3.5 shrink-[4] items-center gap-1 overflow-hidden">
-        <GitBranch className="size-3.5 shrink-0" aria-hidden />
-        <span className="truncate">{group.branch ?? 'detached'}</span>
-      </span>
+      <BranchPopover group={group} />
       {/* Unfolded, the notice under the row says it; folded, this keeps it in sight without crowding the branch. */}
       {group.operation === null || expanded ? null : (
         <TriangleAlert className="ml-1 size-3.5 shrink-0 text-warning" aria-hidden />

@@ -5,6 +5,8 @@ import {
   EyeOff,
   FileCode,
   FilePlus,
+  GitBranch,
+  GitBranchPlus,
   GitCommitHorizontal,
   GitCompareArrows,
   History,
@@ -220,10 +222,29 @@ export function GroupMenu({ group }: { group: SourceControlGroup }): React.JSX.E
   const pull = useSourceControlStore((state) => state.pull)
   const push = useSourceControlStore((state) => state.push)
   const openHunk = useHunkTabStore((state) => state.open)
+  const openBranches = useSourceControlStore((state) => state.openBranches)
+  const openNewBranch = useSourceControlStore((state) => state.openNewBranch)
+  const afterMenu = useAfterMenu()
   return (
-    <OpenTerminalMenuContent cwd={group.root} disabled={false}>
+    <OpenTerminalMenuContent
+      cwd={group.root}
+      disabled={false}
+      onCloseAutoFocus={afterMenu.onCloseAutoFocus}
+    >
       {group.status === 'git' ? (
         <>
+          <ContextMenuSeparator />
+          <Item
+            icon={<GitBranch aria-hidden />}
+            label="Branches…"
+            onSelect={() => afterMenu.choose(() => openBranches(group.root))}
+          />
+          <Item
+            icon={<GitBranchPlus aria-hidden />}
+            label="New Branch…"
+            unavailable={busy}
+            onSelect={() => afterMenu.choose(() => openNewBranch(group, { kind: 'head' }))}
+          />
           <ContextMenuSeparator />
           <Item
             icon={<GitCompareArrows aria-hidden />}

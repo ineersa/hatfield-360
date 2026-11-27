@@ -141,7 +141,7 @@ export type SourceControlApi = {
    */
   abortGitOperation: (root: string, operation: GitOperation) => Promise<GitOutcome>
   /**
-   * Stops the commit, push, pull, fetch, rollback, add or abort this window is running, with its hooks and
+   * Stops the commit, push, pull, fetch, rollback, add, abort or branch action this window is running, with its hooks and
    * ssh; that call resolves `{ ok: false, cancelled: true }`. Nothing running: nothing happens.
    */
   cancelSourceControlAction: () => Promise<void>

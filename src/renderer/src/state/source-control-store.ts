@@ -15,6 +15,7 @@ import {
   pullPlan
 } from '@/components/git/commit-plan'
 import { mainErrorMessage } from '@/lib/main-error-message'
+import type { BranchStart, LostCommit } from '../../../shared/branch-api'
 import type {
   ChangedFile,
   GitOutcome,
@@ -33,6 +34,26 @@ export type SourceControlAction =
   | 'add'
   | 'ignore'
   | 'abort'
+  | 'switch-branch'
+  | 'create-branch'
+  | 'delete-branch'
+
+/** The New Branch or Delete Branch dialog, and what it last heard from main. */
+export type BranchDialog =
+  | {
+      kind: 'new'
+      group: GitGroup
+      start: BranchStart
+      /** Why the branch wasn't created: an invalid or taken name, or git's output. */
+      problem: string | null
+    }
+  | {
+      kind: 'delete'
+      group: GitGroup
+      name: string
+      /** Git refused the branch as unmerged: its output and the commits only that branch holds. */
+      refused: { output: string; commits: LostCommit[]; more: number } | null
+    }
 
 /** Files of one working tree an action works on. */
 export type FileTargets = { group: GitGroup; files: ChangedFile[] }[]
@@ -104,6 +125,22 @@ type SourceControlState = {
   ignore: (group: GitGroup, file: ChangedFile) => Promise<void>
   /** Aborts the group's merge, cherry-pick, revert or rebase. */
   abort: (group: GitGroup) => Promise<void>
+  /** The working tree whose branch popup is open; null when none is. */
+  branchesOpen: string | null
+  branchDialog: BranchDialog | null
+  openBranches: (root: string | null) => void
+  openNewBranch: (group: GitGroup, start: BranchStart) => void
+  openDeleteBranch: (group: GitGroup, name: string) => void
+  closeBranchDialog: () => void
+  /** Switches the working tree to a branch; a remote one through its local tracking branch. */
+  switchBranch: (
+    group: GitGroup,
+    branch: { kind: 'local' | 'remote'; name: string }
+  ) => Promise<void>
+  /** Creates the New Branch dialog's branch; the dialog closes once it exists, else shows why not. */
+  createBranch: (name: string, switchTo: boolean) => Promise<void>
+  /** Deletes the Delete Branch dialog's branch; refused as unmerged, the dialog asks about forcing it. */
+  deleteBranch: (force: boolean) => Promise<void>
   /** Stops the running commit, push, pull, fetch, rollback, add or abort, with its hooks and ssh. */
   cancel: () => Promise<void>
   dismissFailure: () => void
@@ -471,6 +508,62 @@ export const useSourceControlStore = create<SourceControlState>((set, get, store
       if (operation === null) return
       await actOn('abort', 'Abort', group, () =>
         window.desktop.abortGitOperation(group.root, operation.kind)
+      )
+    },
+    branchesOpen: null,
+    branchDialog: null,
+    openBranches: (root) => set({ branchesOpen: root }),
+    openNewBranch: (group, start) =>
+      set({ branchesOpen: null, branchDialog: { kind: 'new', group, start, problem: null } }),
+    openDeleteBranch: (group, name) =>
+      set({ branchesOpen: null, branchDialog: { kind: 'delete', group, name, refused: null } }),
+    closeBranchDialog: () => set({ branchDialog: null }),
+    switchBranch: async (group, branch) => {
+      set({ branchesOpen: null })
+      await actOn('switch-branch', `Switch to ${branch.name}`, group, () =>
+        window.desktop.switchBranch(group.root, branch)
+      )
+    },
+    createBranch: async (name, switchTo) => {
+      const dialog = get().branchDialog
+      if (dialog?.kind !== 'new') return
+      const { group, start } = dialog
+      await act(
+        'create-branch',
+        async () => {
+          const outcome = await window.desktop.createBranch({
+            root: group.root,
+            name,
+            start,
+            switchTo
+          })
+          if (get().branchDialog !== dialog) return
+          set({
+            branchDialog: outcome.ok
+              ? null
+              : { ...dialog, problem: outcome.output.trim() || 'Git printed nothing.' }
+          })
+        },
+        () => `Creating ${name} failed in ${group.name}`
+      )
+    },
+    deleteBranch: async (force) => {
+      const dialog = get().branchDialog
+      if (dialog?.kind !== 'delete') return
+      const { group, name } = dialog
+      await act(
+        'delete-branch',
+        async (fail) => {
+          const outcome = await window.desktop.deleteBranch(group.root, name, force)
+          if (!outcome.ok && outcome.unmerged) {
+            const refused = { output: outcome.output, ...outcome.unmerged }
+            set({ branchDialog: { ...dialog, refused } })
+            return
+          }
+          set({ branchDialog: null })
+          fail(`Delete ${name}`, group.name, outcome)
+        },
+        () => `Delete ${name} failed in ${group.name}`
       )
     },
     cancel: async () => {
