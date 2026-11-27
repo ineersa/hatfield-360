@@ -1,7 +1,11 @@
 import type { WebContents } from 'electron'
 import { isPlainObject } from '../../shared/plain-object'
 import { BRANCH_CHANNELS } from '../../shared/branch-api'
-import { type GitOutcome, SOURCE_CONTROL_CHANNELS } from '../../shared/source-control-api'
+import {
+  type GitOutcome,
+  type HunkKind,
+  SOURCE_CONTROL_CHANNELS
+} from '../../shared/source-control-api'
 import {
   createBranch,
   deleteBranch,
@@ -22,6 +26,8 @@ import {
   pushBranch,
   rollbackChanges
 } from '../git/source-control'
+import { dropStash, listStashes, stashChanges, unstash } from '../git/stash'
+import { STASH_CHANNELS } from '../../shared/stash-api'
 import { worktreeStore } from '../git/worktree-store'
 import { launchHunk } from '../terminal/hunk-terminal'
 import { gridSize } from '../terminal/terminal-request'
@@ -34,6 +40,9 @@ export async function workingTree(root: unknown) {
   await worktreesListed()
   return workingTreeOf(worktreeStore.view(), root)
 }
+
+const HUNK_KINDS = new Set<unknown>(['review', 'log', 'stash'] satisfies HunkKind[])
+const isHunkKind = (value: unknown): value is HunkKind => HUNK_KINDS.has(value)
 
 /** The git action each window is running, by its webContents id: only that window may stop it. */
 const runningActions = new Map<number, AbortController>()
@@ -130,6 +139,30 @@ export function registerSourceControlIpc(): void {
     return cancellable(event.sender, root, (signal) => abortOperation(root, operation, signal))
   })
 
+  handleTrusted(STASH_CHANNELS.list, async (_event, root) =>
+    listStashes((await workingTree(root)).root)
+  )
+
+  handleTrusted(STASH_CHANNELS.push, async (event, request) => {
+    if (!isPlainObject(request)) throw new Error('Invalid stash request.')
+    const { root } = await workingTree(request.root)
+    const { paths, untracked, message } = request
+    return cancellable(event.sender, root, (signal) =>
+      stashChanges(root, { paths, untracked, message }, signal)
+    )
+  })
+
+  handleTrusted(STASH_CHANNELS.apply, async (event, request, id, pop) => {
+    if (typeof pop !== 'boolean') throw new Error('Invalid unstash request.')
+    const { root } = await workingTree(request)
+    return cancellable(event.sender, root, (signal) => unstash(root, id, pop, signal))
+  })
+
+  handleTrusted(STASH_CHANNELS.drop, async (event, request, id) => {
+    const { root } = await workingTree(request)
+    return cancellable(event.sender, root, (signal) => dropStash(root, id, signal))
+  })
+
   handleTrusted(BRANCH_CHANNELS.list, async (_event, root) =>
     listBranches((await workingTree(root)).root)
   )
@@ -159,12 +192,13 @@ export function registerSourceControlIpc(): void {
   })
 
   handleTrusted(SOURCE_CONTROL_CHANNELS.launchHunk, async (event, request) => {
-    if (!isPlainObject(request) || (request.kind !== 'review' && request.kind !== 'log'))
+    if (!isPlainObject(request) || !isHunkKind(request.kind))
       throw new Error('Invalid hunk request.')
+    const { kind } = request
     const size = gridSize(request.cols, request.rows)
     if (!size) throw new Error('Invalid hunk terminal size.')
     const place = await workingTree(request.root)
     await existingDirectory(place.root)
-    return launchHunk(event.sender, place, request.kind, size)
+    return launchHunk(event.sender, place, { kind, stash: request.stash }, size)
   })
 }

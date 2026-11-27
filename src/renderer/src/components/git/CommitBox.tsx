@@ -1,10 +1,13 @@
 import { CircleStop, Sparkles, Undo2 } from 'lucide-react'
+import { useRef } from 'react'
+import { PanelResizeHandle } from '@/components/shell/PanelResizeHandle'
 import { PanelHeaderButton } from '@/components/shell/PanelHeaderButton'
 import { Spinner } from '@/components/ui/spinner'
 import { Textarea } from '@/components/ui/textarea'
 import { PRIMARY_BUTTON, SECONDARY_BUTTON } from '@/components/ui/action-button-classes'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { rendererPlatform } from '@/lib/shortcut-keys'
+import { COMMIT_MESSAGE_MIN_HEIGHT, useShellLayoutStore } from '@/state/shell-layout-store'
 import { actionRunning, useSourceControlStore } from '@/state/source-control-store'
 import {
   amendTarget,
@@ -20,6 +23,9 @@ import { OPERATION_NAMES } from './operation-notice'
 export const COMMIT_MESSAGE_ID = 'commit-message'
 
 const COMMIT_KEY = rendererPlatform === 'darwin' ? '⌘↩' : 'Ctrl+Enter'
+
+/** Share of the Git panel the message box may take, so the changes stay in sight. */
+const MAX_MESSAGE_SHARE = 0.6
 
 /**
  * A commit button that stays focusable and hoverable while it can't act (aria-disabled), so its
@@ -78,6 +84,15 @@ export function CommitBox(): React.JSX.Element {
   const commit = useSourceControlStore((state) => state.commit)
   const generating = useSourceControlStore((state) => state.generating)
   const generateMessage = useSourceControlStore((state) => state.generateMessage)
+  const height = useShellLayoutStore((state) => state.commitMessageHeight)
+  const setHeight = useShellLayoutStore((state) => state.setCommitMessageHeight)
+  const box = useRef<HTMLDivElement>(null)
+  const textarea = useRef<HTMLTextAreaElement>(null)
+  const maxHeight = (): number =>
+    Math.max(
+      COMMIT_MESSAGE_MIN_HEIGHT,
+      Math.round((box.current?.parentElement?.clientHeight ?? 0) * MAX_MESSAGE_SHARE)
+    )
   const cancelGenerate = useSourceControlStore((state) => state.cancelGenerate)
   const generated = useSourceControlStore((state) => state.generated)
   const restorePrevious = useSourceControlStore((state) => state.restorePrevious)
@@ -118,99 +133,112 @@ export function CommitBox(): React.JSX.Element {
       : `Commit ${files}`
 
   return (
-    <div className="flex shrink-0 flex-col gap-2 border-t border-separator p-2">
-      <div className="flex items-center justify-between gap-2">
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <label className="type-body flex w-fit items-center gap-2 select-none has-disabled:text-muted-foreground">
-              <input
-                type="checkbox"
-                checked={amend}
-                disabled={running !== null || generating || (amendBlocked !== null && !amend)}
-                aria-description={amendBlocked ?? undefined}
-                onChange={(event) => void setAmend(event.target.checked)}
-                className="accent-primary"
-              />
-              {amendLabel}
-            </label>
-          </TooltipTrigger>
-          {amendBlocked === null ? null : (
-            <TooltipContent side="top">{amendBlocked}</TooltipContent>
-          )}
-        </Tooltip>
-        <span className="flex items-center gap-1">
-          {generated !== null && generated.message === message && !generating ? (
-            <PanelHeaderButton label="Restore Previous Message" onClick={restorePrevious}>
-              <Undo2 className="size-4" strokeWidth={1.75} aria-hidden />
-            </PanelHeaderButton>
-          ) : null}
-          {generating ? (
-            <PanelHeaderButton label="Stop Generating" onClick={cancelGenerate}>
-              <CircleStop className="size-4" strokeWidth={1.75} aria-hidden />
-            </PanelHeaderButton>
-          ) : (
-            <PanelHeaderButton
-              label="Generate Commit Message"
-              disabled={generate.blocked !== null}
-              tip={
-                generate.blocked ??
-                (amend
-                  ? 'Write a message for the amended commit with an agent'
-                  : 'Write a message for the checked files with an agent')
-              }
-              onClick={() => void generateMessage()}
-            >
-              <Sparkles className="size-4" strokeWidth={1.75} aria-hidden />
-            </PanelHeaderButton>
-          )}
-        </span>
-      </div>
-      <Textarea
-        id={COMMIT_MESSAGE_ID}
-        aria-label="Commit message"
-        placeholder={generating ? 'Writing a commit message…' : 'Commit message'}
-        rows={3}
-        spellCheck={false}
-        readOnly={generating}
-        aria-busy={generating || undefined}
-        value={message}
-        onChange={(event) => setMessage(event.target.value)}
-        onKeyDown={(event) => {
-          if (event.key !== 'Enter' || !(event.ctrlKey || event.metaKey)) return
-          event.preventDefault()
-          if (blocked === null) void commit(false)
-        }}
-        className="max-h-60 resize-none bg-input text-input-foreground field-sizing-fixed"
+    <>
+      <PanelResizeHandle
+        label="Resize commit message"
+        size={height}
+        renderedSize={() => textarea.current?.getBoundingClientRect().height ?? height}
+        minSize={COMMIT_MESSAGE_MIN_HEIGHT}
+        maxSize={maxHeight}
+        onSizeChange={(next) => setHeight(Math.min(next, maxHeight()))}
+        panelSide="below"
       />
-      {plan.note === null ? null : <p className="type-hint">{plan.note}</p>}
-      <div className="flex flex-wrap items-center gap-2">
-        <CommitButton
-          label={commitLabel(plan.work)}
-          className={PRIMARY_BUTTON}
-          busy={running === 'commit'}
-          blocked={blocked}
-          tip={`${what} (${COMMIT_KEY})`}
-          onClick={() => void commit(false)}
+      <div ref={box} className="flex shrink-0 flex-col gap-2 border-t border-separator p-2">
+        <div className="flex items-center justify-between gap-2">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <label className="type-body flex w-fit items-center gap-2 select-none has-disabled:text-muted-foreground">
+                <input
+                  type="checkbox"
+                  checked={amend}
+                  disabled={running !== null || generating || (amendBlocked !== null && !amend)}
+                  aria-description={amendBlocked ?? undefined}
+                  onChange={(event) => void setAmend(event.target.checked)}
+                  className="accent-primary"
+                />
+                {amendLabel}
+              </label>
+            </TooltipTrigger>
+            {amendBlocked === null ? null : (
+              <TooltipContent side="top">{amendBlocked}</TooltipContent>
+            )}
+          </Tooltip>
+          <span className="flex items-center gap-1">
+            {generated !== null && generated.message === message && !generating ? (
+              <PanelHeaderButton label="Restore Previous Message" onClick={restorePrevious}>
+                <Undo2 className="size-4" strokeWidth={1.75} aria-hidden />
+              </PanelHeaderButton>
+            ) : null}
+            {generating ? (
+              <PanelHeaderButton label="Stop Generating" onClick={cancelGenerate}>
+                <CircleStop className="size-4" strokeWidth={1.75} aria-hidden />
+              </PanelHeaderButton>
+            ) : (
+              <PanelHeaderButton
+                label="Generate Commit Message"
+                disabled={generate.blocked !== null}
+                tip={
+                  generate.blocked ??
+                  (amend
+                    ? 'Write a message for the amended commit with an agent'
+                    : 'Write a message for the checked files with an agent')
+                }
+                onClick={() => void generateMessage()}
+              >
+                <Sparkles className="size-4" strokeWidth={1.75} aria-hidden />
+              </PanelHeaderButton>
+            )}
+          </span>
+        </div>
+        <Textarea
+          ref={textarea}
+          id={COMMIT_MESSAGE_ID}
+          aria-label="Commit message"
+          placeholder={generating ? 'Writing a commit message…' : 'Commit message'}
+          spellCheck={false}
+          readOnly={generating}
+          aria-busy={generating || undefined}
+          value={message}
+          onChange={(event) => setMessage(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key !== 'Enter' || !(event.ctrlKey || event.metaKey)) return
+            event.preventDefault()
+            if (blocked === null) void commit(false)
+          }}
+          // A small window still leaves the changes most of the panel.
+          style={{ height, maxHeight: `${MAX_MESSAGE_SHARE * 100}vh` }}
+          className="resize-none bg-input text-input-foreground field-sizing-fixed"
         />
-        <CommitButton
-          label="Commit and Push"
-          className={SECONDARY_BUTTON}
-          busy={running === 'commit-push'}
-          blocked={blocked}
-          tip={`${what}, then push`}
-          onClick={() => void commit(true)}
-        />
-        {running === null || running === 'refresh' || running === 'ignore' ? null : (
+        {plan.note === null ? null : <p className="type-hint">{plan.note}</p>}
+        <div className="flex flex-wrap items-center gap-2">
           <CommitButton
-            label={cancelling ? 'Cancelling…' : 'Cancel'}
-            className={SECONDARY_BUTTON}
-            busy={false}
-            blocked={cancelling ? 'Stopping git and everything it started' : null}
-            tip="Stop the running git command, its hooks and ssh"
-            onClick={() => void cancel()}
+            label={commitLabel(plan.work)}
+            className={PRIMARY_BUTTON}
+            busy={running === 'commit'}
+            blocked={blocked}
+            tip={`${what} (${COMMIT_KEY})`}
+            onClick={() => void commit(false)}
           />
-        )}
+          <CommitButton
+            label="Commit and Push"
+            className={SECONDARY_BUTTON}
+            busy={running === 'commit-push'}
+            blocked={blocked}
+            tip={`${what}, then push`}
+            onClick={() => void commit(true)}
+          />
+          {running === null || running === 'refresh' || running === 'ignore' ? null : (
+            <CommitButton
+              label={cancelling ? 'Cancelling…' : 'Cancel'}
+              className={SECONDARY_BUTTON}
+              busy={false}
+              blocked={cancelling ? 'Stopping git and everything it started' : null}
+              tip="Stop the running git command, its hooks and ssh"
+              onClick={() => void cancel()}
+            />
+          )}
+        </div>
       </div>
-    </div>
+    </>
   )
 }

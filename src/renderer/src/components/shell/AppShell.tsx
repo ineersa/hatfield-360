@@ -32,7 +32,7 @@ import { useWorkspaceStore } from '@/state/workspace-store'
 import { ActivityBar } from './ActivityBar'
 import { LazyEditorTabs, loadEditorTabs } from './LazyEditorTabs'
 import { SHELL_VIEWS } from './shell-views'
-import { SIDE_PANEL_HANDLE_WIDTH, SidePanelResizeHandle } from './SidePanelResizeHandle'
+import { SIDE_PANEL_HANDLE_WIDTH, PanelResizeHandle } from './PanelResizeHandle'
 import { StatusBar } from './StatusBar'
 import { ToolWindowStripe } from './ToolWindowStripe'
 
@@ -134,15 +134,13 @@ export function AppShell(): React.JSX.Element {
                   >
                     <view.Panel />
                   </aside>
-                  <SidePanelResizeHandle
+                  <PanelResizeHandle
                     label={`Resize ${view.label} panel`}
-                    width={panel.width}
-                    renderedWidth={() =>
-                      aside.current?.getBoundingClientRect().width ?? panel.width
-                    }
-                    minWidth={SIDE_PANEL_MIN_WIDTH}
-                    maxWidth={maxWidth}
-                    onWidthChange={(next) => setPanelWidth(view.id, Math.min(next, maxWidth()))}
+                    size={panel.width}
+                    renderedSize={() => aside.current?.getBoundingClientRect().width ?? panel.width}
+                    minSize={SIDE_PANEL_MIN_WIDTH}
+                    maxSize={maxWidth}
+                    onSizeChange={(next) => setPanelWidth(view.id, Math.min(next, maxWidth()))}
                   />
                 </>
               )}

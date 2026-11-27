@@ -703,3 +703,54 @@ test('Review and Log run hunk in tabs in the Git view, which close when hunk end
     await fixture.cleanup()
   }
 })
+
+const handle = (page: Page) => page.getByRole('separator', { name: 'Resize commit message' })
+const height = async (page: Page): Promise<number> =>
+  Math.round((await message(page).boundingBox())?.height ?? 0)
+
+test('the commit message box is resized from the handle on its top edge, and keeps its height', async () => {
+  const fixture = await commitFixture()
+  try {
+    await withApp(
+      async (_app, page) => {
+        await showGit(page)
+        await expect(handle(page)).toHaveAttribute('aria-valuenow', '80')
+        expect(await height(page)).toBe(80)
+        // Up grows the box: the handle is on its top edge.
+        await handle(page).focus()
+        await page.keyboard.press('ArrowUp')
+        await page.keyboard.press('ArrowUp')
+        await expect(handle(page)).toHaveAttribute('aria-valuenow', '112')
+        expect(await height(page)).toBe(112)
+        const box = await handle(page).boundingBox()
+        if (!box) throw new Error('The handle is not rendered')
+        await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+        await page.mouse.down()
+        await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2 - 40)
+        await page.mouse.up()
+        await expect(handle(page)).toHaveAttribute('aria-valuenow', '152')
+        expect(await height(page)).toBe(152)
+        // Never smaller than two lines.
+        await page.keyboard.press('Home')
+        await expect(handle(page)).toHaveAttribute('aria-valuenow', '48')
+        await page.keyboard.press('ArrowUp')
+        await page.keyboard.press('ArrowUp')
+        await expect(handle(page)).toHaveAttribute('aria-valuenow', '80')
+        await page.keyboard.press('ArrowUp')
+        await expect(handle(page)).toHaveAttribute('aria-valuenow', '96')
+        await saveScreenshot(page, 'git-commit-message-resized')
+      },
+      { userDataDir: fixture.userData, env: fixture.env }
+    )
+    await withApp(
+      async (_app, page) => {
+        // It reopens on the Git view, as it was left.
+        await expect(handle(page)).toHaveAttribute('aria-valuenow', '96')
+        expect(await height(page)).toBe(96)
+      },
+      { userDataDir: fixture.userData, env: fixture.env }
+    )
+  } finally {
+    await fixture.cleanup()
+  }
+})

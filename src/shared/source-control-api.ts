@@ -85,9 +85,16 @@ type CommitRequest = {
   amend: boolean
 }
 
-export type HunkKind = 'review' | 'log'
+export type HunkKind = 'review' | 'log' | 'stash'
 
-type HunkLaunchRequest = { root: string; kind: HunkKind; cols: number; rows: number }
+type HunkLaunchRequest = {
+  root: string
+  kind: HunkKind
+  /** For `stash`: the stash's commit (`StashEntry.id`). */
+  stash?: string
+  cols: number
+  rows: number
+}
 
 /** A terminal running hunk in the root, or `missing` when no `hunk` is on the user's shell PATH. */
 export type HunkLaunch = { status: 'started'; terminal: TerminalSession } | { status: 'missing' }
@@ -147,7 +154,8 @@ export type SourceControlApi = {
   cancelSourceControlAction: () => Promise<void>
   /**
    * `hunk diff --watch HEAD` (review: every change the Commit panel lists, staged or not; the empty
-   * tree before the first commit) or `hunk log`, in a terminal driven by the terminal API.
+   * tree before the first commit), `hunk log` or `hunk stash show` for one stash, in a terminal
+   * driven by the terminal API.
    */
   launchHunk: (request: HunkLaunchRequest) => Promise<HunkLaunch>
 }

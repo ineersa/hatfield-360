@@ -13,6 +13,7 @@ import type { SearchEverywhereApi } from './search-everywhere-api'
 import type { SettingsApi } from './settings-api'
 import type { ShellLayoutApi } from './shell-layout-api'
 import type { SourceControlApi } from './source-control-api'
+import type { StashApi } from './stash-api'
 import type { TerminalApi } from './terminal-api'
 import type { WebLinkApi } from './web-link-api'
 import type { WorkspaceApi } from './workspace-api'
@@ -42,6 +43,7 @@ export type DesktopApi = WorkspaceApi &
   WorktreeApi &
   SourceControlApi &
   BranchApi &
+  StashApi &
   CommitMessageApi &
   FileTreeApi &
   SearchApi &

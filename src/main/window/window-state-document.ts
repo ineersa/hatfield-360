@@ -6,7 +6,8 @@ import {
   type ShellLayout,
   type ShellViewId,
   type SidePanelLayout,
-  SIDE_PANEL_WIDTH_RANGE
+  SIDE_PANEL_WIDTH_RANGE,
+  COMMIT_MESSAGE_HEIGHT_RANGE
 } from '../../shared/shell-layout-api'
 
 export type Bounds = { x: number; y: number; width: number; height: number }
@@ -26,11 +27,13 @@ function isShellViewId(value: unknown): value is ShellViewId {
   return SHELL_VIEW_IDS.some((id) => id === value)
 }
 
-function panelWidth(value: unknown): number | null {
+function inRange(value: unknown, range: { min: number; max: number }): number | null {
   if (!isFiniteNumber(value)) return null
-  if (value < SIDE_PANEL_WIDTH_RANGE.min || value > SIDE_PANEL_WIDTH_RANGE.max) return null
+  if (value < range.min || value > range.max) return null
   return Math.round(value)
 }
+
+const panelWidth = (value: unknown): number | null => inRange(value, SIDE_PANEL_WIDTH_RANGE)
 
 function sidePanel(value: unknown): SidePanelLayout | null {
   if (!isPlainObject(value) || typeof value.collapsed !== 'boolean') return null
@@ -56,7 +59,10 @@ export function parseShellLayout(value: unknown): ShellLayout | null {
     // Layouts saved before the panel existed lack it, and shouldn't lose their side panels for it.
     notificationsWidth:
       panelWidth(value.notificationsWidth) ?? DEFAULT_SHELL_LAYOUT.notificationsWidth,
-    chatWidth: panelWidth(value.chatWidth) ?? DEFAULT_SHELL_LAYOUT.chatWidth
+    chatWidth: panelWidth(value.chatWidth) ?? DEFAULT_SHELL_LAYOUT.chatWidth,
+    commitMessageHeight:
+      inRange(value.commitMessageHeight, COMMIT_MESSAGE_HEIGHT_RANGE) ??
+      DEFAULT_SHELL_LAYOUT.commitMessageHeight
   }
 }
 

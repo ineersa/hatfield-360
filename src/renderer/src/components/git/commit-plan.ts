@@ -1,5 +1,11 @@
 import type { ChangedFile, SourceControlGroup } from '../../../../shared/source-control-api'
-import { checkedFilesByGroup, type GitGroup, trackedFiles } from './change-tree-rows'
+import {
+  addableFiles,
+  checkedFilesByGroup,
+  fileKey,
+  type GitGroup,
+  trackedFiles
+} from './change-tree-rows'
 import { OPERATION_NAMES } from './operation-notice'
 
 /** Files of one working tree a commit works on. */
@@ -174,4 +180,35 @@ export function generatePlan(
   if (target === undefined || target === null)
     return { target: null, blocked: 'Check the files the message is for' }
   return { target, blocked: null }
+}
+
+const chosen = (keys: ReadonlySet<string>, group: GitGroup, files: ChangedFile[]): ChangedFile[] =>
+  files.filter((file) => keys.has(fileKey(group.root, file.path)))
+
+/** What a stash takes from one working tree: its checked changes and its untracked files chosen to add. */
+export type StashTarget = { group: GitGroup; files: ChangedFile[]; untracked: ChangedFile[] }
+
+/**
+ * The working tree Stash Changes works on and what it takes: `root`'s when given (its menu), else
+ * the one with chosen files, the selected row's when several have some. Never everything: with
+ * nothing chosen it is blocked.
+ */
+export function stashPlan(
+  groups: readonly SourceControlGroup[],
+  checked: ReadonlySet<string>,
+  toAdd: ReadonlySet<string>,
+  place: { root: string; only: boolean } | null
+): { target: StashTarget | null; blocked: string | null } {
+  const targets = gitGroups(groups)
+    .filter((group) => place === null || !place.only || group.root === place.root)
+    .map((group) => ({
+      group,
+      files: chosen(checked, group, trackedFiles(group)),
+      untracked: chosen(toAdd, group, addableFiles(group))
+    }))
+    .filter((target) => target.files.length > 0 || target.untracked.length > 0)
+  const target = targets.find((each) => each.group.root === place?.root) ?? targets[0] ?? null
+  return target === null
+    ? { target: null, blocked: 'Check the files to stash' }
+    : { target, blocked: null }
 }

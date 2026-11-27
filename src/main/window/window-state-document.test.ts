@@ -76,7 +76,8 @@ describe('parseShellLayout', () => {
         git: { width: 180, collapsed: false }
       },
       notificationsWidth: 400.4,
-      chatWidth: 520
+      chatWidth: 520,
+      commitMessageHeight: 150
     }
     expect(parseShellLayout(layout)).toEqual({
       ...layout,
@@ -95,6 +96,15 @@ describe('parseShellLayout', () => {
       panels: { ...layout.panels, search: panel }
     })
     expect(parseShellLayout(withSearch({ width: 300, collapsed: 'yes' }))).toBe(null)
+  })
+
+  it('gives a layout without a valid commit message height the default one, keeping the rest', () => {
+    const { commitMessageHeight: _unused, ...older } = DEFAULT_SHELL_LAYOUT
+    const expected = { ...DEFAULT_SHELL_LAYOUT, chatWidth: 500 }
+    expect(parseShellLayout({ ...older, chatWidth: 500 })).toEqual(expected)
+    expect(parseShellLayout({ ...older, chatWidth: 500, commitMessageHeight: 10 })).toEqual(
+      expected
+    )
   })
 
   it('gives a layout saved before Find in Files existed a new search panel, keeping the rest', () => {

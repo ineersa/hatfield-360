@@ -28,6 +28,7 @@ import {
   useAgentSessions
 } from '@/components/workspace/AgentSessionRows'
 import { cn } from '@/lib/class-names'
+import { agoText } from '@/lib/elapsed-time'
 import { mainErrorMessage } from '@/lib/main-error-message'
 import { useMemorySearchStore } from '@/state/memory-search-store'
 import { notify } from '@/state/notification-store'
@@ -45,9 +46,7 @@ import type {
 } from '../../../../shared/memory-search-api'
 import { memorySource, type MemorySource } from './memory-sources'
 
-const MINUTE = 60_000
-const HOUR = 60 * MINUTE
-const DAY = 24 * HOUR
+const DAY = 24 * 60 * 60_000
 const DEBOUNCE_MS = 250
 
 const chipClass =
@@ -81,14 +80,6 @@ function stamp(at: number): string {
     return `Yesterday ${time}`
   const sameYear = date.getFullYear() === today.getFullYear()
   return `${date.toLocaleDateString([], { month: 'short', day: 'numeric', ...(sameYear ? {} : { year: 'numeric' }) })} ${time}`
-}
-
-function ago(at: number): string {
-  const elapsed = Date.now() - at
-  if (elapsed < HOUR) return `${Math.max(1, Math.round(elapsed / MINUTE))}m ago`
-  if (elapsed < DAY) return `${Math.round(elapsed / HOUR)}h ago`
-  if (elapsed < 2 * DAY) return 'yesterday'
-  return `${Math.floor(elapsed / DAY)}d ago`
 }
 
 const queryTerms = (query: string): string[] =>
@@ -166,7 +157,7 @@ function SessionSource({
       ) : (
         <span className="flex shrink-0 items-center gap-1">
           <History className="size-3.5" aria-hidden />
-          last active {ago(source.entry.lastModified)}
+          last active {agoText(source.entry.lastModified)}
         </span>
       )}
     </span>

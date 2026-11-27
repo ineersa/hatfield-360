@@ -144,7 +144,7 @@ function HunkButton({
   group,
   icon: Icon
 }: {
-  kind: HunkKind
+  kind: Exclude<HunkKind, 'stash'>
   group: GitGroup
   icon: LucideIcon
 }): React.JSX.Element {
