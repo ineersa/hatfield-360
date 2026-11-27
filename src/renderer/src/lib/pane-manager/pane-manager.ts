@@ -272,7 +272,7 @@ export class PaneManager {
       this.nextPaneId++,
       this.options,
       (id) => this.setActivePane(id, false),
-      (id) => this.closePane(id)
+      (id) => (this.options.requestClosePane ?? ((paneId) => this.closePane(paneId)))(id)
     )
     this.panes.set(pane.id, pane)
     this.updateMultiPaneState()

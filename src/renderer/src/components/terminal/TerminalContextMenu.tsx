@@ -2,7 +2,7 @@ import { AgentProviderIcon } from '@/components/icons/AgentProviderIcon'
 import type { AgentProvider } from '../../../../shared/agent-api'
 import type { Terminal } from '@xterm/xterm'
 import { Clipboard, Columns2, Copy, Eraser, Move, Rows2, X } from 'lucide-react'
-import { useState, type ReactNode } from 'react'
+import { useRef, useState, type ReactNode } from 'react'
 import {
   ContextMenu,
   ContextMenuContent,
@@ -14,6 +14,7 @@ import {
 import { terminalShortcutLabel } from '@/lib/keymap-match'
 import { rendererPlatform } from '@/lib/shortcut-keys'
 import { useKeymapStore } from '@/state/keymap-store'
+import { usePinnedCloseStore } from '@/state/pinned-close'
 import { copyTerminalSelection, pasteIntoTerminal } from './terminal-clipboard'
 
 const CLIPBOARD_KEYS =
@@ -44,6 +45,7 @@ export function TerminalContextMenu({
   const [launchable, setLaunchable] = useState(false)
   const [rearrangeable, setRearrangeable] = useState(false)
   const [hasSelection, setHasSelection] = useState(false)
+  const closeAfterMenu = useRef<(() => void) | null>(null)
   const withTerminal = (action: (terminal: Terminal) => void) => () => {
     const terminal = activeTerminal()
     if (terminal) action(terminal)
@@ -57,8 +59,15 @@ export function TerminalContextMenu({
           setLaunchable(canLaunch())
           setRearrangeable(canRearrange())
         }
-        // Back to typing in the terminal once the closing menu has let go of focus.
-        else setTimeout(() => activeTerminal()?.focus(), 0)
+        // Back to typing in the terminal once the closing menu has let go of focus, unless Close
+        // Pane, run only then, is asking about a pinned session.
+        else
+          setTimeout(() => {
+            const close = closeAfterMenu.current
+            closeAfterMenu.current = null
+            close?.()
+            if (!usePinnedCloseStore.getState().pending) activeTerminal()?.focus()
+          }, 0)
       }}
     >
       <ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
@@ -102,7 +111,11 @@ export function TerminalContextMenu({
           <Eraser aria-hidden />
           Clear
         </ContextMenuItem>
-        <ContextMenuItem onSelect={() => runCommand('close-pane')}>
+        <ContextMenuItem
+          onSelect={() => {
+            closeAfterMenu.current = () => runCommand('close-pane')
+          }}
+        >
           <X aria-hidden />
           Close Pane
           <ContextMenuShortcut>{terminalShortcutLabel(keymap, 'close-pane')}</ContextMenuShortcut>

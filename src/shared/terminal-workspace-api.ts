@@ -24,4 +24,9 @@ export type SavedTerminalTab = {
   activePane: string | null
   layout: PaneLayout
 }
-export type TerminalLayout = { tabs: SavedTerminalTab[]; activeTabId: string | null }
+export type TerminalLayout = {
+  tabs: SavedTerminalTab[]
+  activeTabId: string | null
+  /** Pinned conversations (`pinKey`), kept only while one of the saved panes holds them. */
+  pinned?: string[]
+}

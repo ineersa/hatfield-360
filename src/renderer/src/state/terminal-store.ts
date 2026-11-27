@@ -2,6 +2,8 @@ import type { SavedTerminalTab } from '../../../shared/terminal-workspace-api'
 import { AGENT_PROVIDERS, type AgentLaunch } from '../../../shared/agent-api'
 import { create } from 'zustand'
 import { useShellLayoutStore } from './shell-layout-store'
+import { useAgentSessionStore } from './agent-session-store'
+import { pinnedTabIds, stripOrder } from './pinned-sessions'
 
 export type TerminalTab = {
   id: string
@@ -21,6 +23,12 @@ type TerminalState = {
   setActivePane: (tabId: string, id: string | null) => void
   tabs: TerminalTab[]
   activeTabId: string | null
+  /** The terminals each tab's panes run, as their shells start and end. */
+  tabTerminals: Record<string, string[]>
+  setTabTerminals: (tabId: string, ids: string[]) => void
+  /** Pinned conversations, by `pinKey`; saved with the workspace. */
+  pinned: string[]
+  setPinned: (key: string, pinned: boolean) => void
   /** Opens a tab with one shell and shows it in the Agents view. */
   openTerminal: (cwd: string | null, agent?: AgentLaunch) => void
   /** Removes the tab; its panes' shells end as the tab unmounts. */
@@ -39,6 +47,21 @@ export const useTerminalStore = create<TerminalState>((set, get) => ({
     set((state) => ({ paneByTab: { ...state.paneByTab, [tabId]: id } })),
   tabs: [],
   activeTabId: null,
+  tabTerminals: {},
+  setTabTerminals: (tabId, ids) =>
+    set((state) => {
+      const current = state.tabTerminals[tabId]
+      if (current?.length === ids.length && current.every((id, index) => id === ids[index]))
+        return state
+      return { tabTerminals: { ...state.tabTerminals, [tabId]: ids } }
+    }),
+  pinned: [],
+  setPinned: (key, pinned) =>
+    set((state) =>
+      state.pinned.includes(key) === pinned
+        ? state
+        : { pinned: pinned ? [...state.pinned, key] : state.pinned.filter((item) => item !== key) }
+    ),
   openTerminal: (cwd, agent) => {
     const label = cwd ? folderName(cwd) : 'Terminal'
     const tab: TerminalTab = {
@@ -61,12 +84,16 @@ export const useTerminalStore = create<TerminalState>((set, get) => ({
       const activeTabId = state.activeTabId === id ? (neighbour?.id ?? null) : state.activeTabId
       const paneByTab = { ...state.paneByTab }
       delete paneByTab[id]
-      return { tabs, activeTabId, paneByTab }
+      const tabTerminals = { ...state.tabTerminals }
+      delete tabTerminals[id]
+      return { tabs, activeTabId, paneByTab, tabTerminals }
     })
   },
   activateTab: (id) => set({ activeTabId: id }),
   cycleTab: (step) => {
-    const { tabs, activeTabId } = get()
+    const { activeTabId, tabTerminals, pinned } = get()
+    const sessions = useAgentSessionStore.getState().sessions
+    const tabs = stripOrder(get().tabs, pinnedTabIds(tabTerminals, sessions, pinned))
     if (tabs.length < 2) return
     const index = tabs.findIndex((tab) => tab.id === activeTabId)
     const next = tabs[(index + step + tabs.length) % tabs.length]

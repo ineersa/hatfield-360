@@ -1,4 +1,5 @@
 import { checkpointTab, currentTerminalGeneration } from '@/state/terminal-workspace'
+import { closeUnlessPinned } from '@/state/pinned-close'
 import { conversationKey } from '../../../../shared/recent-conversation'
 import type { PaneLeaf } from '../../../../shared/terminal-workspace-api'
 import type { ManagedPane } from '@/lib/pane-manager/pane-manager-types'
@@ -43,6 +44,10 @@ export function TerminalTabBody({
     const owner = tab.generation ?? currentTerminalGeneration()
     const leaves = new Map<string, PaneLeaf>()
     const checkpoint = () => {
+      useTerminalStore.getState().setTabTerminals(
+        tab.id,
+        panes.getPanes().flatMap(({ container }) => container.dataset.terminalId ?? [])
+      )
       const layout = panes.layout((container) => {
         const id = container.dataset.layoutId ?? crypto.randomUUID()
         const leaf = leaves.get(id) ?? { kind: 'pane', id, cwd: tab.cwd }
@@ -114,11 +119,18 @@ export function TerminalTabBody({
           else checkpoint()
         },
         closePaneTitle: `Close Pane (${terminalShortcutLabel(useKeymapStore.getState().shell, 'close-pane')})`,
+        requestClosePane: (paneId) => requestClosePane(paneId),
         onLinkClick: openTerminalLink
       },
       checkpoint
     )
     manager.current = panes
+    // A pane running a pinned session closes only once the user confirms.
+    const requestClosePane = (paneId: number) => {
+      const terminalId = panes.getPanes().find((pane) => pane.id === paneId)?.container
+        .dataset.terminalId
+      closeUnlessPinned(terminalId ? [terminalId] : [], () => panes.closePane(paneId))
+    }
     if (tab.saved) panes.restore(tab.saved.layout, tab.saved.activePane, create)
     else panes.createInitialPane()
     const findTerminal = (id: string) =>
@@ -132,12 +144,12 @@ export function TerminalTabBody({
         else if (!activePane) return
         else if (command === 'split-right') panes.splitPane(activePane.id, 'vertical')
         else if (command === 'split-down') panes.splitPane(activePane.id, 'horizontal')
-        else panes.closePane(activePane.id)
+        else requestClosePane(activePane.id)
       },
       closeTerminal: (id) => {
         const pane = findTerminal(id)
         if (!pane) return false
-        panes.closePane(pane.id)
+        requestClosePane(pane.id)
         return true
       },
       selectTerminal: (id) => {

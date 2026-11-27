@@ -24,9 +24,12 @@ import {
   FolderX,
   GitBranch,
   Lock,
+  Pin,
   Search,
   Trash2
 } from 'lucide-react'
+import { useTerminalStore } from '@/state/terminal-store'
+import { isPinned } from '@/state/pinned-sessions'
 import { RootFolderIcon } from '@/components/icons/RootFolderIcon'
 import { ContextMenu, ContextMenuItem, ContextMenuTrigger } from '@/components/ui/context-menu'
 import {
@@ -366,7 +369,11 @@ export function WorkspacePanel(): React.JSX.Element {
     (session) =>
       (!scope || session.project === scope) && (!filter || matchesStatus(session, filter))
   )
-  const ungrouped = visible.filter(
+  const pinned = useTerminalStore((state) => state.pinned)
+  // Pinned sessions lead in their own section, across projects, and aren't repeated below.
+  const pinnedRows = visible.filter((session) => isPinned(session, pinned))
+  const listed = visible.filter((session) => !isPinned(session, pinned))
+  const ungrouped = listed.filter(
     (session) => !folders.some((folder) => !folder.missing && folder.path === session.project)
   )
   // Action errors and notices show in the shell's workspace message; the panel shows why the workspace is read-only.
@@ -468,6 +475,26 @@ export function WorkspacePanel(): React.JSX.Element {
               })}
             </div>
           </div>
+          {pinnedRows.length > 0 ? (
+            <section aria-labelledby="pinned-sessions" className="px-2 pb-2">
+              <h3
+                id="pinned-sessions"
+                className="type-section-title flex items-center gap-1.5 px-2 pb-1 text-muted-foreground"
+              >
+                <Pin className="size-3.5 shrink-0" aria-hidden />
+                Pinned
+              </h3>
+              <ul aria-label="Pinned sessions">
+                <AgentSessionRows
+                  sessions={pinnedRows}
+                  projectName={(session) =>
+                    folders.find((folder) => folder.path === session.project)?.name ??
+                    'Other terminals'
+                  }
+                />
+              </ul>
+            </section>
+          ) : null}
           <ul aria-label="Workspace folders" className="flex min-h-0 flex-col gap-0.5 px-2">
             {folders
               .filter((folder) => !scope || folder.path === scope)
@@ -488,7 +515,7 @@ export function WorkspacePanel(): React.JSX.Element {
                       generation={generation}
                       live={sessions}
                       now={now}
-                      visible={visible.filter((session) => session.project === folder.path)}
+                      visible={listed.filter((session) => session.project === folder.path)}
                     />
                   )}
                 </Fragment>

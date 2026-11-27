@@ -1,4 +1,5 @@
 import { connectTerminalWorkspace } from './state/terminal-workspace'
+import { connectAgentSessions } from './state/agent-session-store'
 import { useWorkspaceStore } from './state/workspace-store'
 import { notify } from './state/notification-store'
 import { mainErrorMessage } from './lib/main-error-message'
@@ -20,6 +21,7 @@ if (!root) {
 const stopAgentNotifications = window.desktop.subscribeAgentNotifications(receiveAgentNotification)
 if (import.meta.hot) import.meta.hot.dispose(stopAgentNotifications)
 
+connectAgentSessions()
 connectTerminalWorkspace()
 const workspace = window.desktop
   .getWorkspace()

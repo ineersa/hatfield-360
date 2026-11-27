@@ -3,6 +3,8 @@ import type { WorkspaceView } from '../../../shared/workspace-api'
 import { mainErrorMessage } from '@/lib/main-error-message'
 import { notify } from './notification-store'
 import { useTerminalStore } from './terminal-store'
+import { useAgentSessionStore } from './agent-session-store'
+import { pinnedTabIds, stripOrder } from './pinned-sessions'
 
 let generation: number | undefined
 const tabs = new Map<string, SavedTerminalTab>()
@@ -23,6 +25,8 @@ export function hydrateTerminals(workspace: WorkspaceView): void {
       generation: workspace.terminalGeneration
     })),
     paneByTab: {},
+    tabTerminals: {},
+    pinned: workspace.terminals?.pinned ?? [],
     activeTabId: workspace.terminals?.activeTabId ?? null
   })
 }
@@ -43,10 +47,16 @@ function checkpointTerminals(): void {
     const state = useTerminalStore.getState()
     const open = new Set(state.tabs.map((tab) => tab.id))
     for (const id of tabs.keys()) if (!open.has(id)) tabs.delete(id)
+    // Saved in the strip's order, so pinned tabs lead before their sessions report again.
+    const order = stripOrder(
+      state.tabs,
+      pinnedTabIds(state.tabTerminals, useAgentSessionStore.getState().sessions, state.pinned)
+    )
     void window.desktop
       .checkpointTerminals(owner, {
-        tabs: state.tabs.flatMap(({ id }) => tabs.get(id) ?? []),
-        activeTabId: state.activeTabId
+        tabs: order.flatMap(({ id }) => tabs.get(id) ?? []),
+        activeTabId: state.activeTabId,
+        ...(state.pinned.length ? { pinned: state.pinned } : {})
       })
       .catch((error: unknown) =>
         notify({
@@ -61,7 +71,12 @@ function checkpointTerminals(): void {
 export function connectTerminalWorkspace(): void {
   window.desktop.subscribeAgentSessions(checkpointTerminals)
   useTerminalStore.subscribe((state, previous) => {
-    if (state.tabs !== previous.tabs || state.activeTabId !== previous.activeTabId)
+    if (
+      state.tabs !== previous.tabs ||
+      state.activeTabId !== previous.activeTabId ||
+      state.pinned !== previous.pinned ||
+      state.tabTerminals !== previous.tabTerminals
+    )
       checkpointTerminals()
   })
 }

@@ -16,6 +16,8 @@ export type TabMenu = {
   /** Closes these tabs, which a strip may first ask about. */
   close: (ids: string[]) => void
   closeShortcut?: string
+  /** Tabs the bulk closes leave open, as browsers leave pinned tabs. */
+  keep?: ReadonlySet<string>
   /** The tab's own items below the closing ones, run once the menu has closed. */
   renderItems?: (choose: (action: () => void) => void) => ReactNode
 }
@@ -31,11 +33,12 @@ export function TabContextMenu({
   /** The tab; it takes the menu's trigger props. */
   children: ReactNode
 }): React.JSX.Element {
-  const { tabs, close, closeShortcut, renderItems } = menu
+  const { tabs, close, closeShortcut, keep, renderItems } = menu
   const afterMenu = useAfterMenu()
   const index = tabs.indexOf(id)
-  const others = tabs.filter((tab) => tab !== id)
-  const right = tabs.slice(index + 1)
+  const closable = keep ? tabs.filter((tab) => !keep.has(tab)) : [...tabs]
+  const others = closable.filter((tab) => tab !== id)
+  const right = tabs.slice(index + 1).filter((tab) => closable.includes(tab))
   return (
     <ContextMenu>
       <ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
@@ -56,7 +59,10 @@ export function TabContextMenu({
         >
           Close Tabs to the Right
         </ContextMenuItem>
-        <ContextMenuItem onSelect={() => afterMenu.choose(() => close([...tabs]))}>
+        <ContextMenuItem
+          disabled={closable.length === 0}
+          onSelect={() => afterMenu.choose(() => close(closable))}
+        >
           Close All Tabs
         </ContextMenuItem>
         {renderItems ? (
