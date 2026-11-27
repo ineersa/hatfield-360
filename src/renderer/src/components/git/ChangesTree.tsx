@@ -3,6 +3,7 @@ import {
   ArrowUp,
   ChevronRight,
   CircleAlert,
+  FilePlus,
   GitBranch,
   GitCompareArrows,
   History,
@@ -13,6 +14,7 @@ import { FileTreeIcon } from '@/components/icons/FileTreeIcon'
 import { RootFolderIcon } from '@/components/icons/RootFolderIcon'
 import { treeIndent, treeRowClass } from '@/components/tree/tree-row-style'
 import { useLoadingShown } from '@/components/tree/use-loading-delay'
+import { ContextMenu, ContextMenuTrigger } from '@/components/ui/context-menu'
 import { Spinner } from '@/components/ui/spinner'
 import {
   PATH_TOOLTIP_DELAY_MS,
@@ -32,13 +34,18 @@ import type {
   HunkKind,
   SourceControlGroup
 } from '../../../../shared/source-control-api'
+import { isDeleteKey } from '@/components/files/delete-key'
 import {
   type ChangeRow,
   type CheckState,
   fileKey,
+  filesCheckState,
   type GitGroup,
-  groupCheckState
+  isUntracked,
+  trackedFiles
 } from './change-tree-rows'
+import { FileRowMenu, GroupMenu, type RowMenuRequests, UnversionedMenu } from './ChangeRowMenus'
+import { COMMIT_MESSAGE_ID } from './CommitBox'
 
 /** Each kind's letter and colour; the letter and its description carry it, never the colour alone. */
 export const CHANGE_KINDS: Record<ChangeKind, { letter: string; label: string; text: string }> = {
@@ -53,10 +60,20 @@ export const CHANGE_KINDS: Record<ChangeKind, { letter: string; label: string; t
 const nameOf = (path: string): string => path.slice(path.lastIndexOf('/') + 1)
 const folderOf = (path: string): string => path.slice(0, Math.max(0, path.lastIndexOf('/')))
 
-const isNavigable = (row: ChangeRow): boolean => row.type === 'group' || row.type === 'file'
+const isNavigable = (row: ChangeRow): boolean =>
+  row.type === 'group' || row.type === 'file' || row.type === 'unversioned'
 
 const rootOf = (row: ChangeRow): string =>
-  row.type === 'group' || row.type === 'file' ? row.group.root : row.key
+  row.type === 'group' || row.type === 'file' || row.type === 'unversioned'
+    ? row.group.root
+    : row.key
+
+/** "1 file", "3 files". */
+const fileCount = (count: number): string => (count === 1 ? '1 file' : `${count} files`)
+
+/** Rings a row while its menu is open, as in the Files tree. */
+const MENU_OPEN =
+  'data-[state=open]:ring-1 data-[state=open]:ring-ring data-[state=open]:ring-inset'
 
 /** Opens the file in the editor, in the Files view, as the Files tree does; a deleted one has nothing to open. */
 function openFile(file: ChangedFile): void {
@@ -184,9 +201,9 @@ function GroupRowContent({
   const sync = syncSummary(group)
   return (
     <>
-      {group.files.length > 0 ? (
+      {trackedFiles(group).length > 0 ? (
         <RowCheckbox
-          state={groupCheckState(group, checked)}
+          state={filesCheckState(group.root, trackedFiles(group), checked)}
           label={`Include all changes in ${group.name}`}
           onToggle={() => toggleGroup(group)}
         />
@@ -237,24 +254,30 @@ function FileRowContent({
   group,
   file,
   checked,
+  toAdd,
   selected
 }: {
   group: GitGroup
   file: ChangedFile
   checked: ReadonlySet<string>
+  toAdd: ReadonlySet<string>
   selected: boolean
 }): React.JSX.Element {
   const toggleFile = useSourceControlStore((state) => state.toggleFile)
+  const toggleToAdd = useSourceControlStore((state) => state.toggleToAdd)
   const kind = CHANGE_KINDS[file.kind]
+  const key = fileKey(group.root, file.path)
+  // An untracked file is checked to be added, never to be committed as it is.
+  const untracked = isUntracked(file)
   const folder = folderOf(file.path)
   // A selected row in the focused tree takes the selection's text colour, so its name stays legible.
   const onSelection = selected && 'group-focus-within/tree:text-selection-foreground'
   return (
     <>
       <RowCheckbox
-        state={checked.has(fileKey(group.root, file.path)) ? 'checked' : 'unchecked'}
-        label={`Include ${file.path}`}
-        onToggle={() => toggleFile(group.root, file.path)}
+        state={(untracked ? toAdd : checked).has(key) ? 'checked' : 'unchecked'}
+        label={untracked ? `Select ${file.path} to add` : `Include ${file.path}`}
+        onToggle={() => (untracked ? toggleToAdd : toggleFile)(group.root, file.path)}
       />
       <FileTreeIcon kind="file" name={nameOf(file.path)} className="size-4 shrink-0" />
       <span className={cn('ml-1 min-w-0 truncate', kind.text, onSelection)}>
@@ -273,6 +296,60 @@ function FileRowContent({
   )
 }
 
+/** Adds the group's untracked files checked to add; stays hoverable when none are, to say why. */
+function AddToVcsButton({
+  group,
+  files,
+  toAdd
+}: {
+  group: GitGroup
+  files: ChangedFile[]
+  toAdd: ReadonlySet<string>
+}): React.JSX.Element {
+  const addToVcs = useSourceControlStore((state) => state.addToVcs)
+  const running = useSourceControlStore((state) => state.running)
+  const selected = files.filter((file) => toAdd.has(fileKey(group.root, file.path)))
+  const blocked =
+    selected.length === 0
+      ? 'Check the files to add'
+      : running !== null
+        ? 'Wait for the current action to finish'
+        : null
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          type="button"
+          tabIndex={-1}
+          aria-label={`Add to VCS in ${group.name}`}
+          aria-disabled={blocked !== null || undefined}
+          aria-busy={running === 'add' || undefined}
+          onClick={(event) => {
+            event.stopPropagation()
+            if (blocked === null) void addToVcs(group, selected)
+          }}
+          onDoubleClick={(event) => event.stopPropagation()}
+          className="ml-auto flex size-small-icon-button shrink-0 items-center justify-center rounded-button text-muted-foreground hover:bg-hover hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none aria-disabled:opacity-50 aria-disabled:hover:bg-transparent aria-disabled:hover:text-muted-foreground"
+        >
+          {running === 'add' ? (
+            <Spinner className="size-3.5" aria-hidden />
+          ) : (
+            <FilePlus className="size-3.5" aria-hidden />
+          )}
+        </button>
+      </TooltipTrigger>
+      <TooltipContent side="bottom">
+        <span className="flex flex-col">
+          <span>Add to VCS</span>
+          <span className="text-tooltip-muted-foreground">
+            {blocked ?? `Add ${fileCount(selected.length)} to version control`}
+          </span>
+        </span>
+      </TooltipContent>
+    </Tooltip>
+  )
+}
+
 function fileDescription(file: ChangedFile): string {
   const kind = CHANGE_KINDS[file.kind].label
   const where = folderOf(file.path)
@@ -284,18 +361,55 @@ function fileDescription(file: ChangedFile): string {
     .join(', ')
 }
 
+/** A row with its right-click (or context menu key) menu, and its tooltip if it has one. */
+function withMenu(
+  key: string,
+  menu: ReactNode,
+  tip: ReactNode,
+  row: React.JSX.Element
+): React.JSX.Element {
+  const trigger = <ContextMenuTrigger asChild>{row}</ContextMenuTrigger>
+  return (
+    <ContextMenu key={key}>
+      {tip === null ? trigger : <RowTip text={tip}>{trigger}</RowTip>}
+      {menu}
+    </ContextMenu>
+  )
+}
+
 /**
- * The Commit panel's changes: a row per working tree, with its changed files under it. A click
- * selects, a double click or Enter opens a file, Space checks the focused row.
+ * The Commit panel's changes: a row per working tree, with its tracked changes under it and its
+ * untracked files under Unversioned Files. A click selects, a double click or Enter opens a file,
+ * Space checks the focused row, the delete key asks to trash its file, the context menu key opens
+ * its menu.
  */
-export function ChangesTree({ rows }: { rows: ChangeRow[] }): React.JSX.Element {
+export function ChangesTree({
+  rows,
+  onRollback,
+  onTrash
+}: {
+  rows: ChangeRow[]
+  onRollback: RowMenuRequests['onRollback']
+  onTrash: RowMenuRequests['onTrash']
+}): React.JSX.Element {
   const checked = useSourceControlStore((state) => state.checked)
+  const toAdd = useSourceControlStore((state) => state.toAdd)
   const selected = useSourceControlStore((state) => state.selected)
   const select = useSourceControlStore((state) => state.select)
   const toggleFold = useSourceControlStore((state) => state.toggleFold)
+  const toggleUnversionedFold = useSourceControlStore((state) => state.toggleUnversionedFold)
   const toggleFile = useSourceControlStore((state) => state.toggleFile)
+  const toggleToAdd = useSourceControlStore((state) => state.toggleToAdd)
   const toggleGroup = useSourceControlStore((state) => state.toggleGroup)
+  const toggleUnversioned = useSourceControlStore((state) => state.toggleUnversioned)
   const elements = useRef(new Map<string, HTMLElement>())
+
+  const requests: RowMenuRequests = {
+    onRollback,
+    onTrash,
+    onOpen: openFile,
+    onFocusMessage: () => document.getElementById(COMMIT_MESSAGE_ID)?.focus()
+  }
 
   const navigable = rows.filter(isNavigable)
   const selectedKey = navigable.some((row) => row.key === selected?.key)
@@ -309,17 +423,39 @@ export function ChangesTree({ rows }: { rows: ChangeRow[] }): React.JSX.Element 
   }
 
   const toggleCheck = (row: ChangeRow): void => {
-    if (row.type === 'file') toggleFile(row.group.root, row.file.path)
-    else if (row.type === 'group' && row.group.status === 'git' && row.group.files.length > 0)
+    if (row.type === 'file')
+      (isUntracked(row.file) ? toggleToAdd : toggleFile)(row.group.root, row.file.path)
+    else if (row.type === 'unversioned') toggleUnversioned(row.group)
+    else if (
+      row.type === 'group' &&
+      row.group.status === 'git' &&
+      trackedFiles(row.group).length > 0
+    )
       toggleGroup(row.group)
+  }
+
+  /** The row a file or Unversioned Files row hangs under. */
+  const parentOf = (row: ChangeRow): ChangeRow | undefined => {
+    if (row.type === 'unversioned' || (row.type === 'file' && row.depth === 1))
+      return navigable.find((each) => each.key === row.group.root)
+    if (row.type === 'file')
+      return navigable.find((each) => each.type === 'unversioned' && each.group === row.group)
+    return undefined
   }
 
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>): void => {
     if (event.target instanceof HTMLButtonElement) return
-    if (event.ctrlKey || event.metaKey || event.altKey) return
     const index = navigable.findIndex((row) => row.key === tabbable)
     const row = navigable[index]
     if (!row) return
+    if (isDeleteKey(event)) {
+      if (row.type === 'file' && row.file.kind !== 'deleted') {
+        event.preventDefault()
+        onTrash(row.group, [row.file])
+      }
+      return
+    }
+    if (event.ctrlKey || event.metaKey || event.altKey) return
     const move = (step: number): void => {
       const target =
         step === -Infinity
@@ -329,6 +465,11 @@ export function ChangesTree({ rows }: { rows: ChangeRow[] }): React.JSX.Element 
             : navigable[Math.min(Math.max(index + step, 0), navigable.length - 1)]
       if (target) choose(target)
     }
+    const fold = (): void => {
+      if (row.type === 'group') toggleFold(row.group.root)
+      else if (row.type === 'unversioned') toggleUnversionedFold(row.group.root)
+    }
+    const folds = row.type === 'group' || row.type === 'unversioned'
     const handled = ((): boolean => {
       switch (event.key) {
         case 'ArrowDown':
@@ -344,19 +485,20 @@ export function ChangesTree({ rows }: { rows: ChangeRow[] }): React.JSX.Element 
           move(Infinity)
           return true
         case 'ArrowRight':
-          if (row.type === 'group' && !row.expanded) toggleFold(row.group.root)
+          if (folds && !row.expanded) fold()
           else move(1)
           return true
         case 'ArrowLeft': {
-          if (row.type === 'group' && row.expanded) toggleFold(row.group.root)
-          const parent =
-            row.type === 'file' ? navigable.find((each) => each.key === row.group.root) : undefined
-          if (parent) choose(parent)
+          if (folds && row.expanded) fold()
+          else {
+            const parent = parentOf(row)
+            if (parent) choose(parent)
+          }
           return true
         }
         case 'Enter':
-          if (row.type === 'group') toggleFold(row.group.root)
-          else if (row.type === 'file') openFile(row.file)
+          if (row.type === 'file') openFile(row.file)
+          else fold()
           return true
         case ' ':
           toggleCheck(row)
@@ -409,14 +551,19 @@ export function ChangesTree({ rows }: { rows: ChangeRow[] }): React.JSX.Element 
       'data-tree-key': row.key,
       'aria-selected': isSelected,
       tabIndex: row.key === tabbable ? 0 : -1,
+      className: cn(treeRowClass(isSelected), MENU_OPEN),
       onFocus: () => {
         if (!isSelected) select(row.key, rootOf(row))
-      }
+      },
+      onContextMenu: () => choose(row)
     }
     if (row.type === 'group')
       return (
         <div key={row.key} className="sticky top-0 z-10 -mx-2 bg-island px-2 not-first:mt-1.5">
-          <RowTip text={groupTip(row.group)}>
+          {withMenu(
+            row.key,
+            <GroupMenu group={row.group} />,
+            groupTip(row.group),
             <div
               {...common}
               aria-level={1}
@@ -429,7 +576,6 @@ export function ChangesTree({ rows }: { rows: ChangeRow[] }): React.JSX.Element 
                       .join(', ')
                   : undefined
               }
-              className={treeRowClass(isSelected)}
               style={{ paddingLeft: treeIndent(0) }}
               onClick={() => {
                 choose(row)
@@ -442,31 +588,72 @@ export function ChangesTree({ rows }: { rows: ChangeRow[] }): React.JSX.Element 
               />
               <GroupRowContent group={row.group} checked={checked} />
             </div>
-          </RowTip>
+          )}
         </div>
       )
-    const { file, group } = row
-    return (
-      <RowTip
-        key={row.key}
-        text={
-          file.originalPath === null ? file.path : `${file.path}, renamed from ${file.originalPath}`
-        }
-      >
+    if (row.type === 'unversioned') {
+      const { group, files } = row
+      return withMenu(
+        row.key,
+        <UnversionedMenu group={group} files={files} requests={requests} />,
+        null,
         <div
           {...common}
           aria-level={2}
-          aria-label={nameOf(file.path)}
-          aria-description={fileDescription(file)}
-          className={treeRowClass(isSelected)}
+          aria-expanded={row.expanded}
+          aria-label="Unversioned Files"
+          aria-description={fileCount(files.length)}
           style={{ paddingLeft: treeIndent(1) }}
-          onClick={() => choose(row)}
-          onDoubleClick={() => openFile(file)}
+          onClick={() => {
+            choose(row)
+            toggleUnversionedFold(group.root)
+          }}
         >
-          <span className="size-4 shrink-0" aria-hidden />
-          <FileRowContent group={group} file={file} checked={checked} selected={isSelected} />
+          <ChevronRight
+            className={cn('size-4 shrink-0 text-muted-foreground', row.expanded && 'rotate-90')}
+            aria-hidden
+          />
+          <RowCheckbox
+            state={filesCheckState(group.root, files, toAdd)}
+            label={`Select all unversioned files in ${group.name} to add`}
+            onToggle={() => toggleUnversioned(group)}
+          />
+          <span className="ml-1 min-w-0 truncate">Unversioned Files</span>
+          <span
+            className={cn(
+              'type-hint ml-1.5 shrink-0 tabular-nums',
+              isSelected && 'group-focus-within/tree:text-selection-foreground'
+            )}
+          >
+            {fileCount(files.length)}
+          </span>
+          <AddToVcsButton group={group} files={files} toAdd={toAdd} />
         </div>
-      </RowTip>
+      )
+    }
+    const { file, group, depth } = row
+    return withMenu(
+      row.key,
+      <FileRowMenu group={group} file={file} requests={requests} />,
+      file.originalPath === null ? file.path : `${file.path}, renamed from ${file.originalPath}`,
+      <div
+        {...common}
+        aria-level={depth + 1}
+        aria-label={nameOf(file.path)}
+        aria-description={fileDescription(file)}
+        style={{ paddingLeft: treeIndent(depth) }}
+        onClick={() => choose(row)}
+        onDoubleClick={() => openFile(file)}
+      >
+        <span className="size-4 shrink-0" aria-hidden />
+        <FileRowContent
+          group={group}
+          file={file}
+          checked={checked}
+          toAdd={toAdd}
+          selected={isSelected}
+        />
+      </div>
     )
   }
 

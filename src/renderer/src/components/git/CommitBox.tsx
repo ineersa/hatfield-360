@@ -5,6 +5,9 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { rendererPlatform } from '@/lib/shortcut-keys'
 import { useSourceControlStore } from '@/state/source-control-store'
 
+/** The message box's id, for Commit File… to put focus in it. */
+export const COMMIT_MESSAGE_ID = 'commit-message'
+
 const COMMIT_KEY = rendererPlatform === 'darwin' ? '⌘↩' : 'Ctrl+Enter'
 
 /**
@@ -85,6 +88,7 @@ export function CommitBox({ checkedCount }: { checkedCount: number }): React.JSX
         Amend
       </label>
       <Textarea
+        id={COMMIT_MESSAGE_ID}
         aria-label="Commit message"
         placeholder="Commit message"
         rows={3}

@@ -49,7 +49,10 @@ export type GitOutcome = { ok: true; output: string } | { ok: false; output: str
 
 type CommitRequest = {
   root: string
-  /** Paths (`ChangedFile.path`) committed as they are in the working tree, whatever the index holds. */
+  /**
+   * Paths (`ChangedFile.path`) committed as they are in the working tree, whatever the index holds.
+   * An untracked path is refused (`{ ok: false }`) until it is added to version control.
+   */
   paths: string[]
   message: string
   /** Replaces the last commit: with no paths only its message changes. */
@@ -70,6 +73,9 @@ export const SOURCE_CONTROL_CHANNELS = {
   push: 'source-control:push',
   pull: 'source-control:pull',
   rollback: 'source-control:rollback',
+  fetch: 'source-control:fetch',
+  addUntracked: 'source-control:add-untracked',
+  ignoreUntracked: 'source-control:ignore-untracked',
   launchHunk: 'source-control:launch-hunk'
 } as const
 
@@ -83,8 +89,20 @@ export type SourceControlApi = {
   /** Pushes the current branch, setting its upstream on the remote when it has none. */
   pushBranch: (root: string) => Promise<GitOutcome>
   pullBranch: (root: string) => Promise<GitOutcome>
-  /** Restores tracked paths to HEAD (both sides of a rename) and deletes untracked ones. */
+  /**
+   * Restores paths to HEAD (both sides of a rename; a file added since is deleted). An untracked
+   * path is refused: HEAD has nothing to return it to.
+   */
   rollbackChanges: (root: string, paths: string[]) => Promise<GitOutcome>
+  /** `git fetch` in the root, so its ahead/behind counts catch up with the remote. */
+  fetchRemote: (root: string) => Promise<GitOutcome>
+  /** `git add` for untracked files (`ChangedFile.path`); any other path is refused before git runs. */
+  addUntrackedFiles: (root: string, paths: string[]) => Promise<GitOutcome>
+  /**
+   * Appends a pattern matching exactly this untracked file to the root's .gitignore, creating it if
+   * missing; any other path is refused.
+   */
+  ignoreUntrackedFile: (root: string, path: string) => Promise<void>
   /**
    * `hunk diff --watch HEAD` (review: every change the Commit panel lists, staged or not; the empty
    * tree before the first commit) or `hunk log`, in a terminal driven by the terminal API.

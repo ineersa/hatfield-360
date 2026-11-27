@@ -13,8 +13,11 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import {
+  addUntrackedFiles,
   commitChanges,
   diffBase,
+  fetchRemote,
+  ignoreUntrackedFile,
   lastCommitMessage,
   pullBranch,
   pushBranch,
@@ -156,6 +159,7 @@ describe('commitChanges', () => {
     write(repo, 'staged.ts', 'staged only\n')
     git(repo, 'add', 'staged.ts')
     write(repo, 'new.ts', 'new\n')
+    expect((await addUntrackedFiles(repo, ['new.ts'])).ok).toBe(true)
 
     const result = await commitChanges(repo, {
       paths: ['checked.ts', 'new.ts'],
@@ -178,6 +182,7 @@ describe('commitChanges', () => {
     write(repo, '[a].ts', 'brackets\n')
     write(repo, 'a.txt', 'matches the glob but is not checked\n')
     rmSync(join(repo, 'gone.ts'))
+    expect((await addUntrackedFiles(repo, ['*.txt', '[a].ts'])).ok).toBe(true)
 
     const result = await commitChanges(repo, {
       paths: ['renamed.ts', '*.txt', '[a].ts', 'gone.ts'],
@@ -229,13 +234,29 @@ describe('commitChanges', () => {
     write(repo, 'new.ts', 'new\n')
 
     const result = await commitChanges(repo, {
-      paths: ['file.ts', 'new.ts'],
+      paths: ['file.ts'],
       message: 'Blocked',
       amend: false
     })
 
     expect(result).toEqual({ ok: false, output: 'lint: 2 problems\nfile.ts:1 bad\n' })
     expect(git(repo, 'rev-parse', 'HEAD')).toBe(head)
+    expect(await changes(repo)).toEqual(['modified file.ts', 'untracked new.ts'])
+  })
+
+  it('refuses an untracked file, amending or not, leaving the repository untouched', async () => {
+    const repo = makeRepo('untracked', ['file.ts'])
+    write(repo, 'file.ts', 'changed\n')
+    write(repo, 'new.ts', 'new\n')
+    const head = git(repo, 'rev-parse', 'HEAD')
+
+    for (const amend of [false, true])
+      expect(
+        await commitChanges(repo, { paths: ['file.ts', 'new.ts'], message: 'Sneak in', amend })
+      ).toEqual({ ok: false, output: 'Add new.ts to version control first.' })
+
+    expect(git(repo, 'rev-parse', 'HEAD')).toBe(head)
+    expect(git(repo, 'diff', '--cached', '--name-only')).toBe('')
     expect(await changes(repo)).toEqual(['modified file.ts', 'untracked new.ts'])
   })
 
@@ -336,16 +357,9 @@ describe('rollbackChanges', () => {
     git(repo, 'mv', 'old.ts', 'new.ts')
     write(repo, 'added.ts', 'added\n')
     git(repo, 'add', 'added.ts')
-    write(repo, 'folder/untracked.ts', 'untracked\n')
     write(repo, 'kept.ts', 'kept change\n')
 
-    const result = await rollbackChanges(repo, [
-      'modified.ts',
-      'deleted.ts',
-      'new.ts',
-      'added.ts',
-      'folder/untracked.ts'
-    ])
+    const result = await rollbackChanges(repo, ['modified.ts', 'deleted.ts', 'new.ts', 'added.ts'])
 
     expect(result.ok).toBe(true)
     expect(await changes(repo)).toEqual(['modified kept.ts'])
@@ -354,6 +368,111 @@ describe('rollbackChanges', () => {
     expect(read(repo, 'old.ts')).toBe('old.ts\n')
     expect(existsSync(join(repo, 'new.ts'))).toBe(false)
     expect(existsSync(join(repo, 'added.ts'))).toBe(false)
-    expect(existsSync(join(repo, 'folder', 'untracked.ts'))).toBe(false)
+  })
+
+  it('refuses an untracked file, which only Delete removes, before changing anything', async () => {
+    const repo = makeRepo('rollback-untracked', ['modified.ts'])
+    write(repo, 'modified.ts', 'changed\n')
+    write(repo, 'new.ts', 'new\n')
+    await expect(rollbackChanges(repo, ['modified.ts', 'new.ts'])).rejects.toThrow(
+      'new.ts is untracked: nothing to roll back.'
+    )
+    expect(await changes(repo)).toEqual(['modified modified.ts', 'untracked new.ts'])
+  })
+})
+
+describe('fetchRemote', () => {
+  it('brings in what another clone pushed, so the branch counts it as behind', async () => {
+    const remote = join(root, 'fetch-remote.git')
+    git(root, 'init', '-q', '--bare', remote)
+    const repo = makeRepo('fetch', ['file.ts'])
+    git(repo, 'remote', 'add', 'origin', remote)
+    git(repo, 'push', '-q', '-u', 'origin', 'main')
+    const other = join(root, 'fetch-other')
+    git(root, 'clone', '-q', remote, other)
+    write(other, 'from-other.ts', 'other\n')
+    git(other, 'add', 'from-other.ts')
+    git(other, 'commit', '-q', '-m', 'From the other clone')
+    git(other, 'push', '-q')
+    expect((await readWorkingTreeStatus(repo)).behind).toBe(0)
+
+    expect((await fetchRemote(repo)).ok).toBe(true)
+
+    expect(await readWorkingTreeStatus(repo)).toMatchObject({ ahead: 0, behind: 1 })
+    expect(existsSync(join(repo, 'from-other.ts'))).toBe(false)
+  })
+})
+
+describe('addUntrackedFiles', () => {
+  it('adds untracked files, glob-like names literally, and leaves the rest untracked', async () => {
+    const repo = makeRepo('add-untracked', [])
+    write(repo, 'a[1].ts', 'glob-like\n')
+    write(repo, 'a1.ts', 'would match the glob\n')
+    write(repo, 'dir/new file.ts', 'spaced\n')
+
+    const result = await addUntrackedFiles(repo, ['a[1].ts', 'dir/new file.ts'])
+
+    expect(result.ok).toBe(true)
+    expect(await changes(repo)).toEqual([
+      'added a[1].ts',
+      'added dir/new file.ts',
+      'untracked a1.ts'
+    ])
+  })
+
+  it('refuses a tracked file or a path outside the repository before running git', async () => {
+    const repo = makeRepo('add-refused', ['tracked.ts'])
+    write(repo, 'tracked.ts', 'changed\n')
+    write(repo, 'new.ts', 'new\n')
+    await expect(addUntrackedFiles(repo, ['new.ts', 'tracked.ts'])).rejects.toThrow(
+      'tracked.ts is not an untracked file.'
+    )
+    await expect(addUntrackedFiles(repo, ['../outside.ts'])).rejects.toThrow(
+      '../outside.ts is outside the repository.'
+    )
+    expect(await changes(repo)).toEqual(['modified tracked.ts', 'untracked new.ts'])
+  })
+})
+
+describe('ignoreUntrackedFile', () => {
+  it('ignores exactly the file, whatever glob or comment characters its name holds', async () => {
+    const repo = makeRepo('ignore', [])
+    const names = ['#notes [draft]?.txt', '!keep*.txt', 'dir/with space.txt']
+    for (const name of names) write(repo, name, 'x\n')
+    // What each name would match if it were written unescaped.
+    for (const name of ['#notes d1.txt', '!keepers.txt', 'other/dir/with space.txt'])
+      write(repo, name, 'x\n')
+
+    for (const name of names) await ignoreUntrackedFile(repo, name)
+
+    expect(read(repo, '.gitignore')).toBe(
+      '/#notes \\[draft]\\?.txt\n/!keep\\*.txt\n/dir/with space.txt\n'
+    )
+    expect(await changes(repo)).toEqual([
+      'untracked !keepers.txt',
+      'untracked #notes d1.txt',
+      'untracked .gitignore',
+      'untracked other/dir/with space.txt'
+    ])
+  })
+
+  it('appends to an existing .gitignore, ending it with a newline it lacked', async () => {
+    const repo = makeRepo('ignore-append', [])
+    write(repo, '.gitignore', 'dist')
+    write(repo, 'local.env', 'x\n')
+    await ignoreUntrackedFile(repo, 'local.env')
+    expect(read(repo, '.gitignore')).toBe('dist\n/local.env\n')
+  })
+
+  it('refuses a tracked file and a path outside the repository, writing nothing', async () => {
+    const repo = makeRepo('ignore-refused', ['tracked.ts'])
+    write(repo, 'tracked.ts', 'changed\n')
+    await expect(ignoreUntrackedFile(repo, 'tracked.ts')).rejects.toThrow(
+      'tracked.ts is not an untracked file.'
+    )
+    await expect(ignoreUntrackedFile(repo, '../outside.ts')).rejects.toThrow(
+      '../outside.ts is outside the repository.'
+    )
+    expect(existsSync(join(repo, '.gitignore'))).toBe(false)
   })
 })

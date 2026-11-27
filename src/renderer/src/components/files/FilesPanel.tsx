@@ -13,15 +13,12 @@ import {
   ChevronRight,
   ChevronsDownUp,
   CircleAlert,
-  Copy,
-  CopySlash,
   Crosshair,
   Eye,
   EyeOff,
   FolderInput,
   FolderMinus,
   FilePlus,
-  FolderOpen,
   FolderPlus,
   FolderX,
   GitBranch,
@@ -38,6 +35,10 @@ import { useLoadingShown } from '@/components/tree/use-loading-delay'
 import { Input } from '@/components/ui/input'
 import { RootFolderIcon } from '@/components/icons/RootFolderIcon'
 import { OpenTerminalMenuContent } from '@/components/terminal/OpenTerminalMenuContent'
+import { PathMenuItems } from '@/components/tree/PathMenuItems'
+import { useAfterMenu } from '@/components/tree/use-after-menu'
+import { DELETE_LABEL, isDeleteKey } from './delete-key'
+import { TrashDialog } from './TrashDialog'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -68,7 +69,6 @@ import {
 import { separatorOf } from '@/components/editor/editor-tab-labels'
 import { cn } from '@/lib/class-names'
 import { appCommandForKey, appShortcutLabel } from '@/lib/keymap-match'
-import { rendererPlatform } from '@/lib/shortcut-keys'
 import { useKeymapStore } from '@/state/keymap-store'
 import { useSearchStore } from '@/state/search-store'
 import { useEditorTabStore } from '@/state/editor-tab-store'
@@ -91,15 +91,6 @@ import type { DirectoryEntry } from '../../../../shared/file-tree-api'
 
 /** Typed letters within this gap add up to one name prefix to jump to. */
 const TYPE_AHEAD_GAP_MS = 700
-
-const REVEAL_LABEL =
-  rendererPlatform === 'darwin'
-    ? 'Reveal in Finder'
-    : /Windows/.test(navigator.userAgent)
-      ? 'Show in Explorer'
-      : 'Show in File Manager'
-
-const DELETE_LABEL = rendererPlatform === 'darwin' ? '⌘⌫' : 'Delete'
 
 /** headless-tree's hidden top item, whose children are the workspace roots. */
 const TREE_ID = '\0tree'
@@ -302,58 +293,6 @@ function ReloadItem({ path }: { path: string }): React.JSX.Element {
   )
 }
 
-/** Copy Path, Copy Relative Path (below a root only) and reveal in the system file manager. */
-function PathItems({ path, relative }: { path: string; relative: boolean }): React.JSX.Element {
-  const copyPath = useFileTreeStore((state) => state.copyPath)
-  const reveal = useFileTreeStore((state) => state.reveal)
-  const keymap = useKeymapStore((state) => state.shell)
-  return (
-    <>
-      <ContextMenuItem onSelect={() => copyPath(path, 'absolute')}>
-        <Copy aria-hidden />
-        Copy Path
-        <ContextMenuShortcut>{appShortcutLabel(keymap, 'copy-absolute-path')}</ContextMenuShortcut>
-      </ContextMenuItem>
-      {relative ? (
-        <ContextMenuItem onSelect={() => copyPath(path, 'relative')}>
-          <CopySlash aria-hidden />
-          Copy Relative Path
-          <ContextMenuShortcut>
-            {appShortcutLabel(keymap, 'copy-relative-path')}
-          </ContextMenuShortcut>
-        </ContextMenuItem>
-      ) : null}
-      <ContextMenuItem onSelect={() => reveal(path)}>
-        <FolderOpen aria-hidden />
-        {REVEAL_LABEL}
-      </ContextMenuItem>
-    </>
-  )
-}
-
-/**
- * A menu action that runs once the menu has closed, keeping focus from returning to the row:
- * the search box or name field it moves focus to keeps it.
- */
-function useAfterMenu(): {
-  choose: (action: () => void) => void
-  onCloseAutoFocus: (event: Event) => void
-} {
-  const chosen = useRef<(() => void) | null>(null)
-  return {
-    choose: (action) => {
-      chosen.current = action
-    },
-    onCloseAutoFocus: (event) => {
-      const action = chosen.current
-      if (!action) return
-      event.preventDefault()
-      chosen.current = null
-      action()
-    }
-  }
-}
-
 /** New File… and New Folder…, creating in `folder`, once the menu has closed. */
 function CreateItems({
   folder,
@@ -445,7 +384,7 @@ function RootRow({
               <ContextMenuSeparator />
               <FindInFolderItem onSelect={() => afterMenu.choose(state.onFindInFolder)} />
               <ContextMenuSeparator />
-              <PathItems path={root.path} relative={false} />
+              <PathMenuItems path={root.path} relative={false} />
               <ContextMenuSeparator />
               <ReloadItem path={root.path} />
             </>
@@ -501,7 +440,7 @@ function WorktreeRow({
           <ContextMenuSeparator />
           <FindInFolderItem onSelect={() => afterMenu.choose(state.onFindInFolder)} />
           <ContextMenuSeparator />
-          <PathItems path={worktree.path} relative={false} />
+          <PathMenuItems path={worktree.path} relative={false} />
           <ContextMenuSeparator />
           <ReloadItem path={worktree.path} />
         </OpenTerminalMenuContent>
@@ -605,7 +544,7 @@ function EntryRow({
               <ContextMenuSeparator />
             </>
           ) : null}
-          <PathItems path={entry.path} relative />
+          <PathMenuItems path={entry.path} relative />
           {directory ? (
             <>
               <ContextMenuSeparator />
@@ -692,53 +631,6 @@ function StatusRow({
     >
       {shown ? text : null}
     </div>
-  )
-}
-
-/** Confirms moving entries to the system trash, naming them. */
-function DeleteDialog({
-  entries,
-  onClose
-}: {
-  entries: DirectoryEntry[]
-  onClose: () => void
-}): React.JSX.Element {
-  const trash = useFileTreeStore((state) => state.trash)
-  const [first] = entries
-  const one = entries.length === 1
-  const hasFolder = entries.some((entry) => entry.kind === 'directory')
-  return (
-    <AlertDialog open onOpenChange={(open) => !open && onClose()}>
-      <AlertDialogContent>
-        <AlertDialogTitle>
-          {one && first
-            ? `Delete ${first.kind === 'directory' ? 'folder' : 'file'} "${first.name}"?`
-            : `Delete ${entries.length} items?`}
-        </AlertDialogTitle>
-        <AlertDialogDescription>
-          {`${one ? 'It moves' : 'They move'} to the system trash${hasFolder ? ', folders with everything in them' : ''}, and can be restored from there.`}
-        </AlertDialogDescription>
-        {one ? null : (
-          <ul aria-label="Items to delete" className="type-hint max-h-40 overflow-y-auto">
-            {entries.map((entry) => (
-              <li key={entry.path} className="truncate">
-                {entry.name}
-              </li>
-            ))}
-          </ul>
-        )}
-        <AlertDialogFooter>
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
-          <AlertDialogAction
-            primary
-            autoFocus
-            onClick={() => trash(entries.map((entry) => entry.path))}
-          >
-            Move to Trash
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
   )
 }
 
@@ -1061,10 +953,7 @@ export function FilesPanel(): React.JSX.Element {
       return
     }
     const plain = !event.ctrlKey && !event.metaKey && !event.altKey
-    const deleteKey =
-      (event.key === 'Delete' && plain) ||
-      (rendererPlatform === 'darwin' && event.metaKey && event.key === 'Backspace')
-    if (deleteKey) {
+    if (isDeleteKey(event)) {
       event.preventDefault()
       askDelete(item)
       return
@@ -1246,7 +1135,7 @@ export function FilesPanel(): React.JSX.Element {
           {tree.getItems().map(renderItem)}
         </div>
       )}
-      {deleting ? <DeleteDialog entries={deleting} onClose={() => setDeleting(null)} /> : null}
+      {deleting ? <TrashDialog entries={deleting} onClose={() => setDeleting(null)} /> : null}
       {creating ? <CreateDialog {...creating} onClose={() => setCreating(null)} /> : null}
     </>
   )

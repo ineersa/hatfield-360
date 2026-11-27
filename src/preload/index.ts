@@ -83,6 +83,11 @@ const desktopApi: DesktopApi = {
   pullBranch: (root) => ipcRenderer.invoke(SOURCE_CONTROL_CHANNELS.pull, root),
   rollbackChanges: (root, paths) =>
     ipcRenderer.invoke(SOURCE_CONTROL_CHANNELS.rollback, root, paths),
+  fetchRemote: (root) => ipcRenderer.invoke(SOURCE_CONTROL_CHANNELS.fetch, root),
+  addUntrackedFiles: (root, paths) =>
+    ipcRenderer.invoke(SOURCE_CONTROL_CHANNELS.addUntracked, root, paths),
+  ignoreUntrackedFile: (root, path) =>
+    ipcRenderer.invoke(SOURCE_CONTROL_CHANNELS.ignoreUntracked, root, path),
   launchHunk: (request) => ipcRenderer.invoke(SOURCE_CONTROL_CHANNELS.launchHunk, request),
   listDirectory: (path) => ipcRenderer.invoke(FILE_TREE_CHANNELS.list, path),
   watchDirectories: (paths) => ipcRenderer.invoke(FILE_TREE_CHANNELS.watch, paths),

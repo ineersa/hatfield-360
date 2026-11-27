@@ -12,7 +12,7 @@ import type { ChangedFile } from '../../../../shared/source-control-api'
 import type { GitGroup } from './change-tree-rows'
 import { CHANGE_KINDS } from './ChangesTree'
 
-/** Confirms rolling the checked files back, naming each one; nothing is done until Roll Back. */
+/** Confirms rolling tracked changes back, naming each one; nothing is done until Roll Back. */
 export function RollbackDialog({
   targets,
   onConfirm,
@@ -54,8 +54,8 @@ export function RollbackDialog({
           )}
         </ul>
         <AlertDialogDescription>
-          Untracked files are deleted and tracked files are restored to the last commit. This
-          can&apos;t be undone.
+          Each file goes back to how it is in the last commit: an added file is deleted, a deleted
+          one comes back. This can&apos;t be undone.
         </AlertDialogDescription>
         <AlertDialogFooter>
           <AlertDialogCancel>Cancel</AlertDialogCancel>

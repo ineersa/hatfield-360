@@ -1,3 +1,4 @@
+import { readFile, realpath } from 'node:fs/promises'
 import { devNull } from 'node:os'
 import { isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { type FileStatusResult, simpleGit } from 'simple-git'
@@ -7,7 +8,9 @@ import type {
   GitOutcome,
   SourceControlGroup
 } from '../../shared/source-control-api'
+import { writeFileAtomic } from '../files/atomic-write'
 import { isPathInside } from '../files/path-containment'
+import { anchoredIgnorePattern } from './git-ignore'
 
 type WorkingTreeStatus = Pick<
   Extract<SourceControlGroup, { status: 'git' }>,
@@ -167,7 +170,7 @@ export async function diffBase(root: string): Promise<string> {
 
 /**
  * Commits the paths as they are in the working tree, leaving every other change (staged or not)
- * where it was. New files are added first and taken out of the index again if the commit fails.
+ * where it was. An untracked file is refused: it is added to version control first.
  */
 export async function commitChanges(
   root: string,
@@ -181,28 +184,24 @@ export async function commitChanges(
   if (paths.length === 0 && !request.amend)
     return { ok: false, output: 'Choose the files to commit.' }
   const files = paths.length === 0 ? [] : await changedFiles(root, paths)
-  const untracked = files.filter((file) => file.kind === 'untracked').map((file) => file.path)
+  const untracked = files.find((file) => file.kind === 'untracked')
+  if (untracked) return { ok: false, output: `Add ${untracked.path} to version control first.` }
   // Paths with no changes stay in: git's pathspec check speaks for them.
   const known = new Set(files.flatMap(bothSides))
   const pathspecs = [...new Set([...known, ...paths])].map(literal)
-  if (untracked.length > 0) {
-    const added = await run(root, ['add', '--', ...untracked.map(literal)])
-    if (added.exitCode !== 0) return outcome(added)
-  }
-  const committed = await run(
-    root,
-    [
-      'commit',
-      '--only',
-      ...(request.amend ? ['--amend'] : []),
-      '--file=-',
-      ...(pathspecs.length > 0 ? ['--', ...pathspecs] : [])
-    ],
-    request.message
+  return outcome(
+    await run(
+      root,
+      [
+        'commit',
+        '--only',
+        ...(request.amend ? ['--amend'] : []),
+        '--file=-',
+        ...(pathspecs.length > 0 ? ['--', ...pathspecs] : [])
+      ],
+      request.message
+    )
   )
-  if (committed.exitCode !== 0 && untracked.length > 0)
-    await run(root, ['rm', '--cached', '-q', '-f', '--', ...untracked.map(literal)])
-  return outcome(committed)
 }
 
 /** The last commit's message as written, or null on a branch without commits. */
@@ -248,32 +247,70 @@ export async function pullBranch(root: string): Promise<GitOutcome> {
   return outcome(await run(root, ['pull']))
 }
 
+/** `git fetch` as the user would type it: the branch's remote, else `origin`. */
+export async function fetchRemote(root: string): Promise<GitOutcome> {
+  return outcome(await run(root, ['fetch']))
+}
+
+/** The requested paths once each is known to be an untracked file of the working tree. */
+async function untrackedPaths(root: string, requested: unknown): Promise<string[]> {
+  const paths = repositoryPaths(root, requested)
+  const untracked = new Set(
+    (await changedFiles(root, paths))
+      .filter((file) => file.kind === 'untracked')
+      .map((file) => file.path)
+  )
+  const other = paths.find((path) => !untracked.has(path))
+  if (other !== undefined) throw new Error(`${other} is not an untracked file.`)
+  return paths
+}
+
+/** Adds untracked files to the index, so they are listed as added. */
+export async function addUntrackedFiles(root: string, requested: unknown): Promise<GitOutcome> {
+  const paths = await untrackedPaths(root, requested)
+  if (paths.length === 0) return { ok: true, output: '' }
+  return outcome(await run(root, ['add', '--', ...paths.map(literal)]))
+}
+
 /**
- * Returns the paths to HEAD: untracked files are deleted, tracked ones restored in the index and
- * the working tree (a staged new file goes away, a deleted one comes back, a rename is undone on
- * both sides). Paths without changes are left alone.
+ * Appends a pattern matching exactly the untracked file at `path` to the root's .gitignore,
+ * creating it if needed. A linked .gitignore is written through, if it stays in the root.
+ */
+export async function ignoreUntrackedFile(root: string, requested: unknown): Promise<void> {
+  const [path] = await untrackedPaths(root, [requested])
+  if (path === undefined) throw new Error('Invalid file path.')
+  const pattern = anchoredIgnorePattern(path)
+  const link = join(root, '.gitignore')
+  const target = await realpath(link).catch(() => link)
+  if (!isPathInside(target, await realpath(root)) && target !== link)
+    throw new Error('.gitignore points outside the repository.')
+  const current = await readFile(target, 'utf8').catch((error: unknown) => {
+    if (error instanceof Error && 'code' in error && error.code === 'ENOENT') return ''
+    throw error
+  })
+  const separator = current === '' || current.endsWith('\n') ? '' : '\n'
+  await writeFileAtomic(target, `${current}${separator}${pattern}\n`)
+}
+
+/**
+ * Returns the paths to HEAD in the index and the working tree: a file added since is deleted, a
+ * deleted one comes back, a rename is undone on both sides. Paths without changes are left alone;
+ * an untracked file is refused, since HEAD has nothing to return it to.
  */
 export async function rollbackChanges(root: string, requested: unknown): Promise<GitOutcome> {
   const files = await changedFiles(root, repositoryPaths(root, requested))
-  const untracked = files.filter((file) => file.kind === 'untracked').map((file) => file.path)
-  const tracked = files.filter((file) => file.kind !== 'untracked').flatMap(bothSides)
-  let output = ''
-  if (tracked.length > 0) {
-    const head = await run(root, ['rev-parse', '--verify', '-q', 'HEAD'])
-    // Without a commit every tracked change is a staged new file: HEAD has none of them.
-    const restored = await run(
+  const untracked = files.find((file) => file.kind === 'untracked')
+  if (untracked) throw new Error(`${untracked.path} is untracked: nothing to roll back.`)
+  const tracked = files.flatMap(bothSides)
+  if (tracked.length === 0) return { ok: true, output: '' }
+  const head = await run(root, ['rev-parse', '--verify', '-q', 'HEAD'])
+  // Without a commit every tracked change is a staged new file: HEAD has none of them.
+  return outcome(
+    await run(
       root,
       head.exitCode === 0
         ? ['restore', '--source=HEAD', '--staged', '--worktree', '--', ...tracked.map(literal)]
         : ['rm', '-q', '-f', '--', ...tracked.map(literal)]
     )
-    if (restored.exitCode !== 0) return outcome(restored)
-    output += restored.output
-  }
-  if (untracked.length > 0) {
-    const cleaned = await run(root, ['clean', '-f', '-q', '--', ...untracked.map(literal)])
-    if (cleaned.exitCode !== 0) return { ok: false, output: output + cleaned.output }
-    output += cleaned.output
-  }
-  return { ok: true, output }
+  )
 }

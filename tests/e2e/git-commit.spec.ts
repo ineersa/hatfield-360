@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test'
 import { execFileSync } from 'node:child_process'
-import { chmod, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { chmod, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { tab as editorTab } from './editor-page'
@@ -61,6 +61,15 @@ const changes = (page: Page) => page.getByRole('tree', { name: 'Changes' })
 const row = (page: Page, name: string) => changes(page).getByRole('treeitem', { name, exact: true })
 const include = (page: Page, path: string) =>
   changes(page).getByRole('checkbox', { name: `Include ${path}`, exact: true })
+const selectToAdd = (page: Page, path: string) =>
+  changes(page).getByRole('checkbox', { name: `Select ${path} to add`, exact: true })
+const includeAll = (page: Page) =>
+  changes(page).getByRole('checkbox', { name: 'Include all changes in app' })
+const unversioned = (page: Page) => row(page, 'Unversioned Files')
+async function contextMenu(page: Page, name: string, action: string): Promise<void> {
+  await row(page, name).click({ button: 'right' })
+  await page.getByRole('menuitem', { name: action }).click()
+}
 const message = (page: Page) => page.getByRole('textbox', { name: 'Commit message' })
 const commitButton = (page: Page) => page.getByRole('button', { name: 'Commit', exact: true })
 const showGit = (page: Page) =>
@@ -83,13 +92,31 @@ test('the Commit panel lists changes, commits checked files, amends, and commits
         await expect(changes(page).getByRole('treeitem', { name: 'app' })).toContainText('main')
         await expect(row(page, 'a.txt')).toHaveAccessibleDescription('modified')
         await expect(row(page, 'b.txt')).toHaveAccessibleDescription('deleted')
-        await expect(row(page, 'new.txt')).toHaveAccessibleDescription('untracked')
         await expect(row(page, 'a.txt')).toContainText('M')
+        // Untracked files wait, folded, under Unversioned Files.
+        await expect(unversioned(page)).toHaveAccessibleDescription('1 file')
+        await expect(unversioned(page)).toHaveAttribute('aria-expanded', 'false')
+        await expect(row(page, 'new.txt')).toHaveCount(0)
+        await unversioned(page).click()
+        await expect(row(page, 'new.txt')).toHaveAccessibleDescription('untracked')
         await expect(row(page, 'new.txt')).toContainText('U')
         // Nothing starts checked, and nothing can be committed until something is.
         await expect(include(page, 'a.txt')).not.toBeChecked()
         await message(page).fill('Change a and add new')
         await expect(commitButton(page)).toHaveAttribute('aria-disabled', 'true')
+
+        // An untracked file is checked to be added, never to be committed as it is.
+        await expect(include(page, 'new.txt')).toHaveCount(0)
+        const addButton = changes(page).getByRole('button', { name: 'Add to VCS in app' })
+        await expect(addButton).toHaveAttribute('aria-disabled', 'true')
+        await selectToAdd(page, 'new.txt').click()
+        await expect(commitButton(page)).toHaveAttribute('aria-disabled', 'true')
+        await expect(includeAll(page)).not.toBeChecked()
+        await addButton.click()
+        await expect(row(page, 'new.txt')).toHaveAccessibleDescription('added')
+        await expect(row(page, 'new.txt')).toContainText('A')
+        await expect(include(page, 'new.txt')).not.toBeChecked()
+        await expect(unversioned(page)).toHaveCount(0)
 
         await include(page, 'a.txt').click()
         // Space checks the focused row; the group's checkbox shows a part checked.
@@ -164,7 +191,7 @@ test("a failing pre-commit hook's output is shown and nothing is committed", asy
     await withApp(
       async (_app, page) => {
         await showGit(page)
-        await changes(page).getByRole('checkbox', { name: 'Include all changes in app' }).click()
+        await includeAll(page).click()
         await message(page).fill('Should not land')
         await message(page).press('ControlOrMeta+Enter')
 
@@ -176,7 +203,7 @@ test("a failing pre-commit hook's output is shown and nothing is committed", asy
         expect(gitOutput(repo, 'log', '--format=%s')).toBe('Add files\nfirst')
         // The new file is not left staged, and both stay listed and checked for another try.
         expect(gitOutput(repo, 'status', '--porcelain')).toBe('M a.txt\n?? new.txt')
-        await expect(include(page, 'new.txt')).toBeChecked()
+        await expect(include(page, 'a.txt')).toBeChecked()
         await expect(message(page)).toHaveValue('Should not land')
 
         await failure.getByRole('button', { name: 'Dismiss' }).click()
@@ -189,11 +216,12 @@ test("a failing pre-commit hook's output is shown and nothing is committed", asy
   }
 })
 
-test('rollback restores tracked files and deletes untracked ones once confirmed', async () => {
+test('rollback restores changed files and deletes added ones once confirmed', async () => {
   const fixture = await commitFixture()
   const { repo } = fixture
   await writeFile(join(repo, 'a.txt'), 'a.txt two\n')
   await writeFile(join(repo, 'new.txt'), 'new\n')
+  git(repo, 'add', 'new.txt')
   try {
     await withApp(
       async (_app, page) => {
@@ -207,7 +235,7 @@ test('rollback restores tracked files and deletes untracked ones once confirmed'
         const dialog = page.getByRole('alertdialog', { name: 'Roll back 2 files?' })
         await expect(
           dialog.getByRole('list', { name: 'Files to roll back' }).getByRole('listitem')
-        ).toHaveText(['Ma.txtmodified', 'Unew.txtuntracked'])
+        ).toHaveText(['Ma.txtmodified', 'Anew.txtadded'])
         await saveScreenshot(page, 'git-rollback-dialog')
         // Cancel leaves everything as it was.
         await dialog.getByRole('button', { name: 'Cancel' }).click()
@@ -218,6 +246,116 @@ test('rollback restores tracked files and deletes untracked ones once confirmed'
         await expect(changes(page).getByText('No changes')).toBeVisible()
         expect(await readFile(join(repo, 'a.txt'), 'utf8')).toBe('a.txt one\n')
         expect(existsSync(join(repo, 'new.txt'))).toBe(false)
+      },
+      { userDataDir: fixture.userData, env: fixture.env }
+    )
+  } finally {
+    await fixture.cleanup()
+  }
+})
+
+test('Unversioned Files selects untracked files to add, and rows have menus to act on them', async () => {
+  const fixture = await commitFixture()
+  const { repo } = fixture
+  await writeFile(join(repo, 'a.txt'), 'a.txt two\n')
+  await writeFile(join(repo, 'b.txt'), 'b.txt two\n')
+  await writeFile(join(repo, 'x [1].txt'), 'x\n')
+  await writeFile(join(repo, 'y.txt'), 'y\n')
+  // The system trash is kept in this folder, never the user's own.
+  const [dataHome, cleanDataHome] = await makeTempDir('data-home')
+  try {
+    await withApp(
+      async (_app, page) => {
+        await showGit(page)
+        await expect(unversioned(page)).toHaveAccessibleDescription('2 files')
+        // The node's checkbox selects every untracked file to add, and only those.
+        await changes(page)
+          .getByRole('checkbox', { name: 'Select all unversioned files in app to add' })
+          .click()
+        await unversioned(page).click()
+        await expect(selectToAdd(page, 'x [1].txt')).toBeChecked()
+        await expect(selectToAdd(page, 'y.txt')).toBeChecked()
+        await expect(includeAll(page)).not.toBeChecked()
+        await selectToAdd(page, 'y.txt').click()
+        await expect(
+          changes(page).getByRole('checkbox', {
+            name: 'Select all unversioned files in app to add'
+          })
+        ).toBeChecked({ indeterminate: true })
+        await saveScreenshot(page, 'git-unversioned')
+
+        // Add to .gitignore ignores exactly that file, and .gitignore becomes a change.
+        await contextMenu(page, 'x [1].txt', 'Add to .gitignore')
+        await expect(row(page, 'x [1].txt')).toHaveCount(0)
+        await expect(row(page, '.gitignore')).toHaveAccessibleDescription('untracked')
+        expect(await readFile(join(repo, '.gitignore'), 'utf8')).toBe('/x \\[1].txt\n')
+
+        // Rollback… asks about that file only.
+        await include(page, 'b.txt').click()
+        await contextMenu(page, 'a.txt', 'Rollback…')
+        const dialog = page.getByRole('alertdialog', { name: 'Roll back 1 file?' })
+        await expect(
+          dialog.getByRole('list', { name: 'Files to roll back' }).getByRole('listitem')
+        ).toHaveText(['Ma.txtmodified'])
+        await dialog.getByRole('button', { name: 'Cancel' }).click()
+
+        // Commit File… leaves only that file checked and the message box ready.
+        await contextMenu(page, 'a.txt', 'Commit File…')
+        await expect(include(page, 'a.txt')).toBeChecked()
+        await expect(include(page, 'b.txt')).not.toBeChecked()
+        await expect(message(page)).toBeFocused()
+
+        // Delete… moves an untracked file to the trash.
+        await contextMenu(page, 'y.txt', 'Delete…')
+        await page.getByRole('button', { name: 'Move to Trash' }).click()
+        await expect(row(page, 'y.txt')).toHaveCount(0)
+        expect(await readdir(join(dataHome, 'Trash', 'files'))).toEqual(['y.txt'])
+
+        // Add to VCS lists the last untracked file as added, and Unversioned Files goes.
+        await contextMenu(page, '.gitignore', 'Add to VCS')
+        await expect(row(page, '.gitignore')).toHaveAccessibleDescription('added')
+        await expect(unversioned(page)).toHaveCount(0)
+
+        // The delete key on a tracked file trashes it too, which leaves it deleted.
+        await row(page, 'b.txt').click()
+        await page.keyboard.press(process.platform === 'darwin' ? 'Meta+Backspace' : 'Delete')
+        await page
+          .getByRole('alertdialog', { name: 'Delete file "b.txt"?' })
+          .getByRole('button', { name: 'Move to Trash' })
+          .click()
+        await expect(row(page, 'b.txt')).toHaveAccessibleDescription('deleted')
+        expect(existsSync(join(repo, 'b.txt'))).toBe(false)
+        expect((await readdir(join(dataHome, 'Trash', 'files'))).toSorted()).toEqual([
+          'b.txt',
+          'y.txt'
+        ])
+      },
+      { userDataDir: fixture.userData, env: { ...fixture.env, XDG_DATA_HOME: dataHome } }
+    )
+  } finally {
+    await cleanDataHome()
+    await fixture.cleanup()
+  }
+})
+
+test("Fetch from a repository's menu counts what another clone pushed", async () => {
+  const fixture = await commitFixture()
+  const { remote } = fixture
+  const other = join(remote, '..', 'other')
+  git(join(remote, '..'), 'clone', '-q', remote, other)
+  await writeFile(join(other, 'pushed.txt'), 'pushed\n')
+  git(other, 'add', 'pushed.txt')
+  git(other, 'commit', '-q', '-m', 'Pushed from another clone')
+  git(other, 'push', '-q')
+  try {
+    await withApp(
+      async (_app, page) => {
+        await showGit(page)
+        const app = changes(page).getByRole('treeitem', { name: 'app' })
+        await expect(app).toHaveAccessibleDescription('branch main')
+        await app.click({ button: 'right' })
+        await page.getByRole('menuitem', { name: 'Fetch', exact: true }).click()
+        await expect(app).toHaveAccessibleDescription('branch main, 1 to pull')
       },
       { userDataDir: fixture.userData, env: fixture.env }
     )

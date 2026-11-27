@@ -34,8 +34,8 @@ type FileTreeState = {
   restore: (expanded: string[], hideIgnored: boolean) => void
   copyPath: (path: string, form: PathForm, lines?: LineRange) => void
   reveal: (path: string) => void
-  /** Moves the entries to the system trash, then lists their folders again. */
-  trash: (paths: string[]) => void
+  /** Moves the entries to the system trash, then lists their folders again; resolves once done, failed or not. */
+  trash: (paths: string[]) => Promise<void>
   /** Renames an entry in its folder; resolves false, after telling the user why, when main refuses. */
   rename: (path: string, name: string) => Promise<boolean>
   /** Creates a file or folder in `folder` (`name` may hold `/`-separated folders) and lists it. */
@@ -211,7 +211,7 @@ export const useFileTreeStore = create<FileTreeState>((set, get) => {
     trash: (paths) => {
       // The watcher would also catch it; listing at once keeps the tree from showing what's gone.
       const folders = [...new Set(paths.map(parentOf))]
-      window.desktop
+      return window.desktop
         .trashPaths(paths)
         .catch(failed)
         .finally(() => {

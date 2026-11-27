@@ -6,11 +6,18 @@ import {
   OpenFolderEmptyState,
   WorkspaceProblemBanner
 } from '@/components/workspace/WorkspaceNotices'
-import { useSourceControlStore } from '@/state/source-control-store'
+import { TrashDialog } from '@/components/files/TrashDialog'
+import { type FileTargets, useSourceControlStore } from '@/state/source-control-store'
 import { useWorkspaceStore } from '@/state/workspace-store'
 import { useWorktreeStore } from '@/state/worktree-store'
 import { ActionFailureNotice } from './ActionFailureNotice'
-import { changeTreeRows, checkedFilesByGroup } from './change-tree-rows'
+import type { ChangedFile } from '../../../../shared/source-control-api'
+import {
+  changeTreeRows,
+  checkedFilesByGroup,
+  type GitGroup,
+  trackedFiles
+} from './change-tree-rows'
 import { ChangesLoading, ChangesTree } from './ChangesTree'
 import { CommitBox } from './CommitBox'
 import { RollbackDialog } from './RollbackDialog'
@@ -26,6 +33,7 @@ export function GitPanel(): React.JSX.Element {
   const groups = useSourceControlStore((state) => state.groups)
   const checked = useSourceControlStore((state) => state.checked)
   const collapsed = useSourceControlStore((state) => state.collapsed)
+  const unversionedOpen = useSourceControlStore((state) => state.unversionedOpen)
   const selected = useSourceControlStore((state) => state.selected)
   const running = useSourceControlStore((state) => state.running)
   const failure = useSourceControlStore((state) => state.failure)
@@ -35,7 +43,8 @@ export function GitPanel(): React.JSX.Element {
   const expandAll = useSourceControlStore((state) => state.expandAll)
   const collapseAll = useSourceControlStore((state) => state.collapseAll)
   const dismissFailure = useSourceControlStore((state) => state.dismissFailure)
-  const [confirmingRollback, setConfirmingRollback] = useState(false)
+  const [rollingBack, setRollingBack] = useState<FileTargets | null>(null)
+  const [trashing, setTrashing] = useState<{ group: GitGroup; files: ChangedFile[] } | null>(null)
 
   // Opening the panel, folders added or removed, and branches or worktrees git reports read it again.
   useEffect(() => {
@@ -57,9 +66,12 @@ export function GitPanel(): React.JSX.Element {
     return () => window.removeEventListener('focus', onFocus)
   }, [refresh])
 
-  const rows = useMemo(() => changeTreeRows(groups ?? [], collapsed), [groups, collapsed])
+  const rows = useMemo(
+    () => changeTreeRows(groups ?? [], collapsed, unversionedOpen),
+    [groups, collapsed, unversionedOpen]
+  )
   const checkedTargets = useMemo(
-    () => checkedFilesByGroup(groups ?? [], checked),
+    () => checkedFilesByGroup(groups ?? [], checked, trackedFiles),
     [groups, checked]
   )
   const checkedCount = checkedTargets.reduce((sum, target) => sum + target.files.length, 0)
@@ -95,7 +107,7 @@ export function GitPanel(): React.JSX.Element {
           label="Rollback"
           busy={running === 'rollback'}
           disabled={checkedCount === 0 || (busy && running !== 'rollback')}
-          onClick={() => setConfirmingRollback(true)}
+          onClick={() => setRollingBack(checkedTargets)}
           tip={checkedCount === 0 ? 'Check the files to roll back' : 'Roll back checked files…'}
         >
           <Undo2 className={ICON} strokeWidth={1.75} aria-hidden />
@@ -118,15 +130,30 @@ export function GitPanel(): React.JSX.Element {
           <ChangesLoading />
         </div>
       ) : (
-        <ChangesTree rows={rows} />
+        <ChangesTree
+          rows={rows}
+          onRollback={setRollingBack}
+          onTrash={(group, files) => setTrashing({ group, files })}
+        />
       )}
       {failure ? <ActionFailureNotice failure={failure} onDismiss={dismissFailure} /> : null}
       <CommitBox checkedCount={checkedCount} />
-      {confirmingRollback ? (
+      {rollingBack ? (
         <RollbackDialog
-          targets={checkedTargets}
-          onConfirm={() => void rollback()}
-          onClose={() => setConfirmingRollback(false)}
+          targets={rollingBack}
+          onConfirm={() => void rollback(rollingBack)}
+          onClose={() => setRollingBack(null)}
+        />
+      ) : null}
+      {trashing ? (
+        <TrashDialog
+          entries={trashing.files.map((file) => ({
+            name: file.path.slice(file.path.lastIndexOf('/') + 1),
+            path: file.absolutePath,
+            kind: 'file'
+          }))}
+          onClose={() => setTrashing(null)}
+          onTrashed={() => void refresh()}
         />
       ) : null}
     </>

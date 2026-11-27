@@ -2,7 +2,10 @@ import { isPlainObject } from '../../shared/plain-object'
 import { SOURCE_CONTROL_CHANNELS } from '../../shared/source-control-api'
 import { sourceControlStatus, workingTreeOf } from '../git/source-control-groups'
 import {
+  addUntrackedFiles,
   commitChanges,
+  fetchRemote,
+  ignoreUntrackedFile,
   lastCommitMessage,
   pullBranch,
   pushBranch,
@@ -49,6 +52,18 @@ export function registerSourceControlIpc(): void {
 
   handleTrusted(SOURCE_CONTROL_CHANNELS.rollback, async (_event, root, paths) =>
     rollbackChanges((await workingTree(root)).root, paths)
+  )
+
+  handleTrusted(SOURCE_CONTROL_CHANNELS.fetch, async (_event, root) =>
+    fetchRemote((await workingTree(root)).root)
+  )
+
+  handleTrusted(SOURCE_CONTROL_CHANNELS.addUntracked, async (_event, root, paths) =>
+    addUntrackedFiles((await workingTree(root)).root, paths)
+  )
+
+  handleTrusted(SOURCE_CONTROL_CHANNELS.ignoreUntracked, async (_event, root, path) =>
+    ignoreUntrackedFile((await workingTree(root)).root, path)
   )
 
   handleTrusted(SOURCE_CONTROL_CHANNELS.launchHunk, async (event, request) => {
