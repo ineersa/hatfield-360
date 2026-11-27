@@ -137,7 +137,8 @@ export const COMMIT_MESSAGE_SYSTEM_PROMPT = [
   'Answer with the commit message only: no preamble, quotes or code fences.',
   'A subject line in the imperative mood, under 72 characters, saying what the change does; then, only when the change needs explaining, a blank line and a short body wrapped at 72 characters saying why.',
   "Follow the user's rules for commit messages when there are any, else the style of the recent subjects.",
-  "Work from the file names and line counts. Call the file_diff tool only for a file whose name and counts don't tell you what changed, and then only for the few files that matter most."
+  'Say what changed, not which files: a subject like "Update a.txt" or "Modify config" is wrong.',
+  "Work from the file names and line counts when they show what changed. When they don't, call the file_diff tool first, for the few files that matter most."
 ].join('\n')
 
 /** The turn's prompt: names and counts of what will be committed, the style to follow, the user's rules. */

@@ -14,7 +14,7 @@ import { seedWorkspace } from './workspace-seed'
 const fixtures = resolve(__dirname, '..', 'fixtures', 'acp')
 
 /** What the cassette's agent answered, as scripts/record-chat-cassettes.ts recorded it. */
-const RECORDED_MESSAGE = 'greeting: change greeting to "Welcome back" message'
+const RECORDED_MESSAGE = 'greeting: Change greeting to "Welcome back"'
 
 const include = (page: Page) =>
   changes(page).getByRole('checkbox', { name: `Include ${COMMIT_MESSAGE_PATH}`, exact: true })
