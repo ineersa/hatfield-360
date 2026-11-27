@@ -13,7 +13,7 @@ import { Spinner } from '@/components/ui/spinner'
 import { agoText } from '@/lib/elapsed-time'
 import { useSourceControlStore } from '@/state/source-control-store'
 import { type StashDialog, useStashStore } from '@/state/stash-store'
-import type { StashEntry } from '../../../../shared/stash-api'
+import { MAX_STASH_MESSAGE_LENGTH, type StashEntry } from '../../../../shared/stash-api'
 import { ChangedFileList } from './ChangedFileList'
 
 const STASH_ROW =
@@ -50,6 +50,7 @@ function StashChangesDialog({
           aria-label="Stash message"
           autoFocus
           placeholder="Message (optional)"
+          maxLength={MAX_STASH_MESSAGE_LENGTH}
           value={message}
           onChange={(event) => setMessage(event.target.value)}
           onKeyDown={(event) => {
@@ -121,7 +122,12 @@ function UnstashDialog({
                   />
                   <span className="min-w-0 truncate">{entry.message}</span>
                   <span className="type-hint ml-auto shrink-0 pl-2">
-                    {`${entry.branch ?? 'detached HEAD'} · ${agoText(entry.createdAt, now)}`}
+                    {[
+                      entry.detached ? 'detached HEAD' : entry.branch,
+                      agoText(entry.createdAt, now)
+                    ]
+                      .filter((part) => part !== null)
+                      .join(' · ')}
                   </span>
                 </label>
               ))}

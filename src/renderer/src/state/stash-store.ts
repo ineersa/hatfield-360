@@ -40,6 +40,12 @@ type StashState = {
 
 const git = () => useSourceControlStore.getState()
 
+/** A popped or dropped stash's tab could only fail to start again. */
+function closeTabsOf(root: string, id: string): void {
+  const hunk = useHunkTabStore.getState()
+  for (const tab of hunk.tabs) if (tab.root === root && tab.stash === id) hunk.closeTab(tab.id)
+}
+
 export const useStashStore = create<StashState>((set, get) => {
   return {
     dialog: null,
@@ -82,9 +88,11 @@ export const useStashStore = create<StashState>((set, get) => {
       if (dialog?.kind !== 'unstash') return
       const { group } = dialog
       set({ dialog: null })
-      await git().runGitAction('unstash', pop ? 'Pop' : 'Apply', group, () =>
-        window.desktop.unstash(group.root, stash.id, pop)
-      )
+      await git().runGitAction('unstash', pop ? 'Pop' : 'Apply', group, async () => {
+        const outcome = await window.desktop.unstash(group.root, stash.id, pop)
+        if (outcome.ok && pop) closeTabsOf(group.root, stash.id)
+        return outcome
+      })
     },
     drop: async () => {
       const { dialog } = get()
@@ -95,6 +103,7 @@ export const useStashStore = create<StashState>((set, get) => {
       await git().runGitAction('drop-stash', 'Drop', group, async () => {
         const outcome = await window.desktop.dropStash(group.root, stash.id)
         dropped = outcome.ok
+        if (dropped) closeTabsOf(group.root, stash.id)
         return outcome
       })
       // Back to the list, as it is now, unless another dialog opened meanwhile.

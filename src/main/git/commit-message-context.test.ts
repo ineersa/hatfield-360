@@ -24,8 +24,10 @@ beforeAll(() => {
 })
 
 afterAll(() => {
-  process.env.GIT_CONFIG_GLOBAL = saved.global
-  process.env.GIT_CONFIG_NOSYSTEM = saved.system
+  if (saved.global === undefined) delete process.env.GIT_CONFIG_GLOBAL
+  else process.env.GIT_CONFIG_GLOBAL = saved.global
+  if (saved.system === undefined) delete process.env.GIT_CONFIG_NOSYSTEM
+  else process.env.GIT_CONFIG_NOSYSTEM = saved.system
   rmSync(root, { recursive: true, force: true })
 })
 

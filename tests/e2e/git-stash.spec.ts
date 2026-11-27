@@ -74,7 +74,9 @@ test('Stash Changes puts only the chosen files aside, and Unstash Changes pops, 
         await expect(stashes(page)).toHaveCount(1)
         await expect(stashes(page).first()).toBeChecked()
         await expect(dialog(page).getByRole('radiogroup')).toContainText('half done')
-        await expect(dialog(page).getByRole('radiogroup')).toContainText(/main · \dm ago/)
+        await expect(dialog(page).getByRole('radiogroup')).toContainText(
+          /main · (\d+[mhd] ago|yesterday)/
+        )
         await saveScreenshot(page, 'git-unstash-dialog')
         await dialog(page).getByRole('button', { name: 'Pop', exact: true }).click()
         await expect(row(page, 'a.txt')).toBeVisible()
@@ -164,6 +166,14 @@ test('View shows the chosen stash in a hunk tab', async () => {
         await expect(view.locator('.xterm-rows')).toContainText(
           `fake hunk stash show stash@{1} in ${repo}`
         )
+
+        // Popped, the stash can't be shown again: its tab closes.
+        await repositoryMenu(page, 'Unstash Changes…')
+        await dialog(page).getByText('older', { exact: true }).click()
+        await dialog(page).getByRole('button', { name: 'Pop', exact: true }).click()
+        await expect(row(page, 'a.txt')).toBeVisible()
+        await expect(page.getByRole('tab', { name: /^Stash · app · older/ })).toHaveCount(0)
+        await expect(view).toHaveCount(0)
       },
       {
         userDataDir: fixture.userData,

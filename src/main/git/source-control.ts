@@ -21,7 +21,7 @@ type WorkingTreeStatus = Pick<
 /** Far above any real selection; git reads paths from stdin, so only the request's size is bounded. */
 export const MAX_PATHS = 100_000
 const MAX_PATH_LENGTH = 4096
-export const MAX_MESSAGE_LENGTH = 1_000_000
+const MAX_MESSAGE_LENGTH = 1_000_000
 
 /** A git command whose output the user reads, in their own language. */
 export const run = (

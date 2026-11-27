@@ -19,8 +19,10 @@ beforeAll(() => {
 })
 
 afterAll(() => {
-  process.env.GIT_CONFIG_GLOBAL = saved.global
-  process.env.GIT_CONFIG_NOSYSTEM = saved.system
+  if (saved.global === undefined) delete process.env.GIT_CONFIG_GLOBAL
+  else process.env.GIT_CONFIG_GLOBAL = saved.global
+  if (saved.system === undefined) delete process.env.GIT_CONFIG_NOSYSTEM
+  else process.env.GIT_CONFIG_NOSYSTEM = saved.system
   rmSync(root, { recursive: true, force: true })
 })
 
@@ -41,8 +43,11 @@ function makeRepo(): string {
   return repo
 }
 
+/** Untrimmed: a line's leading space says the change isn't staged. */
 const status = (repo: string): string[] =>
-  git(repo, 'status', '--porcelain=v1', '-uall').split('\n').filter(Boolean)
+  execFileSync('git', ['status', '--porcelain=v1', '-uall'], { cwd: repo, encoding: 'utf8' })
+    .split('\n')
+    .filter(Boolean)
 
 describe('stashChanges', () => {
   it('stashes only the chosen files, a rename on both sides, and leaves the rest staged or not', async () => {
@@ -79,12 +84,59 @@ describe('stashChanges', () => {
     expect(stashed.split('\n')).toEqual(
       expect.arrayContaining(['M\ta.txt', 'M\tb.txt', 'A\tnew.txt', 'D\told.txt'])
     )
-    // Popping it brings the chosen changes back, the rename too.
+    // Popping it brings the chosen changes back, the rename too. The stash's index also holds the
+    // still staged c.txt, so the staging can't be restored: they come back unstaged.
     expect(await unstash(repo, entry?.id, true)).toMatchObject({ ok: true })
     expect(read(repo, 'a.txt')).toBe('a changed\n')
     expect(read(repo, 'b.txt')).toBe('b staged\n')
-    expect(existsSync(join(repo, 'new.txt'))).toBe(true)
-    expect(existsSync(join(repo, 'old.txt'))).toBe(false)
+    expect(status(repo)).toEqual([' M a.txt', ' M b.txt', 'M  c.txt', 'A  new.txt', ' D old.txt'])
+    expect(await listStashes(repo)).toEqual([])
+  })
+
+  it('brings back what was staged as staged when the index allows', async () => {
+    const repo = makeRepo()
+    writeFileSync(join(repo, 'a.txt'), 'a changed\n')
+    writeFileSync(join(repo, 'b.txt'), 'b staged\n')
+    git(repo, 'add', 'b.txt')
+    await stashChanges(repo, { paths: ['a.txt', 'b.txt'], untracked: [], message: 'both' })
+    expect(status(repo)).toEqual([])
+    const [entry] = await listStashes(repo)
+    expect(await unstash(repo, entry?.id, false)).toMatchObject({ ok: true })
+    expect(status(repo)).toEqual([' M a.txt', 'M  b.txt'])
+  })
+
+  it('leaves the staging as it was when the stash fails', async () => {
+    const repo = makeRepo()
+    // A conflicted merge elsewhere: git can't save the index, so the stash fails.
+    git(repo, 'switch', '-q', '-c', 'side')
+    writeFileSync(join(repo, 'a.txt'), 'side\n')
+    git(repo, 'commit', '-q', '-am', 'Side')
+    git(repo, 'switch', '-q', 'main')
+    writeFileSync(join(repo, 'a.txt'), 'main\n')
+    git(repo, 'commit', '-q', '-am', 'Main')
+    expect(() => git(repo, 'merge', '-q', 'side')).toThrow('Command failed: git merge')
+    git(repo, 'mv', 'old.txt', 'new.txt')
+    const before = status(repo)
+    expect(before).toEqual(['UU a.txt', 'R  old.txt -> new.txt'])
+    const result = await stashChanges(repo, { paths: ['new.txt'], untracked: [], message: '' })
+    expect(result.ok).toBe(false)
+    expect(result.output).toContain('needs merge')
+    // The rename's old side, put back in the index for the stash, is staged as deleted again.
+    expect(status(repo)).toEqual(before)
+    expect(await listStashes(repo)).toEqual([])
+  })
+
+  it('refuses a message too long to hand to git', async () => {
+    const repo = makeRepo()
+    writeFileSync(join(repo, 'a.txt'), 'a changed\n')
+    await expect(
+      stashChanges(repo, { paths: ['a.txt'], untracked: [], message: 'x'.repeat(16_001) })
+    ).rejects.toThrow('A stash message is at most 16,000 characters.')
+    const message = 'x'.repeat(16_000)
+    expect(await stashChanges(repo, { paths: ['a.txt'], untracked: [], message })).toMatchObject({
+      ok: true
+    })
+    expect((await listStashes(repo))[0]?.message).toBe(message)
   })
 
   it('stashes the chosen untracked files only, taking names with glob characters literally', async () => {
@@ -129,7 +181,10 @@ describe('listStashes and unstash', () => {
   it('lists newest first with branch and message, and applies, pops and drops by commit', async () => {
     const repo = makeRepo()
     writeFileSync(join(repo, 'a.txt'), 'first\n')
+    // git keeps whole seconds.
+    const before = Math.floor(Date.now() / 1000) * 1000
     await stashChanges(repo, { paths: ['a.txt'], untracked: [], message: 'first' })
+    const after = Date.now()
     git(repo, 'switch', '-q', '-c', 'feature')
     writeFileSync(join(repo, 'b.txt'), 'second\n')
     // Without a message git names the stash after the last commit.
@@ -137,8 +192,9 @@ describe('listStashes and unstash', () => {
     const [second, first] = await listStashes(repo)
     expect(second?.branch).toBe('feature')
     expect(second?.message).toMatch(/^[0-9a-f]+ Add the files$/)
-    expect(first).toMatchObject({ branch: 'main', message: 'first' })
-    expect(first?.createdAt).toBeGreaterThan(Date.now() - 60 * 60 * 1000)
+    expect(first).toMatchObject({ branch: 'main', detached: false, message: 'first' })
+    expect(first?.createdAt).toBeGreaterThanOrEqual(before)
+    expect(first?.createdAt).toBeLessThanOrEqual(after)
     expect(await stashToShow(repo, first?.id)).toBe('stash@{1}')
 
     // Apply keeps it, pop removes it: each found by its commit, whatever its index now.
@@ -158,6 +214,26 @@ describe('listStashes and unstash', () => {
     })
     expect(await dropStash(repo, second?.id)).toMatchObject({ ok: false })
     await expect(unstash(repo, 'stash@{0}', false)).rejects.toThrow('Invalid stash.')
+  })
+
+  it('names a detached HEAD as such, and a stash git stored itself without a branch', async () => {
+    const repo = makeRepo()
+    git(repo, 'switch', '-q', '--detach')
+    writeFileSync(join(repo, 'a.txt'), 'detached\n')
+    await stashChanges(repo, { paths: ['a.txt'], untracked: [], message: 'on no branch' })
+    // What a rebase's autostash leaves when it can't be applied back.
+    writeFileSync(join(repo, 'b.txt'), 'autostashed\n')
+    const commit = git(repo, 'stash', 'create')
+    git(repo, 'checkout', '--', 'b.txt')
+    git(repo, 'stash', 'store', '--message', 'autostash', commit)
+    const [stored, detached] = await listStashes(repo)
+    expect(stored).toMatchObject({
+      id: commit,
+      branch: null,
+      detached: false,
+      message: 'autostash'
+    })
+    expect(detached).toMatchObject({ branch: null, detached: true, message: 'on no branch' })
   })
 
   it('a conflicting pop shows git’s output, leaves the conflict and keeps the stash', async () => {
