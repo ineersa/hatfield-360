@@ -14,7 +14,7 @@ import { seedWorkspace } from './workspace-seed'
 const fixtures = resolve(__dirname, '..', 'fixtures', 'acp')
 
 /** What the cassette's agent answered, as scripts/record-chat-cassettes.ts recorded it. */
-const RECORDED_MESSAGE = 'greeting: Change greeting to "Welcome back"'
+const RECORDED_MESSAGE = 'greeting: Change greeting text to "Welcome back"'
 
 const include = (page: Page) =>
   changes(page).getByRole('checkbox', { name: `Include ${COMMIT_MESSAGE_PATH}`, exact: true })
@@ -40,7 +40,6 @@ async function withCommitMessageApp(
     join(userData, 'settings.json'),
     JSON.stringify({
       'terminal.gpuAcceleration': false,
-      'agents.claude': { executable: 'hatfield-360-e2e-no-agent', args: [] },
       'git.commitMessage.instructions': COMMIT_MESSAGE_INSTRUCTIONS
     })
   )

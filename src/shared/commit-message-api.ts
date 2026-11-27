@@ -13,15 +13,15 @@ type CommitMessageRequest = {
 }
 
 export const COMMIT_MESSAGE_CHANNELS = {
-  warm: 'commit-message:warm',
   generate: 'commit-message:generate',
   cancel: 'commit-message:cancel'
 } as const
 
 export type CommitMessageApi = {
-  /** Starts the agent that writes commit messages ahead of the first request, so that one is fast. */
-  warmCommitMessageAgent: () => Promise<void>
-  /** Writes a message for the checked files, with the model, effort and instructions from Settings. */
+  /**
+   * Starts the agent, has it write a message for the checked files with the model, effort and
+   * instructions from Settings, and stops it.
+   */
   generateCommitMessage: (request: CommitMessageRequest) => Promise<CommitMessageOutcome>
   /** Stops this window's running generation; it then resolves cancelled. */
   cancelCommitMessage: () => Promise<void>

@@ -3,7 +3,7 @@ import { registerLanguageServerIpc } from './ipc/language-server-ipc'
 import { languageServerSessions } from './language-servers/language-server-sessions'
 import { registerAgentIpc } from './ipc/agent-ipc'
 import { registerChatAgentIpc } from './ipc/chat-agent-ipc'
-import { endCommitMessageAgent, registerCommitMessageIpc } from './ipc/commit-message-ipc'
+import { endCommitMessageAgents, registerCommitMessageIpc } from './ipc/commit-message-ipc'
 import { chatAgentHost } from './chat/chat-agent-host'
 import { app, BrowserWindow } from 'electron'
 import { agentStatusServer } from './agent-status/status-server'
@@ -86,7 +86,7 @@ app.on('before-quit', (event) => {
   if (quitWaitsForUnsavedChanges()) return
   quitting = true
   chatAgentHost.end()
-  endCommitMessageAgent()
+  endCommitMessageAgents()
   // Teardown changes live agent mappings; finish accepted checkpoints before ending processes.
   void workspaceStore
     .freezeTerminals()

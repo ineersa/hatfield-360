@@ -41,7 +41,6 @@ export function GitPanel(): React.JSX.Element {
   const running = useSourceControlStore((state) => state.running)
   const failure = useSourceControlStore((state) => state.failure)
   const refresh = useSourceControlStore((state) => state.refresh)
-  const warmGenerator = useSourceControlStore((state) => state.warmGenerator)
   const pull = useSourceControlStore((state) => state.pull)
   const rollback = useSourceControlStore((state) => state.rollback)
   const expandAll = useSourceControlStore((state) => state.expandAll)
@@ -66,8 +65,6 @@ export function GitPanel(): React.JSX.Element {
       unfollowWorktrees()
     }
   }, [refresh])
-  // The message agent starts with the panel, so Generate costs only the model's answer.
-  useEffect(() => warmGenerator(), [warmGenerator])
   useEffect(() => {
     const onFocus = (): void => void refresh()
     window.addEventListener('focus', onFocus)

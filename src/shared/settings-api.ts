@@ -14,6 +14,7 @@ export type Settings = {
   /** The workspace chat's reasoning effort for a new chat: the last one chosen in the panel. */
   'chat.effort': string
   /** The agent that writes commit messages; only Claude Code for now. */
+  'git.commitMessage.provider': CommitMessageProvider
   /** The model the commit message agent runs on. */
   'git.commitMessage.model': string
   /** The commit message agent's reasoning effort. */
@@ -55,6 +56,13 @@ export type Settings = {
 export type SettingKey = keyof Settings
 
 /** Claude Code's model aliases, which follow its newest models. */
+/** An ACP agent that can write commit messages, each launched from its own profile in Settings. */
+export type CommitMessageProvider = 'claude'
+
+export const COMMIT_MESSAGE_PROVIDERS: readonly { value: CommitMessageProvider; name: string }[] = [
+  { value: 'claude', name: 'Claude Code' }
+]
+
 export const COMMIT_MESSAGE_MODELS: readonly { value: string; name: string }[] = [
   { value: 'haiku', name: 'Haiku (fastest)' },
   { value: 'sonnet', name: 'Sonnet' },
@@ -98,6 +106,7 @@ export const DEFAULT_SETTINGS: Settings = {
   'agents.claude': { executable: 'claude', args: [] },
   'chat.model': 'haiku',
   'chat.effort': 'medium',
+  'git.commitMessage.provider': 'claude',
   'git.commitMessage.model': 'haiku',
   'git.commitMessage.effort': 'low',
   'git.commitMessage.instructions': '',

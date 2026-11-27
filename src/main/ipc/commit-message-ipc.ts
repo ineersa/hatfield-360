@@ -2,8 +2,14 @@ import { app } from 'electron'
 import { homedir } from 'node:os'
 import { COMMIT_MESSAGE_CHANNELS, type CommitMessageOutcome } from '../../shared/commit-message-api'
 import { isPlainObject } from '../../shared/plain-object'
-import { CommitMessageAgent } from '../chat/commit-message-agent'
-import { agentScriptOverridden, chatAgentCommand, resolveClaude } from '../chat/chat-agent-launch'
+import type { CommitMessageProvider, Settings } from '../../shared/settings-api'
+import { writeCommitMessage } from '../chat/commit-message-agent'
+import {
+  agentScriptOverridden,
+  type ChatAgentCommand,
+  chatAgentCommand,
+  resolveClaude
+} from '../chat/chat-agent-launch'
 import { fileRoots } from '../files/file-roots'
 import {
   commitMessageContext,
@@ -15,28 +21,28 @@ import { settingsStore } from '../settings/settings-store'
 import { workingTree } from './source-control-ipc'
 import { handleTrusted } from './trusted-ipc'
 
-/** The agent writing commit messages, started on the profile it was started with. */
-let current: { agent: CommitMessageAgent; profile: string } | null = null
-
 /** The generation each window is running, by its webContents id: only that window may stop it. */
 const running = new Map<number, AbortController>()
 
 const message = (error: unknown): string => (error instanceof Error ? error.message : String(error))
 
-/** The agent for the Claude profile in Settings; a changed profile starts another. */
-async function commitMessageAgent(): Promise<CommitMessageAgent> {
-  const { values } = await settingsStore.view()
-  const profile = values['agents.claude']
-  const key = JSON.stringify(profile)
-  if (current?.profile === key) return current.agent
-  current?.agent.end()
-  const agent = new CommitMessageAgent(async () => {
-    const cwd = (await fileRoots.current())[0]?.path ?? homedir()
-    const claude = agentScriptOverridden() ? 'claude' : await resolveClaude(profile, cwd)
-    return { command: chatAgentCommand(claude, app.getVersion()), cwd }
-  })
-  current = { agent, profile: key }
-  return agent
+/** Each provider's ACP agent command, from its launch profile in Settings. */
+const LAUNCHES: Record<
+  CommitMessageProvider,
+  (values: Settings, cwd: string) => Promise<ChatAgentCommand>
+> = {
+  claude: async (values, cwd) => {
+    const claude = agentScriptOverridden()
+      ? 'claude'
+      : await resolveClaude(values['agents.claude'], cwd)
+    return chatAgentCommand(claude, app.getVersion())
+  }
+}
+
+/** The chosen provider's agent command, started in the workspace's first folder. */
+async function agentCommand(values: Settings): Promise<{ command: ChatAgentCommand; cwd: string }> {
+  const cwd = (await fileRoots.current())[0]?.path ?? homedir()
+  return { command: await LAUNCHES[values['git.commitMessage.provider']](values, cwd), cwd }
 }
 
 /** What went wrong, with how to fix a missing login. */
@@ -63,9 +69,8 @@ async function generate(
   running.get(sender.id)?.abort()
   running.set(sender.id, controller)
   try {
-    const reply = await (
-      await commitMessageAgent()
-    ).write(
+    const reply = await writeCommitMessage(
+      await agentCommand(values),
       {
         prompt: commitMessagePrompt(context, values['git.commitMessage.instructions']),
         model: values['git.commitMessage.model'],
@@ -90,15 +95,6 @@ async function generate(
 }
 
 export function registerCommitMessageIpc(): void {
-  handleTrusted(COMMIT_MESSAGE_CHANNELS.warm, async () => {
-    const { values } = await settingsStore.view()
-    // A failure here shows when a message is asked for, with the same cause.
-    await (
-      await commitMessageAgent()
-    )
-      .warm(values['git.commitMessage.model'], values['git.commitMessage.effort'])
-      .catch((error: unknown) => console.error('Starting the commit message agent failed:', error))
-  })
   handleTrusted(COMMIT_MESSAGE_CHANNELS.generate, (event, request) =>
     generate(event.sender, request)
   )
@@ -107,8 +103,7 @@ export function registerCommitMessageIpc(): void {
   })
 }
 
-/** Stops the agent with the app. */
-export function endCommitMessageAgent(): void {
-  current?.agent.end()
-  current = null
+/** Stops every running generation, and so its agent, with the app. */
+export function endCommitMessageAgents(): void {
+  for (const controller of running.values()) controller.abort()
 }

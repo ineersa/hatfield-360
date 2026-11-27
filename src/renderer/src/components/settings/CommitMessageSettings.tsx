@@ -4,6 +4,7 @@ import {
   COMMIT_MESSAGE_EFFORTS,
   COMMIT_MESSAGE_INSTRUCTIONS_LIMIT,
   COMMIT_MESSAGE_MODELS,
+  COMMIT_MESSAGE_PROVIDERS,
   type SettingKey
 } from '../../../../shared/settings-api'
 import { ResetButton } from './ResetButton'
@@ -17,7 +18,7 @@ function Choices({
   label,
   choices
 }: {
-  settingKey: 'git.commitMessage.model' | 'git.commitMessage.effort'
+  settingKey: 'git.commitMessage.provider' | 'git.commitMessage.model' | 'git.commitMessage.effort'
   label: string
   choices: readonly { value: string; name: string }[]
 }): React.JSX.Element {
@@ -76,12 +77,17 @@ export function CommitMessageSettings(): React.JSX.Element {
           Commit messages
         </h3>
         <p className="type-description">
-          Generate in the Commit panel asks Claude Code for a message, with the Claude profile’s
-          executable and login, as the workspace chat does. It sees the checked files’ names and
-          line counts, reads a file’s diff only when it needs to, and follows the style of recent
+          Generate in the Commit panel starts the agent, run from its profile in Agent launch
+          profiles, asks it for a message and stops it. It sees the checked files’ names and line
+          counts, reads a file’s diff only when it needs to, and follows the style of recent
           commits.
         </p>
       </div>
+      <Choices
+        settingKey="git.commitMessage.provider"
+        label="Agent"
+        choices={COMMIT_MESSAGE_PROVIDERS}
+      />
       <Choices settingKey="git.commitMessage.model" label="Model" choices={COMMIT_MESSAGE_MODELS} />
       <Choices
         settingKey="git.commitMessage.effort"

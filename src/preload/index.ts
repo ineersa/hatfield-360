@@ -94,7 +94,6 @@ const desktopApi: DesktopApi = {
   abortGitOperation: (root, operation) =>
     ipcRenderer.invoke(SOURCE_CONTROL_CHANNELS.abortOperation, root, operation),
   cancelSourceControlAction: () => ipcRenderer.invoke(SOURCE_CONTROL_CHANNELS.cancel),
-  warmCommitMessageAgent: () => ipcRenderer.invoke(COMMIT_MESSAGE_CHANNELS.warm),
   generateCommitMessage: (request) => ipcRenderer.invoke(COMMIT_MESSAGE_CHANNELS.generate, request),
   cancelCommitMessage: () => ipcRenderer.invoke(COMMIT_MESSAGE_CHANNELS.cancel),
   listBranches: (root) => ipcRenderer.invoke(BRANCH_CHANNELS.list, root),

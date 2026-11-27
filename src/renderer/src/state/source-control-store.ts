@@ -110,8 +110,6 @@ type SourceControlState = {
   generated: { message: string; previous: string } | null
   /** Puts back what the box held before the generated message. */
   restorePrevious: () => void
-  /** Starts the agent that writes messages, so Generate answers quickly once clicked. */
-  warmGenerator: () => void
   /** Puts an agent's message for the checked files (with Amend, the last commit too) in the box. */
   generateMessage: () => Promise<void>
   /** Stops the agent writing the message; the box keeps what it held. */
@@ -405,9 +403,6 @@ export const useSourceControlStore = create<SourceControlState>((set, get, store
       const { generated, message } = get()
       if (generated === null || generated.message !== message) return
       set({ message: generated.previous, generated: null })
-    },
-    warmGenerator: () => {
-      void window.desktop.warmCommitMessageAgent().catch(() => undefined)
     },
     generateMessage: async () => {
       const { groups, checked, selected, amend, generating, message } = get()

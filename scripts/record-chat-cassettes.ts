@@ -9,7 +9,7 @@ import { dirname, join, resolve } from 'node:path'
 import type { ChatEvent } from '../src/shared/chat-agent-api'
 import { isPlainObject } from '../src/shared/plain-object'
 import { ChatAgentSession } from '../src/main/chat/chat-agent'
-import { CommitMessageAgent } from '../src/main/chat/commit-message-agent'
+import { writeCommitMessage } from '../src/main/chat/commit-message-agent'
 import {
   type ChatAgentCommand,
   chatAgentCommand,
@@ -132,22 +132,18 @@ const SCRIPTS: Record<string, Script> = {
   }
 }
 
-/**
- * The commit-message session as the Commit panel runs it: warmed when the Git view shows, one
- * message for the checked greeting change, then the next message's session made ready.
- */
+/** The commit-message agent as Generate runs it: started for one message, for the checked greeting change. */
 async function commitMessage(claude: string, cwd: string, log: string): Promise<void> {
   makeCommitMessageRepo(cwd)
-  const agent = new CommitMessageAgent(async () => ({ command: teedCommand(claude, log), cwd }))
-  await agent.warm('haiku', 'low')
   const context = await commitMessageContext(cwd, { paths: [COMMIT_MESSAGE_PATH], amend: false })
   let diffs = 0
-  const reply = await agent.write(
+  const reply = await writeCommitMessage(
+    { command: teedCommand(claude, log), cwd },
     {
       prompt: commitMessagePrompt(context, COMMIT_MESSAGE_INSTRUCTIONS),
       model: 'haiku',
       effort: 'low',
-      diff: (path) => {
+      diff: (path: string) => {
         diffs += 1
         return contextFileDiff(cwd, context, path)
       }
@@ -157,8 +153,6 @@ async function commitMessage(claude: string, cwd: string, log: string): Promise<
   if (reply.stopReason !== 'end_turn' || diffs === 0)
     throw new Error(`commit-message: ended ${reply.stopReason} after ${diffs} diffs: ${reply.text}`)
   process.stdout.write(`  message: ${reply.text}\n`)
-  await agent.warm('haiku', 'low')
-  agent.end()
 }
 
 async function record(

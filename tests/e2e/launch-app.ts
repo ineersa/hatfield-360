@@ -24,9 +24,7 @@ export async function makeTempDir(prefix: string): Promise<[string, () => Promis
  * own `hatfield session:list` in every test project, which writes a `.hatfield` folder into it.
  */
 const NO_AGENT_SETTINGS = {
-  'agents.hatfield': { executable: 'hatfield-360-e2e-no-agent', args: [] },
-  // The Git view starts the commit message agent: never the user's real Claude Code.
-  'agents.claude': { executable: 'hatfield-360-e2e-no-agent', args: [] }
+  'agents.hatfield': { executable: 'hatfield-360-e2e-no-agent', args: [] }
 }
 
 /** Settings for a launch whose test wrote none; a test's own settings.json is left as it is. */

@@ -67,14 +67,7 @@ export async function commitFixture(): Promise<{
     JSON.stringify({ version: 1, folders: [{ path: repo, kind: 'project' }] })
   )
   // The DOM renderer, so terminal text can be read.
-  // The Git view starts the commit message agent: never the user's real Claude Code.
-  await writeFile(
-    join(userData, 'settings.json'),
-    JSON.stringify({
-      'terminal.gpuAcceleration': false,
-      'agents.claude': { executable: 'hatfield-360-e2e-no-agent', args: [] }
-    })
-  )
+  await writeFile(join(userData, 'settings.json'), '{ "terminal.gpuAcceleration": false }')
   // Main passes its environment to git and hooks: commits stay off the user's config and keys.
   const gitConfig = join(projects, 'gitconfig')
   await writeFile(
