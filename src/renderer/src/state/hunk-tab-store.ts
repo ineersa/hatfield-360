@@ -8,6 +8,8 @@ export type HunkTab = {
   id: string
   kind: HunkKind
   root: string
+  /** The stash a `stash` tab shows (`StashEntry.id`); null for the others. */
+  stash: string | null
   /** "Review · app": what the strip shows and the tab is named by. */
   title: string
   /** Counts restarts: a new value remounts the pane, which starts hunk afresh. */
@@ -23,8 +25,16 @@ type HunkTabState = {
   activeTabId: string | null
   /** The last launch found no hunk: the Git view shows how to install it. */
   missing: boolean
-  /** Shows the root's Review or Log tab, opening one (shown once hunk runs) when it has none. */
-  open: (kind: HunkKind, root: string, name: string) => void
+  /**
+   * Shows the root's Review or Log tab, or a stash's tab, opening one (shown once hunk runs) when
+   * there is none.
+   */
+  open: (
+    kind: HunkKind,
+    root: string,
+    name: string,
+    stash?: { id: string; message: string }
+  ) => void
   /** hunk runs in the tab: the strip shows it, chosen. */
   started: (id: string) => void
   /** No hunk on the user's PATH: the tab goes and the install steps show. */
@@ -42,15 +52,16 @@ type HunkTabState = {
   dismissMissing: () => void
 }
 
-const KIND_LABEL: Record<HunkKind, string> = { review: 'Review', log: 'Log' }
+const KIND_LABEL: Record<HunkKind, string> = { review: 'Review', log: 'Log', stash: 'Stash' }
 
-/** The root's Review or Log tab, if one is open or opening. */
+/** The root's Review or Log tab, or the tab of its stash `stash`, if one is open or opening. */
 export function tabFor(
   tabs: readonly HunkTab[],
   kind: HunkKind,
-  root: string
+  root: string,
+  stash: string | null = null
 ): HunkTab | undefined {
-  return tabs.find((tab) => tab.kind === kind && tab.root === root)
+  return tabs.find((tab) => tab.kind === kind && tab.root === root && tab.stash === stash)
 }
 
 const without = (set: ReadonlySet<string>, id: string): ReadonlySet<string> =>
@@ -82,9 +93,9 @@ export const useHunkTabStore = create<HunkTabState>((set, get) => {
     pending: new Set(),
     activeTabId: null,
     missing: false,
-    open: (kind, root, name) => {
+    open: (kind, root, name, stash) => {
       const { tabs, pending } = get()
-      const existing = tabFor(tabs, kind, root)
+      const existing = tabFor(tabs, kind, root, stash?.id ?? null)
       if (existing) {
         // One still starting is chosen once hunk runs.
         if (!pending.has(existing.id)) set({ activeTabId: existing.id, missing: false })
@@ -94,7 +105,8 @@ export const useHunkTabStore = create<HunkTabState>((set, get) => {
         id: crypto.randomUUID(),
         kind,
         root,
-        title: `${KIND_LABEL[kind]} · ${name}`,
+        stash: stash?.id ?? null,
+        title: [KIND_LABEL[kind], name, ...(stash ? [stash.message] : [])].join(' · '),
         run: 0
       }
       set((state) => ({ tabs: [...state.tabs, tab], pending: new Set([...state.pending, tab.id]) }))

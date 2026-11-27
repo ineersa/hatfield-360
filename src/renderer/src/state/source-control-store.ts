@@ -24,11 +24,11 @@ import type {
   SourceControlGroup
 } from '../../../shared/source-control-api'
 
-/** What the Commit panel is doing; its button spins and every other action waits. */
 /** Whether a git action other than the background refresh is running. */
 export const actionRunning = (running: SourceControlAction | null): boolean =>
   running !== null && running !== 'refresh'
 
+/** What the Commit panel is doing; its button spins and every other action waits. */
 export type SourceControlAction =
   | 'refresh'
   | 'commit'
@@ -43,6 +43,9 @@ export type SourceControlAction =
   | 'switch-branch'
   | 'create-branch'
   | 'delete-branch'
+  | 'stash'
+  | 'unstash'
+  | 'drop-stash'
 
 /** The Switch, New Branch or Delete Branch dialog, and what it last heard from main. */
 export type BranchDialog =
@@ -172,6 +175,18 @@ type SourceControlState = {
   createBranch: (name: string, switchTo: boolean) => Promise<void>
   /** Deletes the Delete Branch dialog's branch; refused as unmerged, the dialog asks about forcing it. */
   deleteBranch: (force: boolean) => Promise<void>
+  /**
+   * Runs one git command for one working tree like the panel's own actions: spinning, cancellable,
+   * its failure titled "<what> failed in <name>", status read again afterwards.
+   */
+  runGitAction: (
+    action: SourceControlAction,
+    what: string,
+    group: GitGroup,
+    run: () => Promise<GitOutcome>
+  ) => Promise<void>
+  /** Unchecks files that left the working tree's changes, tracked or untracked. */
+  forgetChecks: (root: string, files: ChangedFile[]) => void
   /** Stops the running commit, push, pull, fetch, rollback, add or abort, with its hooks and ssh. */
   cancel: () => Promise<void>
   dismissFailure: () => void
@@ -367,7 +382,6 @@ export const useSourceControlStore = create<SourceControlState>((set, get, store
       return { checked, toAdd }
     })
 
-  /** Runs one git command for one working tree, its failure titled "<what> failed in <name>". */
   /** After a checkout in `root` Amend would amend another commit than the one it showed: it goes off. */
   const checkedOut = (root: string): void => {
     const state = get()
@@ -375,6 +389,7 @@ export const useSourceControlStore = create<SourceControlState>((set, get, store
       void state.setAmend(false)
   }
 
+  /** Runs one git command for one working tree, its failure titled "<what> failed in <name>". */
   const actOn = (
     action: SourceControlAction,
     what: string,
@@ -669,6 +684,8 @@ export const useSourceControlStore = create<SourceControlState>((set, get, store
         () => `Delete ${name} failed in ${group.name}`
       )
     },
+    runGitAction: actOn,
+    forgetChecks: uncheck,
     cancel: async () => {
       const { running, cancelling } = get()
       if (running === null || running === 'refresh' || cancelling) return

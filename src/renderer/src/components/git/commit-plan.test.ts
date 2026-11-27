@@ -1,7 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import type { ChangedFile, GitOperation } from '../../../../shared/source-control-api'
 import { fileKey, type GitGroup } from './change-tree-rows'
-import { amendTarget, commitLabel, commitPlan, generatePlan, pullPlan } from './commit-plan'
+import {
+  amendTarget,
+  commitLabel,
+  commitPlan,
+  generatePlan,
+  pullPlan,
+  stashPlan
+} from './commit-plan'
 
 const file = (root: string, path: string): ChangedFile => ({
   path,
@@ -166,6 +173,52 @@ describe('pullPlan', () => {
     expect(pullPlan([repo('/app'), ...groups.slice(1)], '/lib')).toMatchObject({
       targets: [],
       blocked: 'lib has no upstream branch to pull from'
+    })
+  })
+})
+
+describe('stashPlan', () => {
+  const untracked = (root: string, path: string): ChangedFile => ({
+    ...file(root, path),
+    kind: 'untracked'
+  })
+  const app = { ...repo('/app'), files: [file('/app', 'a.ts'), untracked('/app', 'new.ts')] }
+  const groups = [app, repo('/lib')]
+
+  it('takes the checked changes and chosen untracked files of one repository, the selected one when several have some', () => {
+    const toAdd = new Set([fileKey('/app', 'new.ts')])
+    expect(stashPlan(groups, checkedIn('/app'), toAdd, null)).toMatchObject({
+      target: {
+        group: { root: '/app' },
+        files: [{ path: 'a.ts' }],
+        untracked: [{ path: 'new.ts' }]
+      },
+      blocked: null
+    })
+    // Untracked files only are enough.
+    expect(stashPlan(groups, new Set(), toAdd, null)).toMatchObject({
+      target: { files: [], untracked: [{ path: 'new.ts' }] }
+    })
+    expect(
+      stashPlan(groups, checkedIn('/app', '/lib'), new Set(), { root: '/lib', only: false })
+    ).toMatchObject({ target: { group: { root: '/lib' } } })
+    // The selected row's repository has nothing chosen: the one that does.
+    expect(
+      stashPlan(groups, checkedIn('/lib'), new Set(), { root: '/app', only: false })
+    ).toMatchObject({
+      target: { group: { root: '/lib' } }
+    })
+  })
+
+  it('from a repository’s menu takes only that repository, and is blocked with nothing chosen', () => {
+    expect(stashPlan(groups, checkedIn('/lib'), new Set(), { root: '/app', only: true })).toEqual({
+      target: null,
+      blocked: 'Check the files to stash'
+    })
+    // Unchosen untracked files are never taken.
+    expect(stashPlan(groups, new Set(), new Set(), null)).toEqual({
+      target: null,
+      blocked: 'Check the files to stash'
     })
   })
 })

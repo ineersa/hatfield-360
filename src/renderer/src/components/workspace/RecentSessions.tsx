@@ -19,18 +19,10 @@ import {
 import type { AgentSession } from '../../../../shared/agent-api'
 import { agentSessionIdentity } from './AgentSessionRows'
 import { resumeRecentConversation } from '@/components/terminal/resume-recent-conversation'
+import { agoText, elapsedSince } from '@/lib/elapsed-time'
 import { mainErrorMessage } from '@/lib/main-error-message'
 
-const DAY = 24 * 60 * 60 * 1000
 const RECENT_PAGE = 20
-
-function activityAgo(lastModified: number, now: number): string {
-  const elapsed = now - lastModified
-  if (elapsed < DAY / 24) return `${Math.max(1, Math.round(elapsed / 60000))}m`
-  if (elapsed < DAY) return `${Math.round(elapsed / (DAY / 24))}h`
-  if (elapsed < 2 * DAY) return 'yesterday'
-  return `${Math.floor(elapsed / DAY)}d`
-}
 
 function reportError(error: unknown): void {
   notify({
@@ -85,7 +77,7 @@ function RecentRow({
                   </span>
                 ) : null}
                 <span className="type-hint shrink-0 tabular-nums group-hover:hidden">
-                  {activityAgo(session.lastModified, now)}
+                  {elapsedSince(session.lastModified, now)}
                 </span>
                 <Play className="hidden size-3.5 shrink-0 group-hover:block" aria-hidden />
               </button>
@@ -93,8 +85,7 @@ function RecentRow({
           </ContextMenuTrigger>
           <TooltipContent className="max-w-72 break-words">
             {session.title ? `${session.title} · ` : ''}
-            {identity} · last active {activityAgo(session.lastModified, now)}
-            {activityAgo(session.lastModified, now).endsWith('y') ? '' : ' ago'}
+            {identity} · last active {agoText(session.lastModified, now)}
           </TooltipContent>
         </Tooltip>
         <ContextMenuContent>

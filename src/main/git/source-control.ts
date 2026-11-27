@@ -21,14 +21,18 @@ type WorkingTreeStatus = Pick<
 /** Far above any real selection; git reads paths from stdin, so only the request's size is bounded. */
 export const MAX_PATHS = 100_000
 const MAX_PATH_LENGTH = 4096
-const MAX_MESSAGE_LENGTH = 1_000_000
+export const MAX_MESSAGE_LENGTH = 1_000_000
 
 /** A git command whose output the user reads, in their own language. */
-const run = (root: string, args: string[], input?: string, signal?: AbortSignal): Promise<GitRun> =>
-  runGitWithOutput(root, args, { input, signal })
+export const run = (
+  root: string,
+  args: string[],
+  input?: string,
+  signal?: AbortSignal
+): Promise<GitRun> => runGitWithOutput(root, args, { input, signal })
 
 /** A git command whose output the app reads. */
-const query = (root: string, args: string[]): Promise<GitRun> =>
+export const query = (root: string, args: string[]): Promise<GitRun> =>
   runGitWithOutput(root, args, { parsed: true })
 
 export async function runOrThrow(root: string, args: string[]): Promise<string> {
@@ -37,7 +41,7 @@ export async function runOrThrow(root: string, args: string[]): Promise<string> 
   return result.stdout
 }
 
-const outcome = (result: GitRun): GitOutcome =>
+export const outcome = (result: GitRun): GitOutcome =>
   result.cancelled
     ? { ok: false, output: result.output, cancelled: true }
     : { ok: result.exitCode === 0, output: result.output }
@@ -65,10 +69,10 @@ export async function leftoverIndexLock(root: string): Promise<string | null> {
 const literal = (path: string): string => `:(literal)${path}`
 
 /** Git reads the pathspecs from stdin, so the command line stays short however many there are. */
-const PATHSPECS_FROM_STDIN = ['--pathspec-from-file=-', '--pathspec-file-nul']
+export const PATHSPECS_FROM_STDIN = ['--pathspec-from-file=-', '--pathspec-file-nul']
 
 /** `paths` as literal pathspecs for `PATHSPECS_FROM_STDIN`. */
-const pathspecInput = (paths: string[]): string =>
+export const pathspecInput = (paths: string[]): string =>
   paths.map((path) => `${literal(path)}\0`).join('')
 
 /** The marker each operation leaves in the git dir while it waits to be concluded, rebase first. */
@@ -213,14 +217,14 @@ export function repositoryPaths(root: string, paths: unknown): string[] {
 }
 
 /** The requested files' status entries; paths with no changes have none. */
-async function changedFiles(root: string, paths: string[]): Promise<ChangedFile[]> {
+export async function changedFiles(root: string, paths: string[]): Promise<ChangedFile[]> {
   const wanted = new Set(paths)
   const { files } = await readWorkingTreeStatus(root)
   return files.filter((file) => wanted.has(file.path))
 }
 
 /** A path and, for a rename, where it came from: the two halves of one change. */
-const bothSides = (file: ChangedFile): string[] =>
+export const bothSides = (file: ChangedFile): string[] =>
   file.originalPath === null ? [file.path] : [file.path, file.originalPath]
 
 /** What changes are relative to: `revision` (HEAD for the Commit panel), or the empty tree when it does not exist. */
@@ -372,7 +376,7 @@ export async function fetchRemote(root: string, signal?: AbortSignal): Promise<G
 }
 
 /** The requested paths' status entries once each is known to be untracked in the working tree. */
-async function untrackedEntries(root: string, requested: unknown): Promise<ChangedFile[]> {
+export async function untrackedEntries(root: string, requested: unknown): Promise<ChangedFile[]> {
   const paths = repositoryPaths(root, requested)
   const untracked = new Map(
     (await changedFiles(root, paths))

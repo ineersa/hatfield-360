@@ -1,4 +1,6 @@
 import {
+  Archive,
+  ArchiveRestore,
   ArrowDownToLine,
   ArrowUpFromLine,
   CloudDownload,
@@ -28,9 +30,10 @@ import {
 import { rendererPlatform } from '@/lib/shortcut-keys'
 import { useHunkTabStore } from '@/state/hunk-tab-store'
 import { type FileTargets, useSourceControlStore } from '@/state/source-control-store'
+import { useStashStore } from '@/state/stash-store'
 import type { ChangedFile, SourceControlGroup } from '../../../../shared/source-control-api'
 import { addableFiles, fileKey, type GitGroup, isUntracked } from './change-tree-rows'
-import { pullBlocker } from './commit-plan'
+import { pullBlocker, stashPlan } from './commit-plan'
 
 const ENTER_LABEL = rendererPlatform === 'darwin' ? '↩' : 'Enter'
 
@@ -224,6 +227,12 @@ export function GroupMenu({ group }: { group: SourceControlGroup }): React.JSX.E
   const openHunk = useHunkTabStore((state) => state.open)
   const openBranches = useSourceControlStore((state) => state.openBranches)
   const openNewBranch = useSourceControlStore((state) => state.openNewBranch)
+  const groups = useSourceControlStore((state) => state.groups)
+  const checked = useSourceControlStore((state) => state.checked)
+  const toAdd = useSourceControlStore((state) => state.toAdd)
+  const stashing = stashPlan(groups ?? [], checked, toAdd, { root: group.root, only: true })
+  const openStash = useStashStore((state) => state.openStash)
+  const openUnstash = useStashStore((state) => state.openUnstash)
   const afterMenu = useAfterMenu()
   return (
     <OpenTerminalMenuContent
@@ -244,6 +253,22 @@ export function GroupMenu({ group }: { group: SourceControlGroup }): React.JSX.E
             label="New Branch…"
             unavailable={busy}
             onSelect={() => afterMenu.choose(() => openNewBranch(group, { kind: 'head' }))}
+          />
+          <ContextMenuSeparator />
+          <Item
+            icon={<Archive aria-hidden />}
+            label="Stash Changes…"
+            unavailable={stashing.blocked ?? busy}
+            onSelect={() => {
+              const { target } = stashing
+              if (target) afterMenu.choose(() => openStash(target))
+            }}
+          />
+          <Item
+            icon={<ArchiveRestore aria-hidden />}
+            label="Unstash Changes…"
+            unavailable={busy}
+            onSelect={() => afterMenu.choose(() => void openUnstash(group))}
           />
           <ContextMenuSeparator />
           <Item

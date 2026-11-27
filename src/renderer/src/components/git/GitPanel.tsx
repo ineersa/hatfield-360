@@ -1,4 +1,11 @@
-import { ArrowDownToLine, ChevronsDownUp, ChevronsUpDown, RefreshCw, Undo2 } from 'lucide-react'
+import {
+  Archive,
+  ArrowDownToLine,
+  ChevronsDownUp,
+  ChevronsUpDown,
+  RefreshCw,
+  Undo2
+} from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { HidePanelButton } from '@/components/shell/HidePanelButton'
 import { PanelHeaderButton } from '@/components/shell/PanelHeaderButton'
@@ -8,6 +15,7 @@ import {
 } from '@/components/workspace/WorkspaceNotices'
 import { TrashDialog } from '@/components/files/TrashDialog'
 import { type FileTargets, useSourceControlStore } from '@/state/source-control-store'
+import { useStashStore } from '@/state/stash-store'
 import { useWorkspaceStore } from '@/state/workspace-store'
 import { useWorktreeStore } from '@/state/worktree-store'
 import { ActionFailureNotice } from './ActionFailureNotice'
@@ -19,11 +27,12 @@ import {
   trackedFiles
 } from './change-tree-rows'
 import { ChangesLoading, ChangesTree } from './ChangesTree'
-import { pullPlan } from './commit-plan'
+import { pullPlan, stashPlan } from './commit-plan'
 import { CommitBox } from './CommitBox'
 import { RollbackDialog } from './RollbackDialog'
 import { AbortOperationDialog } from './AbortOperationDialog'
 import { BranchDialogs } from './BranchDialogs'
+import { StashDialogs } from './StashDialogs'
 
 const ICON = 'size-4.5'
 
@@ -35,6 +44,8 @@ export function GitPanel(): React.JSX.Element {
   const workspace = useWorkspaceStore((state) => state.workspace)
   const groups = useSourceControlStore((state) => state.groups)
   const checked = useSourceControlStore((state) => state.checked)
+  const toAdd = useSourceControlStore((state) => state.toAdd)
+  const openStash = useStashStore((state) => state.openStash)
   const collapsed = useSourceControlStore((state) => state.collapsed)
   const unversionedOpen = useSourceControlStore((state) => state.unversionedOpen)
   const selected = useSourceControlStore((state) => state.selected)
@@ -81,6 +92,12 @@ export function GitPanel(): React.JSX.Element {
   )
   const checkedCount = checkedTargets.reduce((sum, target) => sum + target.files.length, 0)
   const pulling = pullPlan(groups, selected?.root ?? null)
+  const stashing = stashPlan(
+    groups ?? [],
+    checked,
+    toAdd,
+    selected === null ? null : { root: selected.root, only: false }
+  )
   const busy = running !== null
   const problem = workspace?.problem ?? null
 
@@ -113,6 +130,19 @@ export function GitPanel(): React.JSX.Element {
           tip={checkedCount === 0 ? 'Check the files to roll back' : 'Roll back checked files…'}
         >
           <Undo2 className={ICON} strokeWidth={1.75} aria-hidden />
+        </PanelHeaderButton>
+        <PanelHeaderButton
+          label="Stash Changes"
+          busy={running === 'stash'}
+          disabled={stashing.target === null || (busy && running !== 'stash')}
+          onClick={() => stashing.target && openStash(stashing.target)}
+          tip={
+            stashing.target === null
+              ? (stashing.blocked ?? 'Check the files to stash')
+              : `Stash the chosen files of ${stashing.target.group.name}…`
+          }
+        >
+          <Archive className={ICON} strokeWidth={1.75} aria-hidden />
         </PanelHeaderButton>
         <PanelHeaderButton label="Expand All" onClick={expandAll}>
           <ChevronsUpDown className={ICON} strokeWidth={1.75} aria-hidden />
@@ -157,6 +187,7 @@ export function GitPanel(): React.JSX.Element {
         />
       ) : null}
       <BranchDialogs />
+      <StashDialogs />
       {trashing ? (
         <TrashDialog
           entries={trashing.files.map((file) => ({

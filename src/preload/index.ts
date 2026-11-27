@@ -11,6 +11,7 @@ import { SEARCH_EVERYWHERE_CHANNELS } from '../shared/search-everywhere-api'
 import { SETTINGS_CHANNELS, type SettingsView } from '../shared/settings-api'
 import { SHELL_LAYOUT_CHANNELS } from '../shared/shell-layout-api'
 import { BRANCH_CHANNELS } from '../shared/branch-api'
+import { STASH_CHANNELS } from '../shared/stash-api'
 import { COMMIT_MESSAGE_CHANNELS } from '../shared/commit-message-api'
 import { SOURCE_CONTROL_CHANNELS } from '../shared/source-control-api'
 import { MEMORY_SEARCH_CHANNELS } from '../shared/memory-search-api'
@@ -96,6 +97,10 @@ const desktopApi: DesktopApi = {
   cancelSourceControlAction: () => ipcRenderer.invoke(SOURCE_CONTROL_CHANNELS.cancel),
   generateCommitMessage: (request) => ipcRenderer.invoke(COMMIT_MESSAGE_CHANNELS.generate, request),
   cancelCommitMessage: () => ipcRenderer.invoke(COMMIT_MESSAGE_CHANNELS.cancel),
+  listStashes: (root) => ipcRenderer.invoke(STASH_CHANNELS.list, root),
+  stashChanges: (request) => ipcRenderer.invoke(STASH_CHANNELS.push, request),
+  unstash: (root, id, pop) => ipcRenderer.invoke(STASH_CHANNELS.apply, root, id, pop),
+  dropStash: (root, id) => ipcRenderer.invoke(STASH_CHANNELS.drop, root, id),
   listBranches: (root) => ipcRenderer.invoke(BRANCH_CHANNELS.list, root),
   previewSwitch: (root, branch) => ipcRenderer.invoke(BRANCH_CHANNELS.preview, root, branch),
   switchBranch: (root, branch) => ipcRenderer.invoke(BRANCH_CHANNELS.switch, root, branch),
