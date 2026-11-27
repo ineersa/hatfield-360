@@ -1,17 +1,15 @@
 import { create } from 'zustand'
 import { mainErrorMessage } from '@/lib/main-error-message'
-import type { HunkView } from '../../../shared/source-control-api'
+import type { HunkKind } from '../../../shared/source-control-api'
 import { notify } from './notification-store'
 
 /** One hunk run in a tab: its pane starts hunk itself, so a remounted pane starts a fresh one. */
 export type HunkTab = {
   id: string
-  view: HunkView
+  kind: HunkKind
   root: string
-  /** "Review · app", "a.txt · app": what the strip shows and the tab is named by. */
+  /** "Review · app": what the strip shows and the tab is named by. */
   title: string
-  /** The root, or the file's full path. */
-  tip: string
 }
 
 type HunkTabState = {
@@ -23,8 +21,8 @@ type HunkTabState = {
   activeTabId: string | null
   /** The last launch found no hunk: the Git view shows how to install it. */
   missing: boolean
-  /** Shows the root's tab for the view, opening one (shown once hunk runs) when it has none. */
-  open: (view: HunkView, root: string, title: string, tip: string) => void
+  /** Shows the root's Review or Log tab, opening one (shown once hunk runs) when it has none. */
+  open: (kind: HunkKind, root: string, name: string) => void
   /** hunk runs in the tab: the strip shows it, chosen. */
   started: (id: string) => void
   /** No hunk on the user's PATH: the tab goes and the install steps show. */
@@ -37,16 +35,15 @@ type HunkTabState = {
   dismissMissing: () => void
 }
 
-const sameView = (a: HunkView, b: HunkView): boolean =>
-  a.kind === b.kind && (a.kind !== 'diff' || (b.kind === 'diff' && a.path === b.path))
+const KIND_LABEL: Record<HunkKind, string> = { review: 'Review', log: 'Log' }
 
-/** The root's tab for the view, if one is open or opening. */
+/** The root's Review or Log tab, if one is open or opening. */
 export function tabFor(
   tabs: readonly HunkTab[],
-  view: HunkView,
+  kind: HunkKind,
   root: string
 ): HunkTab | undefined {
-  return tabs.find((tab) => tab.root === root && sameView(tab.view, view))
+  return tabs.find((tab) => tab.kind === kind && tab.root === root)
 }
 
 const without = (set: ReadonlySet<string>, id: string): ReadonlySet<string> =>
@@ -78,15 +75,20 @@ export const useHunkTabStore = create<HunkTabState>((set, get) => {
     pending: new Set(),
     activeTabId: null,
     missing: false,
-    open: (view, root, title, tip) => {
+    open: (kind, root, name) => {
       const { tabs, pending } = get()
-      const existing = tabFor(tabs, view, root)
+      const existing = tabFor(tabs, kind, root)
       if (existing) {
         // One still starting is chosen once hunk runs.
         if (!pending.has(existing.id)) set({ activeTabId: existing.id, missing: false })
         return
       }
-      const tab: HunkTab = { id: crypto.randomUUID(), view, root, title, tip }
+      const tab: HunkTab = {
+        id: crypto.randomUUID(),
+        kind,
+        root,
+        title: `${KIND_LABEL[kind]} · ${name}`
+      }
       set((state) => ({ tabs: [...state.tabs, tab], pending: new Set([...state.pending, tab.id]) }))
     },
     started: (id) =>

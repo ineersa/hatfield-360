@@ -9,7 +9,7 @@ import {
   rollbackChanges
 } from '../git/source-control'
 import { worktreeStore } from '../git/worktree-store'
-import { hunkArgs, launchHunk } from '../terminal/hunk-terminal'
+import { launchHunk } from '../terminal/hunk-terminal'
 import { gridSize } from '../terminal/terminal-request'
 import { existingDirectory } from './terminal-ipc'
 import { handleTrusted } from './trusted-ipc'
@@ -52,11 +52,12 @@ export function registerSourceControlIpc(): void {
   )
 
   handleTrusted(SOURCE_CONTROL_CHANNELS.launchHunk, async (event, request) => {
-    if (!isPlainObject(request)) throw new Error('Invalid hunk request.')
+    if (!isPlainObject(request) || (request.kind !== 'review' && request.kind !== 'log'))
+      throw new Error('Invalid hunk request.')
     const size = gridSize(request.cols, request.rows)
     if (!size) throw new Error('Invalid hunk terminal size.')
     const place = await workingTree(request.root)
     await existingDirectory(place.root)
-    return launchHunk(event.sender, place, await hunkArgs(place.root, request), size)
+    return launchHunk(event.sender, place, request.kind, size)
   })
 }

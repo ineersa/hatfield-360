@@ -1,29 +1,14 @@
 import { randomUUID } from 'node:crypto'
 import type { WebContents } from 'electron'
-import type { HunkLaunch } from '../../shared/source-control-api'
-import { fileDiffSpec } from '../git/source-control'
+import type { HunkKind, HunkLaunch } from '../../shared/source-control-api'
+import { diffBase } from '../git/source-control'
 import { UnsupportedAgentShell } from './agent-shell-command'
 import { findOnShellPath } from './shell-lookup'
 import { terminalSessions } from './terminal-sessions'
 
-/** hunk's arguments for a view the renderer asked for; a diff's file is checked to be inside `root`. */
-export async function hunkArgs(
-  root: string,
-  view: { kind?: unknown; path?: unknown }
-): Promise<string[]> {
-  switch (view.kind) {
-    case 'review':
-      return ['diff', '--watch']
-    case 'log':
-      return ['log']
-    case 'diff': {
-      const { base, pathspecs } = await fileDiffSpec(root, view.path)
-      return ['diff', '--watch', base, '--', ...pathspecs]
-    }
-    default:
-      throw new Error('Invalid hunk request.')
-  }
-}
+/** Review compares with HEAD, not the index, so staged changes show too, as the Commit panel lists them. */
+const hunkArgs = async (root: string, kind: HunkKind): Promise<string[]> =>
+  kind === 'review' ? ['diff', '--watch', await diffBase(root)] : ['log']
 
 /**
  * Runs hunk in a terminal in `root`, found afresh on the user's shell PATH each time so installing
@@ -32,7 +17,7 @@ export async function hunkArgs(
 export async function launchHunk(
   owner: WebContents,
   place: { root: string; project: string },
-  args: string[],
+  kind: HunkKind,
   size: { cols: number; rows: number }
 ): Promise<HunkLaunch> {
   const hunk = await findOnShellPath('hunk', place.root)
@@ -41,7 +26,13 @@ export async function launchHunk(
     const terminal = await terminalSessions.spawn(
       owner,
       { cwd: place.root, ...size },
-      { id: randomUUID(), project: place.project, executable: hunk, args, env: {} }
+      {
+        id: randomUUID(),
+        project: place.project,
+        executable: hunk,
+        args: await hunkArgs(place.root, kind),
+        env: {}
+      }
     )
     return { status: 'started', terminal }
   } catch (error) {

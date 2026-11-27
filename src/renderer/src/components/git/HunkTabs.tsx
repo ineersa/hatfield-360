@@ -1,6 +1,5 @@
-import { FileCode, FileDiff, GitCompareArrows, History, type LucideIcon } from 'lucide-react'
+import { GitCompareArrows, History, type LucideIcon } from 'lucide-react'
 import { useEffect, useRef } from 'react'
-import { PanelHeaderButton } from '@/components/shell/PanelHeaderButton'
 import { ScrollingTabList } from '@/components/shell/ScrollingTabList'
 import { StripTab } from '@/components/shell/StripTab'
 import { startPaneProgram } from '@/components/terminal/pane-shell'
@@ -12,24 +11,11 @@ import {
 import { bindClipboardKeys } from '@/components/terminal/terminal-clipboard'
 import { openTerminalLink } from '@/components/terminal/terminal-link'
 import { cn } from '@/lib/class-names'
-import { appCommandForKey, appShortcutLabel } from '@/lib/keymap-match'
 import { PaneManager } from '@/lib/pane-manager/pane-manager'
 import { type HunkTab, useHunkTabStore } from '@/state/hunk-tab-store'
-import { useKeymapStore } from '@/state/keymap-store'
-import { useSourceControlStore } from '@/state/source-control-store'
-import type {
-  ChangedFile,
-  HunkView,
-  SourceControlGroup
-} from '../../../../shared/source-control-api'
-import { openInEditor } from './changed-file-actions'
-import { CHANGE_KINDS } from './ChangesTree'
+import type { HunkKind } from '../../../../shared/source-control-api'
 
-const TAB_ICONS: Record<HunkView['kind'], LucideIcon> = {
-  review: GitCompareArrows,
-  log: History,
-  diff: FileDiff
-}
+const TAB_ICONS: Record<HunkKind, LucideIcon> = { review: GitCompareArrows, log: History }
 
 /**
  * One hunk in a single terminal pane, which starts it at the pane's size; mounted while its tab is
@@ -68,7 +54,7 @@ function HunkTabBody({
           program = startPaneProgram(pane, {
             start: async (size) => {
               const launch = await window.desktop.launchHunk({
-                ...tab.view,
+                kind: tab.kind,
                 root: tab.root,
                 ...size
               })
@@ -106,7 +92,6 @@ function HunkTabBody({
     if (shown) manager.current?.getActivePane()?.terminal.focus()
   }, [shown])
 
-  const { view } = tab
   return (
     <div
       role="tabpanel"
@@ -117,84 +102,9 @@ function HunkTabBody({
         pending && 'pointer-events-none invisible absolute inset-0'
       )}
       hidden={!active && !pending}
-      onKeyDownCapture={(event) => {
-        // Jump to Source wins over hunk's own keys, as in a JetBrains diff.
-        if (view.kind !== 'diff') return
-        if (appCommandForKey(event, useKeymapStore.getState().shell) !== 'jump-to-source') return
-        event.preventDefault()
-        event.stopPropagation()
-        if (!isDeleted(tab.root, view.path)) openInEditor(tab.tip)
-      }}
     >
-      {view.kind === 'diff' ? (
-        <FileDiffBar root={tab.root} path={view.path} file={tab.tip} />
-      ) : null}
+      {/* The panes' own root: the pane manager positions it, which would undo `absolute` above. */}
       <div ref={root} className="min-h-0 flex-1 rounded-b-island" />
-    </div>
-  )
-}
-
-/** The changed file's current status entry; none once it is committed or rolled back. */
-function changedFile(
-  groups: readonly SourceControlGroup[] | null,
-  root: string,
-  path: string
-): ChangedFile | undefined {
-  const group = groups?.find((each) => each.root === root)
-  return group?.status === 'git' ? group.files.find((file) => file.path === path) : undefined
-}
-
-const isDeleted = (root: string, path: string): boolean =>
-  changedFile(useSourceControlStore.getState().groups, root, path)?.kind === 'deleted'
-
-/** A file diff's bar, as over a JetBrains diff: which file, and the way to its source. */
-function FileDiffBar({
-  root,
-  path,
-  file
-}: {
-  root: string
-  path: string
-  /** Its full path. */
-  file: string
-}): React.JSX.Element {
-  const kind = useSourceControlStore((state) => changedFile(state.groups, root, path)?.kind)
-  const keymap = useKeymapStore((state) => state.shell)
-  const shortcut = appShortcutLabel(keymap, 'jump-to-source')
-  const change = kind ? CHANGE_KINDS[kind] : null
-  return (
-    <div
-      role="toolbar"
-      aria-label="Diff"
-      className="flex h-control shrink-0 items-center gap-2 pr-1 pl-3 shadow-[inset_0_-1px_0_var(--separator)]"
-    >
-      {/* rtl so a long path loses its start, not the file name. */}
-      <span dir="rtl" className="type-hint min-w-0 flex-1 truncate text-left">
-        <bdi>{path}</bdi>
-      </span>
-      {change ? (
-        <span className={cn('shrink-0 font-mono', change.text)}>
-          <span aria-hidden>{change.letter}</span>
-          <span className="sr-only">{change.label}</span>
-        </span>
-      ) : null}
-      <PanelHeaderButton
-        label="Open in Editor"
-        disabled={kind === 'deleted'}
-        onClick={() => openInEditor(file)}
-        tip={
-          kind === 'deleted' ? (
-            'Deleted: there is no file to open'
-          ) : (
-            <span className="flex gap-2">
-              Open in Editor
-              {shortcut ? <span className="text-tooltip-muted-foreground">{shortcut}</span> : null}
-            </span>
-          )
-        }
-      >
-        <FileCode className="size-4" strokeWidth={1.75} aria-hidden />
-      </PanelHeaderButton>
     </div>
   )
 }
@@ -228,7 +138,7 @@ export function HunkTabs({
           {tabs
             .filter((tab) => !pending.has(tab.id))
             .map((tab) => {
-              const Icon = TAB_ICONS[tab.view.kind]
+              const Icon = TAB_ICONS[tab.kind]
               return (
                 <StripTab
                   key={tab.id}
@@ -236,7 +146,7 @@ export function HunkTabs({
                   label={tab.title}
                   active={tab.id === activeTabId}
                   icon={<Icon className="size-4 shrink-0" aria-hidden />}
-                  tip={tab.tip}
+                  tip={tab.root}
                   onActivate={() => activateTab(tab.id)}
                   onClose={() => closeTab(tab.id)}
                 />

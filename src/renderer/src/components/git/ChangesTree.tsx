@@ -3,8 +3,6 @@ import {
   ArrowUp,
   ChevronRight,
   CircleAlert,
-  FileCode,
-  FileDiff,
   GitBranch,
   GitCompareArrows,
   History,
@@ -15,13 +13,6 @@ import { FileTreeIcon } from '@/components/icons/FileTreeIcon'
 import { RootFolderIcon } from '@/components/icons/RootFolderIcon'
 import { treeIndent, treeRowClass } from '@/components/tree/tree-row-style'
 import { useLoadingShown } from '@/components/tree/use-loading-delay'
-import {
-  ContextMenu,
-  ContextMenuContent,
-  ContextMenuItem,
-  ContextMenuShortcut,
-  ContextMenuTrigger
-} from '@/components/ui/context-menu'
 import { Spinner } from '@/components/ui/spinner'
 import {
   PATH_TOOLTIP_DELAY_MS,
@@ -31,17 +22,16 @@ import {
   usePointerTooltip
 } from '@/components/ui/tooltip'
 import { cn } from '@/lib/class-names'
-import { appCommandForKey, appShortcutLabel } from '@/lib/keymap-match'
+import { useEditorTabStore } from '@/state/editor-tab-store'
 import { tabFor, useHunkTabStore } from '@/state/hunk-tab-store'
-import { useKeymapStore } from '@/state/keymap-store'
+import { useShellLayoutStore } from '@/state/shell-layout-store'
 import { useSourceControlStore } from '@/state/source-control-store'
 import type {
   ChangedFile,
   ChangeKind,
-  HunkView,
+  HunkKind,
   SourceControlGroup
 } from '../../../../shared/source-control-api'
-import { fileNameOf, openInEditor, showDiff } from './changed-file-actions'
 import {
   type ChangeRow,
   type CheckState,
@@ -60,6 +50,7 @@ export const CHANGE_KINDS: Record<ChangeKind, { letter: string; label: string; t
   conflicted: { letter: 'C', label: 'conflicted', text: 'text-vcs-conflicted' }
 }
 
+const nameOf = (path: string): string => path.slice(path.lastIndexOf('/') + 1)
 const folderOf = (path: string): string => path.slice(0, Math.max(0, path.lastIndexOf('/')))
 
 const isNavigable = (row: ChangeRow): boolean => row.type === 'group' || row.type === 'file'
@@ -67,9 +58,11 @@ const isNavigable = (row: ChangeRow): boolean => row.type === 'group' || row.typ
 const rootOf = (row: ChangeRow): string =>
   row.type === 'group' || row.type === 'file' ? row.group.root : row.key
 
-/** A deleted file has nothing to open in the editor. */
-function openFileInEditor(file: ChangedFile): void {
-  if (file.kind !== 'deleted') openInEditor(file.absolutePath)
+/** Opens the file in the editor, in the Files view, as the Files tree does; a deleted one has nothing to open. */
+function openFile(file: ChangedFile): void {
+  if (file.kind === 'deleted') return
+  useShellLayoutStore.getState().showFiles()
+  useEditorTabStore.getState().open(file.absolutePath)
 }
 
 /** A native checkbox in a row: clicking it never selects or opens the row; Space on the row toggles it. */
@@ -122,14 +115,13 @@ function HunkButton({
   group,
   icon: Icon
 }: {
-  kind: 'review' | 'log'
+  kind: HunkKind
   group: GitGroup
   icon: LucideIcon
 }): React.JSX.Element {
-  const view: HunkView = { kind }
   const open = useHunkTabStore((state) => state.open)
   const starting = useHunkTabStore((state) => {
-    const tab = tabFor(state.tabs, view, group.root)
+    const tab = tabFor(state.tabs, kind, group.root)
     return tab !== undefined && state.pending.has(tab.id)
   })
   const action = kind === 'review' ? 'Review' : 'Log'
@@ -143,7 +135,7 @@ function HunkButton({
           aria-busy={starting || undefined}
           onClick={(event) => {
             event.stopPropagation()
-            open(view, group.root, `${action} · ${group.name}`, group.root)
+            open(kind, group.root, group.name)
           }}
           onDoubleClick={(event) => event.stopPropagation()}
           className="flex size-small-icon-button shrink-0 items-center justify-center rounded-button text-muted-foreground hover:bg-hover hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
@@ -264,9 +256,9 @@ function FileRowContent({
         label={`Include ${file.path}`}
         onToggle={() => toggleFile(group.root, file.path)}
       />
-      <FileTreeIcon kind="file" name={fileNameOf(file.path)} className="size-4 shrink-0" />
+      <FileTreeIcon kind="file" name={nameOf(file.path)} className="size-4 shrink-0" />
       <span className={cn('ml-1 min-w-0 truncate', kind.text, onSelection)}>
-        {fileNameOf(file.path)}
+        {nameOf(file.path)}
       </span>
       {folder ? (
         <span className="type-hint ml-1.5 min-w-0 shrink-[1000] truncate">{folder}</span>
@@ -278,24 +270,6 @@ function FileRowContent({
         {kind.letter}
       </span>
     </>
-  )
-}
-
-/** A file row's menu: its diff, or the file itself in the editor (a deleted one has none). */
-function FileMenu({ group, file }: { group: GitGroup; file: ChangedFile }): React.JSX.Element {
-  const keymap = useKeymapStore((state) => state.shell)
-  return (
-    <ContextMenuContent>
-      <ContextMenuItem onSelect={() => showDiff(group, file)}>
-        <FileDiff aria-hidden />
-        Show Diff
-      </ContextMenuItem>
-      <ContextMenuItem disabled={file.kind === 'deleted'} onSelect={() => openFileInEditor(file)}>
-        <FileCode aria-hidden />
-        Open in Editor
-        <ContextMenuShortcut>{appShortcutLabel(keymap, 'jump-to-source')}</ContextMenuShortcut>
-      </ContextMenuItem>
-    </ContextMenuContent>
   )
 }
 
@@ -312,8 +286,7 @@ function fileDescription(file: ChangedFile): string {
 
 /**
  * The Commit panel's changes: a row per working tree, with its changed files under it. A click
- * selects, a double click or Enter shows a file's diff, F4 opens it in the editor, Space checks the
- * focused row.
+ * selects, a double click or Enter opens a file, Space checks the focused row.
  */
 export function ChangesTree({ rows }: { rows: ChangeRow[] }): React.JSX.Element {
   const checked = useSourceControlStore((state) => state.checked)
@@ -343,15 +316,10 @@ export function ChangesTree({ rows }: { rows: ChangeRow[] }): React.JSX.Element 
 
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>): void => {
     if (event.target instanceof HTMLButtonElement) return
+    if (event.ctrlKey || event.metaKey || event.altKey) return
     const index = navigable.findIndex((row) => row.key === tabbable)
     const row = navigable[index]
     if (!row) return
-    if (appCommandForKey(event, useKeymapStore.getState().shell) === 'jump-to-source') {
-      if (row.type === 'file') openFileInEditor(row.file)
-      event.preventDefault()
-      return
-    }
-    if (event.ctrlKey || event.metaKey || event.altKey) return
     const move = (step: number): void => {
       const target =
         step === -Infinity
@@ -388,7 +356,7 @@ export function ChangesTree({ rows }: { rows: ChangeRow[] }): React.JSX.Element 
         }
         case 'Enter':
           if (row.type === 'group') toggleFold(row.group.root)
-          else if (row.type === 'file') showDiff(row.group, row.file)
+          else if (row.type === 'file') openFile(row.file)
           return true
         case ' ':
           toggleCheck(row)
@@ -479,36 +447,26 @@ export function ChangesTree({ rows }: { rows: ChangeRow[] }): React.JSX.Element 
       )
     const { file, group } = row
     return (
-      <ContextMenu key={row.key}>
-        <RowTip
-          text={
-            file.originalPath === null
-              ? file.path
-              : `${file.path}, renamed from ${file.originalPath}`
-          }
+      <RowTip
+        key={row.key}
+        text={
+          file.originalPath === null ? file.path : `${file.path}, renamed from ${file.originalPath}`
+        }
+      >
+        <div
+          {...common}
+          aria-level={2}
+          aria-label={nameOf(file.path)}
+          aria-description={fileDescription(file)}
+          className={treeRowClass(isSelected)}
+          style={{ paddingLeft: treeIndent(1) }}
+          onClick={() => choose(row)}
+          onDoubleClick={() => openFile(file)}
         >
-          <ContextMenuTrigger asChild>
-            <div
-              {...common}
-              aria-level={2}
-              aria-label={fileNameOf(file.path)}
-              aria-description={fileDescription(file)}
-              className={cn(
-                treeRowClass(isSelected),
-                'data-[state=open]:ring-1 data-[state=open]:ring-ring data-[state=open]:ring-inset'
-              )}
-              style={{ paddingLeft: treeIndent(1) }}
-              onClick={() => choose(row)}
-              onDoubleClick={() => showDiff(group, file)}
-              onContextMenu={() => select(row.key, group.root)}
-            >
-              <span className="size-4 shrink-0" aria-hidden />
-              <FileRowContent group={group} file={file} checked={checked} selected={isSelected} />
-            </div>
-          </ContextMenuTrigger>
-        </RowTip>
-        <FileMenu group={group} file={file} />
-      </ContextMenu>
+          <span className="size-4 shrink-0" aria-hidden />
+          <FileRowContent group={group} file={file} checked={checked} selected={isSelected} />
+        </div>
+      </RowTip>
     )
   }
 

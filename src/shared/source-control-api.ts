@@ -56,11 +56,9 @@ type CommitRequest = {
   amend: boolean
 }
 
-/** What hunk shows: the root's changes (review), its history (log), or one changed file's diff. */
-export type HunkView = { kind: 'review' } | { kind: 'log' } | { kind: 'diff'; path: string }
+export type HunkKind = 'review' | 'log'
 
-/** `path` (a `ChangedFile.path`) must be inside `root`; main picks the rest of the command. */
-type HunkLaunchRequest = HunkView & { root: string; cols: number; rows: number }
+type HunkLaunchRequest = { root: string; kind: HunkKind; cols: number; rows: number }
 
 /** A terminal running hunk in the root, or `missing` when no `hunk` is on the user's shell PATH. */
 export type HunkLaunch = { status: 'started'; terminal: TerminalSession } | { status: 'missing' }
@@ -88,8 +86,8 @@ export type SourceControlApi = {
   /** Restores tracked paths to HEAD (both sides of a rename) and deletes untracked ones. */
   rollbackChanges: (root: string, paths: string[]) => Promise<GitOutcome>
   /**
-   * `hunk diff --watch` (review), `hunk log`, or a file's changes since HEAD (`hunk diff --watch
-   * HEAD -- <file>`, both sides of a rename) in a terminal driven by the terminal API.
+   * `hunk diff --watch HEAD` (review: every change the Commit panel lists, staged or not; the empty
+   * tree before the first commit) or `hunk log`, in a terminal driven by the terminal API.
    */
   launchHunk: (request: HunkLaunchRequest) => Promise<HunkLaunch>
 }

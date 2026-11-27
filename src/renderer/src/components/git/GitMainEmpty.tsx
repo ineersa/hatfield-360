@@ -8,9 +8,8 @@ const ENTRIES = [
     term: 'Review',
     detail: (
       <>
-        Opens <code className="font-mono text-foreground">hunk diff --watch</code> for a repository:
-        the Review button on its row in the Commit panel. Double-click a changed file for its diff
-        alone.
+        Opens <code className="font-mono text-foreground">hunk diff --watch HEAD</code> for a
+        repository: the Review button on its row in the Commit panel.
       </>
     )
   },
@@ -35,7 +34,7 @@ const ENTRIES = [
   }
 ]
 
-/** hunk wasn't found when Review, Log or a file's diff was opened. */
+/** hunk wasn't found when Review or Log was clicked. */
 function HunkMissingNotice(): React.JSX.Element {
   const dismiss = useHunkTabStore((state) => state.dismissMissing)
   return (
@@ -43,7 +42,7 @@ function HunkMissingNotice(): React.JSX.Element {
       <TriangleAlert className="text-warning" aria-hidden />
       <AlertTitle className="type-section-title">hunk isn&apos;t installed</AlertTitle>
       <AlertDescription>
-        Install it with one of the commands below, then try again.
+        Install it with one of the commands below, then click Review or Log again.
       </AlertDescription>
       <button
         type="button"
@@ -57,7 +56,7 @@ function HunkMissingNotice(): React.JSX.Element {
   )
 }
 
-/** The Git view's main area before a hunk tab is open: what hunk does here and how to set it up. */
+/** The Git view's main area before a Review or Log tab is open: what hunk does here and how to set it up. */
 export function GitMainEmpty(): React.JSX.Element {
   const missing = useHunkTabStore((state) => state.missing)
   return (

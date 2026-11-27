@@ -14,7 +14,7 @@ import { join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import {
   commitChanges,
-  fileDiffSpec,
+  diffBase,
   lastCommitMessage,
   pullBranch,
   pushBranch,
@@ -264,35 +264,18 @@ describe('commitChanges', () => {
   })
 })
 
-describe('fileDiffSpec', () => {
-  it('compares HEAD with both sides of a rename and takes glob-like names literally', async () => {
-    const repo = makeRepo('diff-spec', ['old.ts'])
-    git(repo, 'mv', 'old.ts', 'renamed.ts')
-    write(repo, '*.txt', 'star\n')
-
-    expect(await fileDiffSpec(repo, 'renamed.ts')).toEqual({
-      base: 'HEAD',
-      pathspecs: [':(literal)renamed.ts', ':(literal)old.ts']
-    })
-    expect(await fileDiffSpec(repo, '*.txt')).toEqual({
-      base: 'HEAD',
-      pathspecs: [':(literal)*.txt']
-    })
-    await expect(fileDiffSpec(repo, '../outside.ts')).rejects.toThrow(
-      '../outside.ts is outside the repository.'
-    )
+describe('diffBase', () => {
+  it('is HEAD once the branch has a commit', async () => {
+    expect(await diffBase(makeRepo('diff-base', ['a.ts']))).toBe('HEAD')
   })
 
-  it('compares with the empty tree before the first commit', async () => {
-    const repo = join(root, 'diff-spec-unborn')
+  it('is the empty tree before the first commit', async () => {
+    const repo = join(root, 'diff-base-unborn')
     git(root, 'init', '-q', repo)
     write(repo, 'staged.ts', 'staged\n')
     git(repo, 'add', 'staged.ts')
 
-    expect(await fileDiffSpec(repo, 'staged.ts')).toEqual({
-      base: '4b825dc642cb6eb9a060e54bf8d69288fbee4904',
-      pathspecs: [':(literal)staged.ts']
-    })
+    expect(await diffBase(repo)).toBe('4b825dc642cb6eb9a060e54bf8d69288fbee4904')
   })
 })
 
