@@ -10,6 +10,7 @@ import { SEARCH_CHANNELS, type SearchEvent } from '../shared/search-api'
 import { SEARCH_EVERYWHERE_CHANNELS } from '../shared/search-everywhere-api'
 import { SETTINGS_CHANNELS, type SettingsView } from '../shared/settings-api'
 import { SHELL_LAYOUT_CHANNELS } from '../shared/shell-layout-api'
+import { BRANCH_CHANNELS } from '../shared/branch-api'
 import { SOURCE_CONTROL_CHANNELS } from '../shared/source-control-api'
 import { MEMORY_SEARCH_CHANNELS } from '../shared/memory-search-api'
 import { LANGUAGE_SERVER_CHANNELS, type LanguageServerStatus } from '../shared/language-server-api'
@@ -92,6 +93,12 @@ const desktopApi: DesktopApi = {
   abortGitOperation: (root, operation) =>
     ipcRenderer.invoke(SOURCE_CONTROL_CHANNELS.abortOperation, root, operation),
   cancelSourceControlAction: () => ipcRenderer.invoke(SOURCE_CONTROL_CHANNELS.cancel),
+  listBranches: (root) => ipcRenderer.invoke(BRANCH_CHANNELS.list, root),
+  previewSwitch: (root, branch) => ipcRenderer.invoke(BRANCH_CHANNELS.preview, root, branch),
+  switchBranch: (root, branch) => ipcRenderer.invoke(BRANCH_CHANNELS.switch, root, branch),
+  createBranch: (request) => ipcRenderer.invoke(BRANCH_CHANNELS.create, request),
+  deleteBranch: (root, name, force) =>
+    ipcRenderer.invoke(BRANCH_CHANNELS.delete, root, name, force),
   listDirectory: (path) => ipcRenderer.invoke(FILE_TREE_CHANNELS.list, path),
   watchDirectories: (paths) => ipcRenderer.invoke(FILE_TREE_CHANNELS.watch, paths),
   copyPath: (path, form, lines) =>

@@ -7,8 +7,6 @@ import { seedWorkspace } from './workspace-seed'
 
 const PROJECT = 'memory-project'
 const dialog = (page: Page) => page.getByRole('dialog', { name: `Search memory · ${PROJECT}` })
-const terminalOutput = (page: Page) =>
-  page.getByRole('tabpanel').getByTestId('terminal-pane').locator('.xterm-rows')
 
 async function seed(settings: Record<string, unknown>) {
   const [projects, cleanProjects] = await makeTempDir('memory-projects')
@@ -26,6 +24,16 @@ async function seed(settings: Record<string, unknown>) {
       await cleanProjects()
     }
   }
+}
+
+/** The DOM members the key recorder uses: the E2E tests compile without DOM types. */
+type KeyTarget = {
+  dataset: Record<string, string | undefined>
+  addEventListener: (
+    type: 'keydown',
+    listener: (event: { key: string }) => void,
+    capture: boolean
+  ) => void
 }
 
 /** A loopback port with nothing listening on it, so a connection is refused at once. */
@@ -49,10 +57,19 @@ test('Search Memory opens over a focused terminal, keeps its keys from the shell
         await page.getByRole('menuitem', { name: 'Open Terminal Here' }).click()
         const textarea = page.getByRole('tabpanel').getByTestId('terminal-pane').locator('textarea')
         await expect(textarea).toBeFocused()
-        // Ctrl+K in a shell kills to the end of the line: leave text after the cursor for it to kill.
-        await page.keyboard.type('echo kept-line')
-        for (let step = 0; step < 5; step++) await page.keyboard.press('ArrowLeft')
-
+        // Record the keys that reach the terminal on their way to the shell, rather than the shell's output.
+        const pane = page.getByRole('tabpanel').getByTestId('terminal-pane')
+        await pane.evaluate((element: KeyTarget) => {
+          const modifiers = new Set(['Control', 'Meta', 'Shift', 'Alt'])
+          element.dataset.keys = ''
+          element.addEventListener(
+            'keydown',
+            (event) => {
+              if (!modifiers.has(event.key)) element.dataset.keys += event.key
+            },
+            true
+          )
+        })
         await page.keyboard.press('ControlOrMeta+K')
         await expect(dialog(page)).toBeVisible()
         const input = dialog(page).getByRole('textbox', { name: 'Search memory' })
@@ -82,14 +99,9 @@ test('Search Memory opens over a focused terminal, keeps its keys from the shell
         await page.keyboard.press('Escape')
         await expect(dialog(page)).toBeHidden()
         await expect(textarea).toBeFocused()
-        await page.keyboard.press('Enter')
-        // The shell ran the whole line: Ctrl+K never reached it.
-        await expect(
-          terminalOutput(page)
-            .locator(':scope > div')
-            .filter({ hasText: /^\s*kept-line\s*$/ })
-        ).toHaveCount(1)
-        await expect(terminalOutput(page)).not.toContainText('worktree decision')
+        // Only the key pressed after the popup closed reached the terminal.
+        await page.keyboard.press('x')
+        await expect(pane).toHaveAttribute('data-keys', 'x')
 
         await page.getByRole('listitem', { name: PROJECT }).click({ button: 'right' })
         await page.getByRole('menuitem', { name: 'Search Memory…' }).click()

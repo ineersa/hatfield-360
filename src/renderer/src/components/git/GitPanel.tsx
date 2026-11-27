@@ -23,6 +23,7 @@ import { pullPlan } from './commit-plan'
 import { CommitBox } from './CommitBox'
 import { RollbackDialog } from './RollbackDialog'
 import { AbortOperationDialog } from './AbortOperationDialog'
+import { BranchDialogs } from './BranchDialogs'
 
 const ICON = 'size-4.5'
 
@@ -155,6 +156,7 @@ export function GitPanel(): React.JSX.Element {
           onClose={() => setAborting(null)}
         />
       ) : null}
+      <BranchDialogs />
       {trashing ? (
         <TrashDialog
           entries={trashing.files.map((file) => ({

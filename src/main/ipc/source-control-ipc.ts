@@ -1,6 +1,14 @@
 import type { WebContents } from 'electron'
 import { isPlainObject } from '../../shared/plain-object'
+import { BRANCH_CHANNELS } from '../../shared/branch-api'
 import { type GitOutcome, SOURCE_CONTROL_CHANNELS } from '../../shared/source-control-api'
+import {
+  createBranch,
+  deleteBranch,
+  listBranches,
+  previewSwitch,
+  switchBranch
+} from '../git/branches'
 import { sourceControlStatus, workingTreeOf } from '../git/source-control-groups'
 import {
   abortOperation,
@@ -31,11 +39,11 @@ async function workingTree(root: unknown) {
 const runningActions = new Map<number, AbortController>()
 
 /** Runs `action` so the window that asked can cancel it; a cancelled one reports a leftover lock. */
-async function cancellable(
+async function cancellable<T extends GitOutcome>(
   sender: WebContents,
   root: string,
-  action: (signal: AbortSignal) => Promise<GitOutcome>
-): Promise<GitOutcome> {
+  action: (signal: AbortSignal) => Promise<T>
+): Promise<T> {
   const controller = new AbortController()
   runningActions.get(sender.id)?.abort()
   runningActions.set(sender.id, controller)
@@ -51,6 +59,20 @@ async function cancellable(
         }
   } finally {
     if (runningActions.get(sender.id) === controller) runningActions.delete(sender.id)
+  }
+}
+
+/** Runs a branch action, then lists the project's worktrees again: their branches changed. */
+async function onBranches<T extends GitOutcome>(
+  sender: WebContents,
+  request: unknown,
+  action: (root: string, signal: AbortSignal) => Promise<T>
+): Promise<T> {
+  const { root, project } = await workingTree(request)
+  try {
+    return await cancellable(sender, root, (signal) => action(root, signal))
+  } finally {
+    await worktreeStore.relist(project)
   }
 }
 
@@ -107,6 +129,30 @@ export function registerSourceControlIpc(): void {
     const { root } = await workingTree(request)
     return cancellable(event.sender, root, (signal) => abortOperation(root, operation, signal))
   })
+
+  handleTrusted(BRANCH_CHANNELS.list, async (_event, root) =>
+    listBranches((await workingTree(root)).root)
+  )
+
+  handleTrusted(BRANCH_CHANNELS.preview, async (_event, root, branch) =>
+    previewSwitch((await workingTree(root)).root, branch)
+  )
+
+  handleTrusted(BRANCH_CHANNELS.switch, (event, root, branch) =>
+    onBranches(event.sender, root, (place, signal) => switchBranch(place, branch, signal))
+  )
+
+  handleTrusted(BRANCH_CHANNELS.create, (event, request) => {
+    if (!isPlainObject(request)) throw new Error('Invalid branch request.')
+    const { name, start, switchTo } = request
+    return onBranches(event.sender, request.root, (place, signal) =>
+      createBranch(place, { name, start, switchTo }, signal)
+    )
+  })
+
+  handleTrusted(BRANCH_CHANNELS.delete, (event, root, name, force) =>
+    onBranches(event.sender, root, (place, signal) => deleteBranch(place, name, force, signal))
+  )
 
   handleTrusted(SOURCE_CONTROL_CHANNELS.cancel, (event) => {
     runningActions.get(event.sender.id)?.abort()
