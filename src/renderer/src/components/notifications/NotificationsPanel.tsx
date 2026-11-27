@@ -5,22 +5,41 @@ import {
 } from '@/components/shell/SidePanelResizeHandle'
 import { type AppNotification, useNotificationStore } from '@/state/notification-store'
 import { SIDE_PANEL_MIN_WIDTH, useShellLayoutStore } from '@/state/shell-layout-store'
+import { TextContextMenu } from '@/components/text-menu/TextContextMenu'
 import { NotificationContent } from './NotificationContent'
+import { notificationMenuItems } from './notification-menu-items'
 
 function NotificationItem({ notification }: { notification: AppNotification }): React.JSX.Element {
   const dismiss = useNotificationStore((state) => state.dismiss)
+  const clearAll = useNotificationStore((state) => state.clearAll)
   const titleId = useId()
   return (
-    <li aria-labelledby={titleId} className="border-b border-separator px-4 py-3 last:border-b-0">
-      <NotificationContent
-        notification={notification}
-        titleId={titleId}
-        closeLabel="Dismiss"
-        onClose={() => dismiss(notification.id)}
-        showTime
-        scrollBody={false}
-      />
-    </li>
+    <TextContextMenu
+      renderItems={(element, choose) =>
+        notificationMenuItems({
+          notification,
+          element,
+          choose,
+          close: { label: 'Dismiss', run: () => dismiss(notification.id) },
+          closeAll: { label: 'Dismiss All', run: clearAll }
+        })
+      }
+    >
+      <li
+        aria-labelledby={titleId}
+        data-text-scope
+        className="border-b border-separator px-4 py-3 last:border-b-0"
+      >
+        <NotificationContent
+          notification={notification}
+          titleId={titleId}
+          closeLabel="Dismiss"
+          onClose={() => dismiss(notification.id)}
+          showTime
+          scrollBody={false}
+        />
+      </li>
+    </TextContextMenu>
   )
 }
 

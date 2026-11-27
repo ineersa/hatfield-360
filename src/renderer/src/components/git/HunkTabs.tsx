@@ -123,6 +123,7 @@ export function HunkTabs({
   const activeTabId = useHunkTabStore((state) => state.activeTabId)
   const activateTab = useHunkTabStore((state) => state.activateTab)
   const closeTab = useHunkTabStore((state) => state.closeTab)
+  const shownIds = tabs.filter((tab) => !pending.has(tab.id)).map((tab) => tab.id)
 
   return (
     <div
@@ -142,6 +143,8 @@ export function HunkTabs({
               return (
                 <StripTab
                   key={tab.id}
+                  id={tab.id}
+                  menu={{ tabs: shownIds, close: (ids) => ids.forEach((id) => closeTab(id)) }}
                   title={tab.title}
                   label={tab.title}
                   active={tab.id === activeTabId}

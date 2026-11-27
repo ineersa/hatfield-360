@@ -1,4 +1,9 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  LINK_ADDRESS_ATTRIBUTE,
+  markdownMenuItems
+} from '@/components/text-menu/markdown-menu-items'
+import { TextContextMenu } from '@/components/text-menu/TextContextMenu'
 import { defaultRehypePlugins, type Components } from 'streamdown'
 import { MessageResponse } from '@/components/ai-elements/message'
 import { useChatStore } from '@/state/chat-store'
@@ -49,10 +54,16 @@ function InlineCode({
   children?: React.ReactNode
   className?: string | undefined
 }): React.JSX.Element {
-  const target = useTarget(textOf(children))
+  const text = textOf(children)
+  const target = useTarget(text)
   if (target === null) return <code className={className}>{children}</code>
   return (
-    <button type="button" className={LINK_CLASS} onClick={() => open(target)}>
+    <button
+      type="button"
+      {...{ [LINK_ADDRESS_ATTRIBUTE]: text }}
+      className={LINK_CLASS}
+      onClick={() => open(target)}
+    >
       <code>{children}</code>
     </button>
   )
@@ -62,7 +73,12 @@ function FileReference({ text }: { text: string }): React.JSX.Element {
   const target = useTarget(text)
   if (target === null) return <>{text}</>
   return (
-    <button type="button" className={LINK_CLASS} onClick={() => open(target)}>
+    <button
+      type="button"
+      {...{ [LINK_ADDRESS_ATTRIBUTE]: text }}
+      className={LINK_CLASS}
+      onClick={() => open(target)}
+    >
       {text}
     </button>
   )
@@ -170,16 +186,20 @@ export function ChatMarkdown({
   const files = useReplyFiles(streaming)
   return (
     <ReplyFilesContext.Provider value={files}>
-      <MessageResponse
-        className="markdown-preview chat-markdown"
-        components={COMPONENTS}
-        rehypePlugins={REHYPE_PLUGINS}
-        skipHtml
-        linkSafety={{ enabled: false }}
-        isAnimating={streaming}
-      >
-        {text}
-      </MessageResponse>
+      <TextContextMenu renderItems={markdownMenuItems}>
+        <div data-text-scope>
+          <MessageResponse
+            className="markdown-preview chat-markdown"
+            components={COMPONENTS}
+            rehypePlugins={REHYPE_PLUGINS}
+            skipHtml
+            linkSafety={{ enabled: false }}
+            isAnimating={streaming}
+          >
+            {text}
+          </MessageResponse>
+        </div>
+      </TextContextMenu>
     </ReplyFilesContext.Provider>
   )
 }

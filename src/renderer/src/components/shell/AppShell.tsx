@@ -12,6 +12,7 @@ import { NotificationsBar } from '@/components/notifications/NotificationsBar'
 import { NotificationsPanel } from '@/components/notifications/NotificationsPanel'
 import { Toaster } from '@/components/notifications/Toaster'
 import { TerminalTabs } from '@/components/terminal/TerminalTabs'
+import { TextContextMenu } from '@/components/text-menu/TextContextMenu'
 import { SearchEverywhere } from '@/components/search/SearchEverywhere'
 import { useFindInFiles } from '@/components/search/use-find-in-files'
 import { useSearchEverywhere } from '@/components/search/use-search-everywhere'
@@ -104,80 +105,87 @@ export function AppShell(): React.JSX.Element {
   return (
     <TooltipProvider>
       <MemorySearchDialog />
-      <div className="type-body flex h-screen flex-col bg-frame">
-        <div className="flex min-h-0 flex-1 pt-island-gap">
-          <ActivityBar />
-          <div
-            className="flex min-w-0 flex-1"
-            // Keeps the side panel's minimum and a sliver of main area; the notifications panel gives way first.
-            style={{
-              minWidth:
-                (panel.collapsed ? 0 : SIDE_PANEL_MIN_WIDTH + SIDE_PANEL_HANDLE_WIDTH) +
-                MAIN_AREA_MIN_WIDTH
-            }}
-          >
-            {panel.collapsed ? null : (
-              <>
-                <aside
-                  aria-label={`${view.label} panel`}
-                  ref={aside}
-                  // CSS caps the panel when the window narrows; the chosen width returns when there is room.
-                  style={{
-                    width: panel.width,
-                    minWidth: SIDE_PANEL_MIN_WIDTH,
-                    maxWidth: `calc(100% - ${SIDE_PANEL_HANDLE_WIDTH + MAIN_AREA_MIN_WIDTH}px)`
-                  }}
-                  className="flex shrink-0 flex-col overflow-hidden rounded-island bg-island"
-                >
-                  <view.Panel />
-                </aside>
-                <SidePanelResizeHandle
-                  label={`Resize ${view.label} panel`}
-                  width={panel.width}
-                  renderedWidth={() => aside.current?.getBoundingClientRect().width ?? panel.width}
-                  minWidth={SIDE_PANEL_MIN_WIDTH}
-                  maxWidth={maxWidth}
-                  onWidthChange={(next) => setPanelWidth(view.id, Math.min(next, maxWidth()))}
-                />
-              </>
-            )}
-            <main
-              aria-label={settingsOpen ? 'Settings' : view.label}
-              className="relative flex min-w-0 flex-1 rounded-island bg-island"
+      {/* Every place without a menu of its own gets the text items. */}
+      <TextContextMenu>
+        <div className="type-body flex h-screen flex-col bg-frame">
+          <div className="flex min-h-0 flex-1 pt-island-gap">
+            <ActivityBar />
+            <div
+              className="flex min-w-0 flex-1"
+              // Keeps the side panel's minimum and a sliver of main area; the notifications panel gives way first.
+              style={{
+                minWidth:
+                  (panel.collapsed ? 0 : SIDE_PANEL_MIN_WIDTH + SIDE_PANEL_HANDLE_WIDTH) +
+                  MAIN_AREA_MIN_WIDTH
+              }}
             >
-              {hasTerminals ? <TerminalTabs hidden={!showTerminals} /> : null}
-              <UnsavedChangesDialog />
-              {hasEditorTabs ? <LazyEditorTabs hidden={!showEditor} /> : null}
-              {hasHunkTabs ? (
-                // A starting hunk is laid out unseen, at its real size, until it runs.
-                <HunkTabs placement={showHunkTabs ? 'shown' : inGitView ? 'offstage' : 'hidden'} />
-              ) : null}
-              {showTerminals || showEditor || showHunkTabs ? null : settingsOpen ? (
-                <SettingsPage />
-              ) : workspaceEmpty ? (
-                <WelcomeScreen />
-              ) : view.MainEmpty ? (
-                <view.MainEmpty />
-              ) : (
-                <div className="flex flex-1 flex-col items-center justify-center gap-3 p-8 text-center">
-                  <view.Icon
-                    className="size-empty-state-icon text-muted-foreground"
-                    strokeWidth={1.5}
-                    aria-hidden
+              {panel.collapsed ? null : (
+                <>
+                  <aside
+                    aria-label={`${view.label} panel`}
+                    ref={aside}
+                    // CSS caps the panel when the window narrows; the chosen width returns when there is room.
+                    style={{
+                      width: panel.width,
+                      minWidth: SIDE_PANEL_MIN_WIDTH,
+                      maxWidth: `calc(100% - ${SIDE_PANEL_HANDLE_WIDTH + MAIN_AREA_MIN_WIDTH}px)`
+                    }}
+                    className="flex shrink-0 flex-col overflow-hidden rounded-island bg-island"
+                  >
+                    <view.Panel />
+                  </aside>
+                  <SidePanelResizeHandle
+                    label={`Resize ${view.label} panel`}
+                    width={panel.width}
+                    renderedWidth={() =>
+                      aside.current?.getBoundingClientRect().width ?? panel.width
+                    }
+                    minWidth={SIDE_PANEL_MIN_WIDTH}
+                    maxWidth={maxWidth}
+                    onWidthChange={(next) => setPanelWidth(view.id, Math.min(next, maxWidth()))}
                   />
-                  <p className="type-description max-w-sm">{view.mainPlaceholder}</p>
-                </div>
+                </>
               )}
-            </main>
+              <main
+                aria-label={settingsOpen ? 'Settings' : view.label}
+                className="relative flex min-w-0 flex-1 rounded-island bg-island"
+              >
+                {hasTerminals ? <TerminalTabs hidden={!showTerminals} /> : null}
+                <UnsavedChangesDialog />
+                {hasEditorTabs ? <LazyEditorTabs hidden={!showEditor} /> : null}
+                {hasHunkTabs ? (
+                  // A starting hunk is laid out unseen, at its real size, until it runs.
+                  <HunkTabs
+                    placement={showHunkTabs ? 'shown' : inGitView ? 'offstage' : 'hidden'}
+                  />
+                ) : null}
+                {showTerminals || showEditor || showHunkTabs ? null : settingsOpen ? (
+                  <SettingsPage />
+                ) : workspaceEmpty ? (
+                  <WelcomeScreen />
+                ) : view.MainEmpty ? (
+                  <view.MainEmpty />
+                ) : (
+                  <div className="flex flex-1 flex-col items-center justify-center gap-3 p-8 text-center">
+                    <view.Icon
+                      className="size-empty-state-icon text-muted-foreground"
+                      strokeWidth={1.5}
+                      aria-hidden
+                    />
+                    <p className="type-description max-w-sm">{view.mainPlaceholder}</p>
+                  </div>
+                )}
+              </main>
+            </div>
+            {chatOpen ? <ChatPanel /> : null}
+            {notificationsOpen ? <NotificationsPanel /> : null}
+            <NotificationsBar />
           </div>
-          {chatOpen ? <ChatPanel /> : null}
-          {notificationsOpen ? <NotificationsPanel /> : null}
-          <NotificationsBar />
+          <StatusBar />
+          <Toaster />
+          <SearchEverywhere />
         </div>
-        <StatusBar />
-        <Toaster />
-        <SearchEverywhere />
-      </div>
+      </TextContextMenu>
     </TooltipProvider>
   )
 }

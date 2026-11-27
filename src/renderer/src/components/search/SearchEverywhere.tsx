@@ -1,4 +1,5 @@
 import { Box, Braces, SquareFunction, Variable } from 'lucide-react'
+import { FileResultMenu } from './FileResultMenu'
 import { Fragment, useEffect, useRef, useState } from 'react'
 import { FileTreeIcon } from '@/components/icons/FileTreeIcon'
 import {
@@ -101,20 +102,24 @@ function FileItem({
   const slash = hit.relative.lastIndexOf('/')
   const name = hit.relative.slice(slash + 1)
   return (
-    <CommandItem value={fileKey(hit)} onSelect={onChoose} title={hit.path}>
-      <FileTreeIcon kind="file" name={name} className="size-4 shrink-0" />
-      <span className="shrink-0">
-        <Highlighted text={hit.relative} ranges={hit.ranges} from={slash + 1} />
-      </span>
-      {showFolder || slash >= 0 ? (
-        <span className="flex min-w-0 type-hint">
-          <StartTruncated>
-            {showFolder ? `${hit.folder}/` : null}
-            {slash < 0 ? null : <Highlighted text={hit.relative} ranges={hit.ranges} to={slash} />}
-          </StartTruncated>
+    <FileResultMenu path={hit.path} onOpen={onChoose}>
+      <CommandItem value={fileKey(hit)} onSelect={onChoose} title={hit.path}>
+        <FileTreeIcon kind="file" name={name} className="size-4 shrink-0" />
+        <span className="shrink-0">
+          <Highlighted text={hit.relative} ranges={hit.ranges} from={slash + 1} />
         </span>
-      ) : null}
-    </CommandItem>
+        {showFolder || slash >= 0 ? (
+          <span className="flex min-w-0 type-hint">
+            <StartTruncated>
+              {showFolder ? `${hit.folder}/` : null}
+              {slash < 0 ? null : (
+                <Highlighted text={hit.relative} ranges={hit.ranges} to={slash} />
+              )}
+            </StartTruncated>
+          </span>
+        ) : null}
+      </CommandItem>
+    </FileResultMenu>
   )
 }
 
@@ -134,26 +139,28 @@ function SymbolItem({
   const file = hit.path.split(/[\\/]/).pop() ?? hit.path
   const at = hit.line === null ? file : `${file}:${String(hit.line)}`
   return (
-    <CommandItem
-      value={symbolKey(hit)}
-      onSelect={onChoose}
-      title={[hit.container, `${hit.path}${hit.line === null ? '' : `:${String(hit.line)}`}`]
-        .filter(Boolean)
-        .join('\n')}
-    >
-      <SymbolIcon kind={hit.kind} />
-      <span className={cn('max-w-[40%] shrink-0 truncate', unlisted && 'text-file-ignored')}>
-        <Highlighted text={hit.name} ranges={hit.ranges} />
-      </span>
-      {/* Short of room, the container gives way first, then the folder; the file and line stay. */}
-      <span className="min-w-0 flex-1 basis-0 truncate type-hint">
-        {hit.container === null ? null : shortContainer(hit.container)}
-      </span>
-      <span className={cn('flex min-w-0 pl-4 type-hint', unlisted && 'text-file-ignored')}>
-        {folder === '' ? null : <StartTruncated>{`${folder}/`}</StartTruncated>}
-        <span className="shrink-0">{at}</span>
-      </span>
-    </CommandItem>
+    <FileResultMenu path={hit.path} onOpen={onChoose}>
+      <CommandItem
+        value={symbolKey(hit)}
+        onSelect={onChoose}
+        title={[hit.container, `${hit.path}${hit.line === null ? '' : `:${String(hit.line)}`}`]
+          .filter(Boolean)
+          .join('\n')}
+      >
+        <SymbolIcon kind={hit.kind} />
+        <span className={cn('max-w-[40%] shrink-0 truncate', unlisted && 'text-file-ignored')}>
+          <Highlighted text={hit.name} ranges={hit.ranges} />
+        </span>
+        {/* Short of room, the container gives way first, then the folder; the file and line stay. */}
+        <span className="min-w-0 flex-1 basis-0 truncate type-hint">
+          {hit.container === null ? null : shortContainer(hit.container)}
+        </span>
+        <span className={cn('flex min-w-0 pl-4 type-hint', unlisted && 'text-file-ignored')}>
+          {folder === '' ? null : <StartTruncated>{`${folder}/`}</StartTruncated>}
+          <span className="shrink-0">{at}</span>
+        </span>
+      </CommandItem>
+    </FileResultMenu>
   )
 }
 

@@ -1,5 +1,6 @@
 import * as React from 'react'
 import { AlertDialog as AlertDialogPrimitive } from 'radix-ui'
+import { TextContextMenu } from '@/components/text-menu/TextContextMenu'
 import { cn } from '@/lib/class-names'
 import { PRIMARY_BUTTON, SECONDARY_BUTTON } from './action-button-classes'
 
@@ -18,14 +19,17 @@ function AlertDialogContent({
         data-slot="alert-dialog-overlay"
         className="fixed inset-0 z-50"
       />
-      <AlertDialogPrimitive.Content
-        data-slot="alert-dialog-content"
-        className={cn(
-          'fixed top-1/2 left-1/2 z-50 grid w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-4 rounded-popup border border-dialog-border bg-dialog p-5 shadow-lg sm:max-w-md',
-          className
-        )}
-        {...props}
-      />
+      {/* Its own text menu: the app's is outside the dialog's focus trap. */}
+      <TextContextMenu>
+        <AlertDialogPrimitive.Content
+          data-slot="alert-dialog-content"
+          className={cn(
+            'fixed top-1/2 left-1/2 z-50 grid w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-4 rounded-popup border border-dialog-border bg-dialog p-5 shadow-lg sm:max-w-md',
+            className
+          )}
+          {...props}
+        />
+      </TextContextMenu>
     </AlertDialogPrimitive.Portal>
   )
 }
