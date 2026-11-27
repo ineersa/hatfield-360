@@ -19,6 +19,7 @@ import {
   trackedFiles
 } from './change-tree-rows'
 import { ChangesLoading, ChangesTree } from './ChangesTree'
+import { pullPlan } from './commit-plan'
 import { CommitBox } from './CommitBox'
 import { RollbackDialog } from './RollbackDialog'
 
@@ -75,10 +76,7 @@ export function GitPanel(): React.JSX.Element {
     [groups, checked]
   )
   const checkedCount = checkedTargets.reduce((sum, target) => sum + target.files.length, 0)
-  const gitGroups = (groups ?? []).filter((group) => group.status === 'git')
-  const pullTarget =
-    gitGroups.find((group) => group.root === selected?.root) ??
-    (gitGroups.length === 1 ? gitGroups[0] : undefined)
+  const pulling = pullPlan(groups, selected?.root ?? null)
   const busy = running !== null
   const problem = workspace?.problem ?? null
 
@@ -97,9 +95,9 @@ export function GitPanel(): React.JSX.Element {
         <PanelHeaderButton
           label="Pull"
           busy={running === 'pull'}
-          disabled={gitGroups.length === 0 || (busy && running !== 'pull')}
+          disabled={pulling.blocked !== null || (busy && running !== 'pull')}
           onClick={() => void pull()}
-          tip={pullTarget ? `Pull ${pullTarget.name}` : 'Pull every repository, one after another'}
+          tip={pulling.blocked ?? pulling.tip}
         >
           <ArrowDownToLine className={ICON} strokeWidth={1.75} aria-hidden />
         </PanelHeaderButton>
@@ -137,7 +135,7 @@ export function GitPanel(): React.JSX.Element {
         />
       )}
       {failure ? <ActionFailureNotice failure={failure} onDismiss={dismissFailure} /> : null}
-      <CommitBox checkedCount={checkedCount} />
+      <CommitBox />
       {rollingBack ? (
         <RollbackDialog
           targets={rollingBack}
@@ -150,7 +148,7 @@ export function GitPanel(): React.JSX.Element {
           entries={trashing.files.map((file) => ({
             name: file.path.slice(file.path.lastIndexOf('/') + 1),
             path: file.absolutePath,
-            kind: 'file'
+            kind: file.nestedRepository ? 'directory' : 'file'
           }))}
           onClose={() => setTrashing(null)}
           onTrashed={() => void refresh()}

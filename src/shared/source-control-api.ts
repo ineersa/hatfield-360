@@ -11,7 +11,15 @@ export type ChangedFile = {
   /** Where a renamed file came from (relative to `root`); null for every other kind. */
   originalPath: string | null
   kind: ChangeKind
+  /**
+   * An untracked nested repository or linked worktree inside the root, which git lists as one
+   * folder (`path` without git's trailing slash): it can be ignored or deleted, not added.
+   */
+  nestedRepository: boolean
 }
+
+/** What git is in the middle of: a commit then concludes a merge, cherry-pick or revert; a rebase is finished in a terminal. */
+export type GitOperation = 'merge' | 'cherry-pick' | 'revert' | 'rebase'
 
 type SourceControlGroupBase = {
   /** The workspace project folder the group belongs to. */
@@ -35,7 +43,9 @@ export type SourceControlGroup =
       /** Commits not yet pushed and not yet pulled; both null without an upstream. */
       ahead: number | null
       behind: number | null
-      /** Untracked files are listed one by one, never as a folder. */
+      /** A merge, cherry-pick, revert or rebase waiting to be concluded; null when none is. */
+      operation: GitOperation | null
+      /** Untracked files are listed one by one; only a nested repository is listed as a folder. */
       files: ChangedFile[]
     })
   | (SourceControlGroupBase & { status: 'not-git' })
@@ -45,13 +55,18 @@ export type SourceControlGroup =
  * The outcome of a git command run for the user. `output` is everything git (and any hook) printed,
  * stdout and stderr in the order they arrived, unedited: show it as it is.
  */
-export type GitOutcome = { ok: true; output: string } | { ok: false; output: string }
+export type GitOutcome =
+  | { ok: true; output: string }
+  /** `cancelled`: stopped by `cancelSourceControlAction`, along with everything git had started. */
+  | { ok: false; output: string; cancelled?: true }
 
 type CommitRequest = {
   root: string
   /**
    * Paths (`ChangedFile.path`) committed as they are in the working tree, whatever the index holds.
-   * An untracked path is refused (`{ ok: false }`) until it is added to version control.
+   * An untracked path is refused (`{ ok: false }`) until it is added to version control. During a
+   * merge, cherry-pick or revert they are staged and the whole index is committed, concluding it;
+   * during a rebase the commit is refused.
    */
   paths: string[]
   message: string
@@ -76,7 +91,8 @@ export const SOURCE_CONTROL_CHANNELS = {
   fetch: 'source-control:fetch',
   addUntracked: 'source-control:add-untracked',
   ignoreUntracked: 'source-control:ignore-untracked',
-  launchHunk: 'source-control:launch-hunk'
+  launchHunk: 'source-control:launch-hunk',
+  cancel: 'source-control:cancel'
 } as const
 
 export type SourceControlApi = {
@@ -96,13 +112,21 @@ export type SourceControlApi = {
   rollbackChanges: (root: string, paths: string[]) => Promise<GitOutcome>
   /** `git fetch` in the root, so its ahead/behind counts catch up with the remote. */
   fetchRemote: (root: string) => Promise<GitOutcome>
-  /** `git add` for untracked files (`ChangedFile.path`); any other path is refused before git runs. */
+  /**
+   * `git add` for untracked files (`ChangedFile.path`); any other path, or a nested repository, is
+   * refused before git runs.
+   */
   addUntrackedFiles: (root: string, paths: string[]) => Promise<GitOutcome>
   /**
-   * Appends a pattern matching exactly this untracked file to the root's .gitignore, creating it if
-   * missing; any other path is refused.
+   * Appends a pattern matching exactly this untracked file (a nested repository as a folder) to the
+   * root's .gitignore, creating it if missing; any other path is refused.
    */
   ignoreUntrackedFile: (root: string, path: string) => Promise<void>
+  /**
+   * Stops the commit, push, pull, fetch, rollback or add this window is running, with its hooks and
+   * ssh; that call resolves `{ ok: false, cancelled: true }`. Nothing running: nothing happens.
+   */
+  cancelSourceControlAction: () => Promise<void>
   /**
    * `hunk diff --watch HEAD` (review: every change the Commit panel lists, staged or not; the empty
    * tree before the first commit) or `hunk log`, in a terminal driven by the terminal API.

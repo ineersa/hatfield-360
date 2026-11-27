@@ -1,13 +1,13 @@
 import { create } from 'zustand'
 import {
-  checkedFilesByGroup,
+  addableFiles,
   fileKey,
   type GitGroup,
   keepListedChecks,
   toggleFilesChecks,
-  trackedFiles,
-  untrackedFiles
+  trackedFiles
 } from '@/components/git/change-tree-rows'
+import { amendTarget, commitPlan, gitGroups, pullPlan } from '@/components/git/commit-plan'
 import { mainErrorMessage } from '@/lib/main-error-message'
 import type {
   ChangedFile,
@@ -31,7 +31,8 @@ export type SourceControlAction =
 export type FileTargets = { group: GitGroup; files: ChangedFile[] }[]
 
 /** A failed action: which one and where, and what git (or a hook) printed, unedited. */
-export type ActionFailure = { title: string; output: string }
+/** What the last action printed when it failed, or was cancelled (not an error: shown plainly). */
+export type ActionFailure = { title: string; output: string; cancelled?: true }
 
 type SourceControlState = {
   /** Every working tree of the workspace with its changes; null until first read. */
@@ -47,12 +48,17 @@ type SourceControlState = {
   /** The tree's selected row and the working tree it belongs to: Pull acts on that one. */
   selected: { key: string; root: string } | null
   running: SourceControlAction | null
+  /** Cancel was asked for the running action: it stops after the git command now running. */
+  cancelling: boolean
   failure: ActionFailure | null
   message: string
   amend: boolean
-  /** What the box held before Amend filled it with the last commit's message. */
-  beforeAmend: string | null
-  /** Reads every group's status again; quietly unless `shown`, which spins Refresh. */
+  /** The last commit message Amend put in the empty box, and whose: it follows Amend's target while untouched. */
+  amendFilled: { root: string; message: string } | null
+  /**
+   * Reads every group's status again; quietly unless `shown`, which spins Refresh. Reads asked
+   * for while one runs share a single read after it.
+   */
   refresh: (shown?: boolean) => Promise<void>
   /** Checks or unchecks a tracked change for the commit. */
   toggleFile: (root: string, path: string) => void
@@ -71,9 +77,12 @@ type SourceControlState = {
   select: (key: string, root: string) => void
   setMessage: (message: string) => void
   setAmend: (amend: boolean) => Promise<void>
-  /** Commits the checked files of each group in turn with the message, pushing each after it when `push`. */
+  /**
+   * Commits the checked files of each group in turn with the message, pushing each after it when
+   * `push`; with Amend, only its one group.
+   */
   commit: (push: boolean) => Promise<void>
-  /** Pulls `root`, else the selected row's working tree, the only git one, or else every git one in turn. */
+  /** Pulls `root`, else the selected row's working tree, the only git one, or else every one that can be pulled, in turn. */
   pull: (root?: string) => Promise<void>
   push: (group: GitGroup) => Promise<void>
   fetch: (group: GitGroup) => Promise<void>
@@ -83,19 +92,22 @@ type SourceControlState = {
   addToVcs: (group: GitGroup, files: ChangedFile[]) => Promise<void>
   /** Ignores an untracked file in its root's .gitignore. */
   ignore: (group: GitGroup, file: ChangedFile) => Promise<void>
+  /** Stops the running commit, push, pull, fetch, rollback or add, with its hooks and ssh. */
+  cancel: () => Promise<void>
   dismissFailure: () => void
 }
 
-const gitGroups = (groups: SourceControlGroup[] | null): GitGroup[] =>
-  (groups ?? []).filter((group): group is GitGroup => group.status === 'git')
-
-/** The working tree whose last commit Amend replaces when no file is checked. */
-function amendGroup(state: SourceControlState): GitGroup | undefined {
-  return (
-    checkedFilesByGroup(state.groups ?? [], state.checked, trackedFiles)[0]?.group ??
-    gitGroups(state.groups)[0]
-  )
+/** The working tree Amend works on now, if just one. */
+function amendRoot(state: SourceControlState): GitGroup | null {
+  const target = amendTarget(state.groups ?? [], state.checked, state.selected?.root ?? null)
+  return target === null || target === 'several' ? null : target.group
 }
+
+/** Whether the box holds nothing the user wrote: empty, or Amend's own text left as it was. */
+const untouched = (state: SourceControlState): boolean =>
+  state.amendFilled === null
+    ? state.message.trim() === ''
+    : state.message === state.amendFilled.message
 
 const toggled = (keys: ReadonlySet<string>, key: string): Set<string> => {
   const next = new Set(keys)
@@ -103,23 +115,96 @@ const toggled = (keys: ReadonlySet<string>, key: string): Set<string> => {
   return next
 }
 
-let latestRead = 0
+export const useSourceControlStore = create<SourceControlState>((set, get, store) => {
+  let reading: Promise<void> | null = null
+  let queued: Promise<void> | null = null
 
-export const useSourceControlStore = create<SourceControlState>((set, get) => {
+  /** One status read at a time, and at most one more after it, which then speaks for every later ask. */
+  const readStatus = (): Promise<void> => {
+    if (queued) return queued
+    if (reading) {
+      queued = reading.then(() => {
+        queued = null
+        return readStatus()
+      })
+      return queued
+    }
+    reading = (async () => {
+      try {
+        const groups = await window.desktop.getSourceControlStatus()
+        // A read asked for meanwhile follows at once and has the newer word.
+        if (queued) return
+        set((state) => ({
+          groups,
+          checked: keepListedChecks(state.checked, groups, trackedFiles),
+          toAdd: keepListedChecks(state.toAdd, groups, addableFiles)
+        }))
+      } catch (error) {
+        if (!queued)
+          set({ failure: { title: 'Reading the changes failed', output: mainErrorMessage(error) } })
+      }
+    })().finally(() => {
+      reading = null
+    })
+    return reading
+  }
+
+  /**
+   * Fills the box with the last commit message of Amend's target while the box holds nothing the
+   * user wrote, again whenever the target changes; never with files checked in several groups.
+   */
+  const fillAmend = async (): Promise<void> => {
+    const state = get()
+    const group = amendRoot(state)
+    if (
+      !state.amend ||
+      group === null ||
+      state.amendFilled?.root === group.root ||
+      !untouched(state)
+    )
+      return
+    try {
+      const last = await window.desktop.getLastCommitMessage(group.root)
+      // The user may have typed, turned Amend off or changed its target while it was read.
+      const now = get()
+      if (
+        last !== null &&
+        now.amend &&
+        now.message === state.message &&
+        amendRoot(now)?.root === group.root
+      )
+        set({ message: last, amendFilled: { root: group.root, message: last } })
+    } catch (error) {
+      set({
+        failure: {
+          title: `Reading the last commit failed in ${group.name}`,
+          output: mainErrorMessage(error)
+        }
+      })
+    }
+  }
+
   /**
    * Runs an action with its button spinning and the last failure cleared; the first failure, or
    * any error main throws, is kept for the panel to show. Status is read again afterwards.
    */
   const act = async (
     action: SourceControlAction,
-    steps: (fail: (title: string, outcome: GitOutcome) => boolean) => Promise<void>,
+    steps: (fail: (what: string, name: string, outcome: GitOutcome) => boolean) => Promise<void>,
     title: () => string
   ): Promise<void> => {
     if (get().running) return
-    set({ running: action, failure: null })
-    const fail = (failed: string, outcome: GitOutcome): boolean => {
+    set({ running: action, cancelling: false, failure: null })
+    const fail = (what: string, name: string, outcome: GitOutcome): boolean => {
       if (outcome.ok) return false
-      set({ failure: { title: failed, output: outcome.output } })
+      const cancelled = outcome.cancelled === true
+      set({
+        failure: {
+          title: `${what} ${cancelled ? 'cancelled' : 'failed'} in ${name}`,
+          output: outcome.output,
+          ...(cancelled ? { cancelled: true } : {})
+        }
+      })
       return true
     }
     try {
@@ -127,10 +212,21 @@ export const useSourceControlStore = create<SourceControlState>((set, get) => {
     } catch (error) {
       set({ failure: { title: title(), output: mainErrorMessage(error) } })
     } finally {
-      set({ running: null })
+      set({ running: null, cancelling: false })
     }
     await get().refresh()
   }
+
+  // Amend's text follows its target: files checked elsewhere, another row selected, files gone.
+  store.subscribe((state, previous) => {
+    if (
+      state.amend &&
+      (state.checked !== previous.checked ||
+        state.selected !== previous.selected ||
+        state.groups !== previous.groups)
+    )
+      void fillAmend()
+  })
 
   const uncheck = (root: string, files: ChangedFile[]): void =>
     set((state) => {
@@ -153,7 +249,7 @@ export const useSourceControlStore = create<SourceControlState>((set, get) => {
     act(
       action,
       async (fail) => {
-        fail(`${what} failed in ${group.name}`, await run())
+        fail(what, group.name, await run())
       },
       () => `${what} failed in ${group.name}`
     )
@@ -166,28 +262,18 @@ export const useSourceControlStore = create<SourceControlState>((set, get) => {
     unversionedOpen: new Set(),
     selected: null,
     running: null,
+    cancelling: false,
     failure: null,
     message: '',
     amend: false,
-    beforeAmend: null,
+    amendFilled: null,
     refresh: async (shown = false) => {
       if (shown) {
         if (get().running) return
         set({ running: 'refresh', failure: null })
       }
-      const read = ++latestRead
       try {
-        const groups = await window.desktop.getSourceControlStatus()
-        // A later read (after an action) wins over one that was already under way.
-        if (read === latestRead)
-          set((state) => ({
-            groups,
-            checked: keepListedChecks(state.checked, groups, trackedFiles),
-            toAdd: keepListedChecks(state.toAdd, groups, untrackedFiles)
-          }))
-      } catch (error) {
-        if (read === latestRead)
-          set({ failure: { title: 'Reading the changes failed', output: mainErrorMessage(error) } })
+        await readStatus()
       } finally {
         if (shown) set({ running: null })
       }
@@ -202,7 +288,7 @@ export const useSourceControlStore = create<SourceControlState>((set, get) => {
       })),
     toggleUnversioned: (group) =>
       set((state) => ({
-        toAdd: toggleFilesChecks(group.root, untrackedFiles(group), state.toAdd)
+        toAdd: toggleFilesChecks(group.root, addableFiles(group), state.toAdd)
       })),
     checkOnly: (root, path) => set({ checked: new Set([fileKey(root, path)]) }),
     toggleFold: (root) => set((state) => ({ collapsed: toggled(state.collapsed, root) })),
@@ -221,81 +307,63 @@ export const useSourceControlStore = create<SourceControlState>((set, get) => {
     select: (key, root) => set({ selected: { key, root } }),
     setMessage: (message) => set({ message }),
     setAmend: async (amend) => {
-      const state = get()
-      if (!amend) {
-        set({ amend: false, beforeAmend: null, message: state.beforeAmend ?? state.message })
+      if (amend) {
+        set({ amend: true, amendFilled: null })
+        await fillAmend()
         return
       }
-      if (state.message.trim() !== '') {
-        set({ amend: true, beforeAmend: null })
-        return
-      }
-      set({ amend: true, beforeAmend: state.message })
-      const group = amendGroup(state)
-      if (!group) return
-      try {
-        const last = await window.desktop.getLastCommitMessage(group.root)
-        // The user may have typed, or turned Amend off, while it was read.
-        const now = get()
-        if (last !== null && now.amend && now.beforeAmend !== null && now.message === state.message)
-          set({ message: last })
-      } catch (error) {
-        set({
-          failure: {
-            title: `Reading the last commit failed in ${group.name}`,
-            output: mainErrorMessage(error)
-          }
-        })
-      }
+      // Amend's own text goes with it; anything the user wrote stays.
+      set((state) => ({
+        amend: false,
+        amendFilled: null,
+        message: state.amendFilled !== null && untouched(state) ? '' : state.message
+      }))
     },
     commit: async (push) => {
-      const { groups, checked, message, amend } = get()
-      const targets = checkedFilesByGroup(groups ?? [], checked, trackedFiles)
-      const amended = amend && targets.length === 0 ? amendGroup(get()) : undefined
-      const work = amended ? [{ group: amended, files: [] }] : targets
-      if (message.trim() === '' || work.length === 0) return
+      const { groups, checked, selected, message, amend } = get()
+      const { work, blocked } = commitPlan(groups ?? [], checked, selected?.root ?? null, amend)
+      if (message.trim() === '' || work.length === 0 || blocked !== null) return
       let current = work[0]?.group.name ?? ''
       await act(
         push ? 'commit-push' : 'commit',
         async (fail) => {
-          let failed = false
+          // The message has served its purpose once every group has its commit, even if the last push failed.
+          let committed = 0
           for (const { group, files } of work) {
+            if (get().cancelling) break
             current = group.name
-            const paths = files.map((file) => file.path)
             const outcome = await window.desktop.commitChanges({
               root: group.root,
-              paths,
+              paths: files.map((file) => file.path),
               message,
               amend
             })
-            if (fail(`Commit failed in ${group.name}`, outcome)) {
-              failed = true
-              break
-            }
+            if (fail('Commit', group.name, outcome)) break
+            committed += 1
             uncheck(group.root, files)
-            if (push) {
-              const pushed = await window.desktop.pushBranch(group.root)
-              if (fail(`Push failed in ${group.name}`, pushed)) break
-            }
+            if (
+              push &&
+              !get().cancelling &&
+              fail('Push', group.name, await window.desktop.pushBranch(group.root))
+            )
+              break
           }
-          if (!failed) set({ message: '', amend: false, beforeAmend: null })
+          if (committed === work.length) set({ message: '', amend: false, amendFilled: null })
         },
         () => `${push ? 'Commit and Push' : 'Commit'} failed in ${current}`
       )
     },
     pull: async (root) => {
-      const { groups, selected } = get()
-      const git = gitGroups(groups)
-      const chosen = git.find((group) => group.root === (root ?? selected?.root))
-      const targets = chosen ? [chosen] : git
+      const { targets } = pullPlan(get().groups, root ?? get().selected?.root ?? null)
+      if (targets.length === 0) return
       let current = targets[0]?.name ?? ''
       await act(
         'pull',
         async (fail) => {
           for (const group of targets) {
+            if (get().cancelling) break
             current = group.name
-            if (fail(`Pull failed in ${group.name}`, await window.desktop.pullBranch(group.root)))
-              break
+            if (fail('Pull', group.name, await window.desktop.pullBranch(group.root))) break
           }
         },
         () => `Pull failed in ${current}`
@@ -325,17 +393,24 @@ export const useSourceControlStore = create<SourceControlState>((set, get) => {
         'rollback',
         async (fail) => {
           for (const { group, files } of targets) {
+            if (get().cancelling) break
             current = group.name
             const outcome = await window.desktop.rollbackChanges(
               group.root,
               files.map((file) => file.path)
             )
-            if (fail(`Rollback failed in ${group.name}`, outcome)) break
+            if (fail('Rollback', group.name, outcome)) break
             uncheck(group.root, files)
           }
         },
         () => `Rollback failed in ${current}`
       )
+    },
+    cancel: async () => {
+      const { running, cancelling } = get()
+      if (running === null || running === 'refresh' || cancelling) return
+      set({ cancelling: true })
+      await window.desktop.cancelSourceControlAction()
     },
     dismissFailure: () => set({ failure: null })
   }

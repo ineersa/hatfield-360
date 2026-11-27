@@ -1,14 +1,17 @@
 import { execFileSync } from 'node:child_process'
 import {
   chmodSync,
+  constants,
   existsSync,
   mkdirSync,
   mkdtempSync,
+  openSync,
   readFileSync,
   realpathSync,
   rmSync,
   writeFileSync
 } from 'node:fs'
+import { readFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
@@ -19,6 +22,8 @@ import {
   fetchRemote,
   ignoreUntrackedFile,
   lastCommitMessage,
+  leftoverIndexLock,
+  MAX_PATHS,
   pullBranch,
   pushBranch,
   readWorkingTreeStatus,
@@ -27,6 +32,9 @@ import {
 
 const root = realpathSync(mkdtempSync(join(tmpdir(), 'hatfield-source-control-')))
 const saved = { global: process.env.GIT_CONFIG_GLOBAL, system: process.env.GIT_CONFIG_NOSYSTEM }
+/** Editors the environment may name (agents set GIT_EDITOR=true): the app must not rely on them. */
+const EDITOR_VARIABLES = ['GIT_EDITOR', 'GIT_SEQUENCE_EDITOR', 'VISUAL', 'EDITOR'] as const
+const savedEditors = EDITOR_VARIABLES.map((name) => [name, process.env[name]] as const)
 
 // The module runs git with the process environment: point it at a config of our own, never the user's
 // identity, signing or hooks path.
@@ -38,6 +46,7 @@ beforeAll(() => {
   )
   process.env.GIT_CONFIG_GLOBAL = config
   process.env.GIT_CONFIG_NOSYSTEM = '1'
+  for (const name of EDITOR_VARIABLES) delete process.env[name]
 })
 
 afterAll(() => {
@@ -45,11 +54,12 @@ afterAll(() => {
   else process.env.GIT_CONFIG_GLOBAL = saved.global
   if (saved.system === undefined) delete process.env.GIT_CONFIG_NOSYSTEM
   else process.env.GIT_CONFIG_NOSYSTEM = saved.system
+  for (const [name, value] of savedEditors) if (value !== undefined) process.env[name] = value
   rmSync(root, { recursive: true, force: true })
 })
 
 function git(cwd: string, ...args: string[]): string {
-  return execFileSync('git', args, { cwd, encoding: 'utf8' })
+  return execFileSync('git', args, { cwd, encoding: 'utf8', stdio: 'pipe' })
 }
 
 const write = (repo: string, path: string, text: string): void => {
@@ -70,6 +80,21 @@ function makeRepo(name: string, files: string[]): string {
 }
 
 const commitCount = (repo: string): string => git(repo, 'rev-list', '--count', 'HEAD').trim()
+
+/** HEAD's parents, one per merged branch. */
+const parentCount = (repo: string): number =>
+  git(repo, 'rev-list', '--parents', '-n', '1', 'HEAD').trim().split(' ').length - 1
+
+/** A clone of `repo` through a new bare remote, which it is tracking. */
+function cloneThroughRemote(repo: string, name: string): string {
+  const remote = join(root, `${name}.git`)
+  git(root, 'init', '-q', '--bare', remote)
+  git(repo, 'remote', 'add', 'origin', remote)
+  git(repo, 'push', '-q', '-u', 'origin', 'main')
+  const clone = join(root, `${name}-clone`)
+  git(root, 'clone', '-q', remote, clone)
+  return clone
+}
 
 /** `kind path` for each changed file, sorted. */
 async function changes(repo: string): Promise<string[]> {
@@ -96,37 +121,43 @@ describe('readWorkingTreeStatus', () => {
         path: 'added.ts',
         absolutePath: join(repo, 'added.ts'),
         originalPath: null,
-        kind: 'added'
+        kind: 'added',
+        nestedRepository: false
       },
       {
         path: 'deleted.ts',
         absolutePath: join(repo, 'deleted.ts'),
         originalPath: null,
-        kind: 'deleted'
+        kind: 'deleted',
+        nestedRepository: false
       },
       {
         path: 'folder/inner/one.ts',
         absolutePath: join(repo, 'folder', 'inner', 'one.ts'),
         originalPath: null,
-        kind: 'untracked'
+        kind: 'untracked',
+        nestedRepository: false
       },
       {
         path: 'folder/two.ts',
         absolutePath: join(repo, 'folder', 'two.ts'),
         originalPath: null,
-        kind: 'untracked'
+        kind: 'untracked',
+        nestedRepository: false
       },
       {
         path: 'modified.ts',
         absolutePath: join(repo, 'modified.ts'),
         originalPath: null,
-        kind: 'modified'
+        kind: 'modified',
+        nestedRepository: false
       },
       {
         path: 'new.ts',
         absolutePath: join(repo, 'new.ts'),
         originalPath: 'old.ts',
-        kind: 'renamed'
+        kind: 'renamed',
+        nestedRepository: false
       }
     ])
   })
@@ -282,6 +313,270 @@ describe('commitChanges', () => {
       await commitChanges(repo, { paths: ['file.ts'], message: '  \n', amend: false })
     ).toEqual({ ok: false, output: 'Write a commit message.' })
     expect(commitCount(repo)).toBe('1')
+  })
+})
+
+/**
+ * A repository whose Pull stopped on a conflict in shared.ts with what another clone pushed;
+ * other.ts merged cleanly and kept.ts has a change of its own.
+ */
+async function conflictingPull(name: string): Promise<string> {
+  const repo = makeRepo(name, ['shared.ts', 'other.ts', 'kept.ts'])
+  const clone = cloneThroughRemote(repo, name)
+  write(clone, 'shared.ts', 'theirs\n')
+  write(clone, 'other.ts', 'merged in\n')
+  git(clone, 'commit', '-q', '-am', 'Theirs')
+  git(clone, 'push', '-q')
+  write(repo, 'shared.ts', 'ours\n')
+  git(repo, 'commit', '-q', '-am', 'Ours')
+  write(repo, 'kept.ts', 'not part of the merge\n')
+  expect((await pullBranch(repo)).ok).toBe(false)
+  return repo
+}
+
+describe('commitChanges during a merge, cherry-pick or rebase', () => {
+  it('concludes a merge Pull stopped on: the checked paths are staged and the merge committed', async () => {
+    const repo = await conflictingPull('merge')
+    expect((await readWorkingTreeStatus(repo)).operation).toBe('merge')
+    expect(await changes(repo)).toEqual([
+      'conflicted shared.ts',
+      'modified kept.ts',
+      'modified other.ts'
+    ])
+    write(repo, 'shared.ts', 'resolved\n')
+
+    const result = await commitChanges(repo, {
+      paths: ['shared.ts'],
+      message: 'Merge theirs',
+      amend: false
+    })
+
+    expect(result.ok).toBe(true)
+    expect(parentCount(repo)).toBe(2)
+    expect(git(repo, 'show', '-s', '--format=%s', 'HEAD')).toBe('Merge theirs\n')
+    expect(git(repo, 'show', 'HEAD:shared.ts')).toBe('resolved\n')
+    expect(git(repo, 'show', 'HEAD:other.ts')).toBe('merged in\n')
+    expect(await readWorkingTreeStatus(repo)).toMatchObject({ operation: null })
+    expect(await changes(repo)).toEqual(['modified kept.ts'])
+  })
+
+  it("refuses while a conflict is unresolved, with git's words or the markers left, committing nothing", async () => {
+    const repo = await conflictingPull('merge-unresolved')
+    const head = git(repo, 'rev-parse', 'HEAD')
+
+    const unmerged = await commitChanges(repo, {
+      paths: ['kept.ts'],
+      message: 'Too early',
+      amend: false
+    })
+    const markers = await commitChanges(repo, {
+      paths: ['shared.ts'],
+      message: 'Still conflicted',
+      amend: false
+    })
+
+    expect(unmerged.ok).toBe(false)
+    expect(unmerged.output).toContain('Committing is not possible because you have unmerged files.')
+    expect(markers).toEqual({
+      ok: false,
+      output: 'shared.ts still has conflict markers: resolve them first.'
+    })
+    expect(git(repo, 'rev-parse', 'HEAD')).toBe(head)
+    expect((await readWorkingTreeStatus(repo)).operation).toBe('merge')
+  })
+
+  it('concludes a cherry-pick in a linked worktree, whose markers live in its own git dir', async () => {
+    const repo = makeRepo('cherry-pick', ['shared.ts'])
+    git(repo, 'checkout', '-q', '-b', 'picked')
+    write(repo, 'shared.ts', 'picked\n')
+    git(repo, 'commit', '-q', '-am', 'To pick')
+    git(repo, 'checkout', '-q', 'main')
+    const tree = join(root, 'cherry-pick-tree')
+    git(repo, 'worktree', 'add', '-q', '-b', 'target', tree)
+    write(tree, 'shared.ts', 'target\n')
+    git(tree, 'commit', '-q', '-am', 'Target')
+    expect(() => git(tree, 'cherry-pick', 'picked')).toThrow('Command failed')
+    expect((await readWorkingTreeStatus(tree)).operation).toBe('cherry-pick')
+    expect((await readWorkingTreeStatus(repo)).operation).toBeNull()
+    write(tree, 'shared.ts', 'both\n')
+
+    const result = await commitChanges(tree, {
+      paths: ['shared.ts'],
+      message: 'Picked',
+      amend: false
+    })
+
+    expect(result.ok).toBe(true)
+    expect(git(tree, 'log', '--format=%s')).toBe('Picked\nTarget\nfirst\n')
+    expect((await readWorkingTreeStatus(tree)).operation).toBeNull()
+  })
+
+  it('reports a rebase stopped on a conflict and leaves concluding it to a terminal', async () => {
+    const repo = makeRepo('rebase', ['shared.ts', 'other.ts'])
+    git(repo, 'checkout', '-q', '-b', 'topic')
+    write(repo, 'shared.ts', 'topic\n')
+    git(repo, 'commit', '-q', '-am', 'Topic')
+    git(repo, 'checkout', '-q', 'main')
+    write(repo, 'shared.ts', 'main\n')
+    git(repo, 'commit', '-q', '-am', 'Main')
+    git(repo, 'checkout', '-q', 'topic')
+    expect(() => git(repo, 'rebase', 'main')).toThrow('Command failed')
+    write(repo, 'other.ts', 'changed\n')
+    const head = git(repo, 'rev-parse', 'HEAD')
+
+    expect((await readWorkingTreeStatus(repo)).operation).toBe('rebase')
+    expect(
+      await commitChanges(repo, { paths: ['other.ts'], message: 'Mid-rebase', amend: false })
+    ).toEqual({
+      ok: false,
+      output:
+        'A rebase is in progress: continue it (git rebase --continue) or abort it (git rebase --abort) in a terminal.'
+    })
+    expect(git(repo, 'rev-parse', 'HEAD')).toBe(head)
+  })
+})
+
+describe('many files at once', () => {
+  it('adds, commits and rolls back files whose paths together are longer than a command line takes', async () => {
+    const repo = makeRepo('many', [])
+    // About 2.3 MB of pathspecs, past Linux's 2 MB and macOS's 1 MB argument limits.
+    const deep = Array.from({ length: 15 }, () => 'd'.repeat(250)).join('/')
+    const paths = Array.from({ length: 600 }, (_, index) => `${deep}/${index}.ts`)
+    mkdirSync(join(repo, deep), { recursive: true })
+    for (const path of paths) writeFileSync(join(repo, path), 'x\n')
+
+    expect((await addUntrackedFiles(repo, paths)).ok).toBe(true)
+    expect((await commitChanges(repo, { paths, message: 'Many', amend: false })).ok).toBe(true)
+    expect(git(repo, 'show', '--shortstat', '--format=', 'HEAD')).toBe(
+      ' 600 files changed, 600 insertions(+)\n'
+    )
+    rmSync(join(repo, 'd'.repeat(250)), { recursive: true })
+    expect((await rollbackChanges(repo, paths)).ok).toBe(true)
+    expect(await changes(repo)).toEqual([])
+  })
+
+  it('takes more paths than the old 5000 and refuses more than one action takes, saying what to do', async () => {
+    const repo = makeRepo('too-many', [])
+    write(repo, 'a.ts', 'a\n')
+
+    // The same file named over and over costs git nothing to match.
+    expect(
+      (
+        await addUntrackedFiles(
+          repo,
+          Array.from({ length: 6000 }, () => 'a.ts')
+        )
+      ).ok
+    ).toBe(true)
+    await expect(
+      rollbackChanges(
+        repo,
+        Array.from({ length: MAX_PATHS + 1 }, () => 'a.ts')
+      )
+    ).rejects.toThrow(
+      '100,001 files are more than one action takes (100,000). Choose fewer files, or ignore generated folders in .gitignore.'
+    )
+    expect(await changes(repo)).toEqual(['added a.ts'])
+  })
+})
+
+describe('git started for the panel', () => {
+  // Git starts in a session of its own: a hook could otherwise read the terminal the app started from.
+  it('has no terminal to prompt on: a hook opening /dev/tty fails instead of waiting', async () => {
+    const repo = makeRepo('no-terminal', ['file.ts'])
+    const hook = join(repo, '.git', 'hooks', 'pre-commit')
+    writeFileSync(
+      hook,
+      '#!/bin/sh\nif (: < /dev/tty) 2>/dev/null; then echo terminal; else echo "no terminal"; fi\nexit 1\n'
+    )
+    chmodSync(hook, 0o755)
+    write(repo, 'file.ts', 'changed\n')
+
+    expect(
+      await commitChanges(repo, { paths: ['file.ts'], message: 'Hooked', amend: false })
+    ).toEqual({ ok: false, output: 'no terminal\n' })
+  })
+
+  it('cancels a commit blocked in its hook: the hook is stopped, nothing is committed, no lock is left', async () => {
+    const repo = makeRepo('cancel', ['file.ts'])
+    const started = join(root, 'cancel-started')
+    const blocked = join(root, 'cancel-blocked')
+    execFileSync('mkfifo', [started, blocked])
+    const hook = join(repo, '.git', 'hooks', 'pre-commit')
+    // The hook says it started, then holds `blocked` open for reading and waits on it for ever.
+    writeFileSync(
+      hook,
+      `#!/bin/sh\necho started > '${started}'\nexec 3<> '${blocked}'\nread line <&3\n`
+    )
+    chmodSync(hook, 0o755)
+    write(repo, 'file.ts', 'changed\n')
+    const controller = new AbortController()
+
+    const committing = commitChanges(
+      repo,
+      { paths: ['file.ts'], message: 'Never', amend: false },
+      controller.signal
+    )
+    expect(await readFile(started, 'utf8')).toBe('started\n')
+    controller.abort()
+
+    // Resolving at all means the hook let go of git's output: it is stopped along with git.
+    expect(await committing).toEqual({ ok: false, output: '', cancelled: true })
+    expect(() => openSync(blocked, constants.O_WRONLY | constants.O_NONBLOCK)).toThrow('ENXIO')
+    expect(commitCount(repo)).toBe('1')
+    expect(git(repo, 'status', '--porcelain')).toBe(' M file.ts\n')
+    expect(await leftoverIndexLock(repo)).toBeNull()
+  })
+
+  it('accepts what git would open an editor for, as an interactive rebase on pull', async () => {
+    const repo = makeRepo('no-editor', ['file.ts'])
+    const clone = cloneThroughRemote(repo, 'no-editor')
+    write(clone, 'theirs.ts', 'theirs\n')
+    git(clone, 'add', 'theirs.ts')
+    git(clone, 'commit', '-q', '-m', 'Theirs')
+    git(clone, 'push', '-q')
+    write(repo, 'ours.ts', 'ours\n')
+    git(repo, 'add', 'ours.ts')
+    git(repo, 'commit', '-q', '-m', 'Ours')
+    git(repo, 'config', 'pull.rebase', 'interactive')
+    // The editor the user configured fails: nobody could use it from the panel.
+    git(repo, 'config', 'core.editor', 'false')
+
+    const pulled = await pullBranch(repo)
+
+    expect(pulled.ok).toBe(true)
+    expect(git(repo, 'log', '--format=%s')).toBe('Ours\nTheirs\nfirst\n')
+  })
+})
+
+describe('nested repositories', () => {
+  it('lists a nested repository and a linked worktree inside the tree as folders, which can be ignored, not added', async () => {
+    const repo = makeRepo('nested', ['file.ts'])
+    git(repo, 'init', '-q', 'vendor/lib')
+    git(repo, 'worktree', 'add', '-q', '-b', 'inner', 'inner tree')
+    write(repo, 'new.ts', 'new\n')
+
+    const { files } = await readWorkingTreeStatus(repo)
+
+    expect(
+      files
+        .map((file) => `${file.kind} ${file.path} ${file.absolutePath} ${file.nestedRepository}`)
+        .toSorted()
+    ).toEqual([
+      `untracked inner tree ${join(repo, 'inner tree')} true`,
+      `untracked new.ts ${join(repo, 'new.ts')} false`,
+      `untracked vendor/lib ${join(repo, 'vendor', 'lib')} true`
+    ])
+    await expect(addUntrackedFiles(repo, ['new.ts', 'vendor/lib'])).rejects.toThrow(
+      'vendor/lib is a nested repository: add it as a submodule in a terminal, or ignore it.'
+    )
+    expect(git(repo, 'diff', '--cached', '--name-only')).toBe('')
+
+    await ignoreUntrackedFile(repo, 'vendor/lib')
+    await ignoreUntrackedFile(repo, 'inner tree')
+
+    expect(read(repo, '.gitignore')).toBe('/vendor/lib/\n/inner tree/\n')
+    expect(await changes(repo)).toEqual(['untracked .gitignore', 'untracked new.ts'])
   })
 })
 

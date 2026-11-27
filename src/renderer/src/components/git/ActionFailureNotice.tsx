@@ -1,4 +1,4 @@
-import { CircleAlert, X } from 'lucide-react'
+import { CircleAlert, CircleSlash, X } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import type { ActionFailure } from '@/state/source-control-store'
 
@@ -12,12 +12,22 @@ export function ActionFailureNotice({
 }): React.JSX.Element {
   return (
     <div className="shrink-0 px-2 pb-2">
-      <Alert className="border-error-border bg-error-background pr-9">
-        <CircleAlert className="text-error" aria-hidden />
+      <Alert
+        className={
+          failure.cancelled ? 'border-border pr-9' : 'border-error-border bg-error-background pr-9'
+        }
+      >
+        {failure.cancelled ? (
+          <CircleSlash className="text-muted-foreground" aria-hidden />
+        ) : (
+          <CircleAlert className="text-error" aria-hidden />
+        )}
         <AlertTitle className="type-section-title line-clamp-none">{failure.title}</AlertTitle>
         <AlertDescription className="w-full min-w-0">
           {failure.output.trim() === '' ? (
-            <p>Git printed nothing.</p>
+            <p>
+              {failure.cancelled ? 'Stopped before git printed anything.' : 'Git printed nothing.'}
+            </p>
           ) : (
             <pre
               aria-label="Git output"

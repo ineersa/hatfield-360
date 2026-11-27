@@ -27,7 +27,8 @@ import { rendererPlatform } from '@/lib/shortcut-keys'
 import { useHunkTabStore } from '@/state/hunk-tab-store'
 import { type FileTargets, useSourceControlStore } from '@/state/source-control-store'
 import type { ChangedFile, SourceControlGroup } from '../../../../shared/source-control-api'
-import { fileKey, type GitGroup, isUntracked } from './change-tree-rows'
+import { addableFiles, fileKey, type GitGroup, isUntracked } from './change-tree-rows'
+import { pullBlocker } from './commit-plan'
 
 const ENTER_LABEL = rendererPlatform === 'darwin' ? '↩' : 'Enter'
 
@@ -103,13 +104,15 @@ export function FileRowMenu({
   const afterMenu = useAfterMenu()
   const untracked = isUntracked(file)
   const deleted = file.kind === 'deleted'
+  const nested = file.nestedRepository
   return (
     <ContextMenuContent onCloseAutoFocus={afterMenu.onCloseAutoFocus}>
       {untracked ? (
         <Item
           icon={<FilePlus aria-hidden />}
           label="Add to VCS"
-          unavailable={busy}
+          // Git would record a nested repository as a bare commit pointer, not its files.
+          unavailable={(nested && 'Nested repository') || busy}
           onSelect={() => void addToVcs(group, [file])}
         />
       ) : (
@@ -134,7 +137,7 @@ export function FileRowMenu({
         icon={<FileCode aria-hidden />}
         label="Jump to Source"
         shortcut={ENTER_LABEL}
-        unavailable={deleted && 'Deleted'}
+        unavailable={(deleted && 'Deleted') || (nested && 'Folder')}
         onSelect={() => requests.onOpen(file)}
       />
       {untracked ? null : (
@@ -171,33 +174,37 @@ export function FileRowMenu({
   )
 }
 
-/** The Unversioned Files row's menu: add the selected (else every) untracked file, or delete them. */
+/**
+ * The Unversioned Files row's menu: add the selected (else every) untracked file, or delete them.
+ * A nested repository is never among them: it is added by no one and deleted only on its own row.
+ */
 export function UnversionedMenu({
   group,
-  files,
   requests
 }: {
   group: GitGroup
-  files: ChangedFile[]
   requests: RowMenuRequests
 }): React.JSX.Element {
   const busy = useSourceControlStore((state) => state.running !== null)
   const toAdd = useSourceControlStore((state) => state.toAdd)
   const addToVcs = useSourceControlStore((state) => state.addToVcs)
-  const selected = files.filter((file) => toAdd.has(fileKey(group.root, file.path)))
-  const targets = selected.length > 0 ? selected : files
+  const addable = addableFiles(group)
+  const selected = addable.filter((file) => toAdd.has(fileKey(group.root, file.path)))
+  const targets = selected.length > 0 ? selected : addable
   const which = selected.length > 0 ? 'Selected' : 'All'
+  const none = targets.length === 0 && 'Only nested repositories'
   return (
     <ContextMenuContent>
       <Item
         icon={<FilePlus aria-hidden />}
         label={`Add ${which} to VCS`}
-        unavailable={busy}
+        unavailable={none || busy}
         onSelect={() => void addToVcs(group, targets)}
       />
       <Item
         icon={<Trash2 aria-hidden />}
         label={`Delete ${which}…`}
+        unavailable={none}
         onSelect={() => requests.onTrash(group, targets)}
       />
       <ContextMenuSeparator />
@@ -239,7 +246,7 @@ export function GroupMenu({ group }: { group: SourceControlGroup }): React.JSX.E
             icon={<ArrowDownToLine aria-hidden />}
             label="Pull"
             // git pull has nothing to merge from without an upstream (or on a detached HEAD).
-            unavailable={busy || (group.upstream === null && 'No upstream')}
+            unavailable={pullBlocker(group) ?? busy}
             onSelect={() => void pull(group.root)}
           />
           <Item

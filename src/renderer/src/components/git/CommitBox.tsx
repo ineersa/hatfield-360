@@ -4,6 +4,7 @@ import { PRIMARY_BUTTON, SECONDARY_BUTTON } from '@/components/ui/action-button-
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { rendererPlatform } from '@/lib/shortcut-keys'
 import { useSourceControlStore } from '@/state/source-control-store'
+import { amendTarget, commitPlan, gitGroups } from './commit-plan'
 
 /** The message box's id, for Commit File… to put focus in it. */
 export const COMMIT_MESSAGE_ID = 'commit-message'
@@ -53,21 +54,35 @@ function CommitButton({
 }
 
 /** The commit message, Amend, and Commit / Commit and Push, at the bottom of the Commit panel. */
-export function CommitBox({ checkedCount }: { checkedCount: number }): React.JSX.Element {
+export function CommitBox(): React.JSX.Element {
+  const groups = useSourceControlStore((state) => state.groups)
+  const checked = useSourceControlStore((state) => state.checked)
+  const selectedRoot = useSourceControlStore((state) => state.selected?.root ?? null)
   const message = useSourceControlStore((state) => state.message)
   const amend = useSourceControlStore((state) => state.amend)
   const running = useSourceControlStore((state) => state.running)
+  const cancelling = useSourceControlStore((state) => state.cancelling)
+  const cancel = useSourceControlStore((state) => state.cancel)
   const setMessage = useSourceControlStore((state) => state.setMessage)
   const setAmend = useSourceControlStore((state) => state.setAmend)
   const commit = useSourceControlStore((state) => state.commit)
+  const plan = commitPlan(groups ?? [], checked, selectedRoot, amend)
+  const checkedCount = plan.work.reduce((sum, target) => sum + target.files.length, 0)
+  const target = amendTarget(groups ?? [], checked, selectedRoot)
+  // With several repositories, Amend says whose last commit it replaces.
+  const amendLabel =
+    gitGroups(groups).length > 1 && target !== null && target !== 'several'
+      ? `Amend last commit in ${target.group.name}`
+      : 'Amend'
   const blocked =
-    message.trim() === ''
+    plan.blocked ??
+    (message.trim() === ''
       ? 'Write a commit message'
       : checkedCount === 0 && !amend
         ? 'Check the files to commit'
         : running !== null
           ? 'Wait for the current action to finish'
-          : null
+          : null)
   const files = checkedCount === 1 ? '1 file' : `${checkedCount} files`
   const what = amend
     ? checkedCount === 0
@@ -85,7 +100,7 @@ export function CommitBox({ checkedCount }: { checkedCount: number }): React.JSX
           onChange={(event) => void setAmend(event.target.checked)}
           className="accent-primary"
         />
-        Amend
+        {amendLabel}
       </label>
       <Textarea
         id={COMMIT_MESSAGE_ID}
@@ -102,6 +117,7 @@ export function CommitBox({ checkedCount }: { checkedCount: number }): React.JSX
         }}
         className="max-h-60 resize-none bg-input text-input-foreground field-sizing-fixed"
       />
+      {plan.note === null ? null : <p className="type-hint">{plan.note}</p>}
       <div className="flex flex-wrap items-center gap-2">
         <CommitButton
           label="Commit"
@@ -119,6 +135,16 @@ export function CommitBox({ checkedCount }: { checkedCount: number }): React.JSX
           tip={`${what}, then push`}
           onClick={() => void commit(true)}
         />
+        {running === null || running === 'refresh' || running === 'ignore' ? null : (
+          <CommitButton
+            label={cancelling ? 'Cancelling…' : 'Cancel'}
+            className={SECONDARY_BUTTON}
+            busy={false}
+            blocked={cancelling ? 'Stopping git and everything it started' : null}
+            tip="Stop the running git command, its hooks and ssh"
+            onClick={() => void cancel()}
+          />
+        )}
       </div>
     </div>
   )

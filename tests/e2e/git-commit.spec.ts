@@ -46,7 +46,7 @@ async function commitFixture(): Promise<{
   const gitConfig = join(projects, 'gitconfig')
   await writeFile(
     gitConfig,
-    '[user]\n\tname = Tester\n\temail = tester@example.com\n[commit]\n\tgpgsign = false\n'
+    '[user]\n\tname = Tester\n\temail = tester@example.com\n[commit]\n\tgpgsign = false\n[pull]\n\trebase = false\n'
   )
   return {
     repo,
@@ -167,6 +167,47 @@ test('the Commit panel lists changes, commits checked files, amends, and commits
         await row(page, 'c.txt').dblclick()
         await expect(page.getByRole('main', { name: 'Files' })).toBeVisible()
         await expect(editorTab(page, 'c.txt')).toHaveAttribute('aria-selected', 'true')
+      },
+      { userDataDir: fixture.userData, env: fixture.env }
+    )
+  } finally {
+    await fixture.cleanup()
+  }
+})
+
+test('Cancel stops a commit whose hook is waiting, and nothing is committed', async () => {
+  const fixture = await commitFixture()
+  const { repo } = fixture
+  await writeFile(join(repo, 'a.txt'), 'a.txt two\n')
+  const started = join(repo, '..', 'hook-started')
+  const blocked = join(repo, '..', 'hook-blocked')
+  execFileSync('mkfifo', [started, blocked])
+  await mkdir(join(repo, '.git', 'hooks'), { recursive: true })
+  const hook = join(repo, '.git', 'hooks', 'pre-commit')
+  // The hook prints, says it started, then waits on a pipe nobody ever writes to.
+  await writeFile(
+    hook,
+    `#!/bin/sh\necho "checking a.txt"\necho started > '${started}'\nexec 3<> '${blocked}'\nread line <&3\n`
+  )
+  await chmod(hook, 0o755)
+  try {
+    await withApp(
+      async (_app, page) => {
+        await showGit(page)
+        await include(page, 'a.txt').click()
+        await message(page).fill('Never lands')
+        await commitButton(page).click()
+        expect(await readFile(started, 'utf8')).toBe('started\n')
+        await page.getByRole('button', { name: 'Cancel', exact: true }).click()
+
+        const cancelled = page.getByRole('alert').filter({ hasText: 'Commit cancelled in app' })
+        await expect(cancelled.getByLabel('Git output')).toHaveText('checking a.txt')
+        await expect(page.getByRole('button', { name: 'Cancel', exact: true })).toHaveCount(0)
+        await saveScreenshot(page, 'git-commit-cancelled')
+        expect(gitOutput(repo, 'log', '--format=%s')).toBe('Add files\nfirst')
+        expect(gitOutput(repo, 'status', '--porcelain')).toBe('M a.txt')
+        await expect(include(page, 'a.txt')).toBeChecked()
+        await expect(message(page)).toHaveValue('Never lands')
       },
       { userDataDir: fixture.userData, env: fixture.env }
     )
@@ -356,6 +397,191 @@ test("Fetch from a repository's menu counts what another clone pushed", async ()
         await app.click({ button: 'right' })
         await page.getByRole('menuitem', { name: 'Fetch', exact: true }).click()
         await expect(app).toHaveAccessibleDescription('branch main, 1 to pull')
+      },
+      { userDataDir: fixture.userData, env: fixture.env }
+    )
+  } finally {
+    await fixture.cleanup()
+  }
+})
+
+test('Amend works on one repository at a time, a failed push keeps the message for the rest, and Pull skips a repository without an upstream', async () => {
+  const fixture = await commitFixture()
+  const { repo, remote } = fixture
+  const projects = join(repo, '..')
+  // lib comes first in the workspace and has no remote, so its push fails before app is committed.
+  const lib = join(projects, 'lib')
+  git(projects, 'init', '-q', '-b', 'main', lib)
+  await writeFile(join(lib, 'l.txt'), 'l one\n')
+  git(lib, 'add', '.')
+  git(lib, 'commit', '-q', '-m', 'Add lib')
+  await writeFile(
+    join(fixture.userData, 'workspaces', 'default.hatfield-workspace'),
+    JSON.stringify({
+      version: 1,
+      folders: [
+        { path: lib, kind: 'project' },
+        { path: repo, kind: 'project' }
+      ]
+    })
+  )
+  const other = join(projects, 'other')
+  git(projects, 'clone', '-q', remote, other)
+  await writeFile(join(other, 'pushed.txt'), 'pushed\n')
+  git(other, 'add', 'pushed.txt')
+  git(other, 'commit', '-q', '-m', 'Pushed from another clone')
+  git(other, 'push', '-q')
+  git(repo, 'fetch', '-q')
+  await writeFile(join(repo, 'a.txt'), 'a.txt two\n')
+  await writeFile(join(lib, 'l.txt'), 'l two\n')
+  try {
+    await withApp(
+      async (_app, page) => {
+        await showGit(page)
+        const app = changes(page).getByRole('treeitem', { name: 'app' })
+        await expect(app).toHaveAccessibleDescription('branch main, 1 to pull')
+
+        // With no row selected, Pull pulls every repository it can and skips lib.
+        const pull = page.getByRole('button', { name: 'Pull', exact: true })
+        await pull.hover()
+        await expect(page.getByRole('tooltip')).toHaveText(
+          "Pull app, one after another; lib can't be pulled"
+        )
+        await pull.click()
+        await expect(app).toHaveAccessibleDescription('branch main')
+        await expect(page.getByRole('alert')).toHaveCount(0)
+
+        // Amend names the repository whose last commit it replaces, and reads its message.
+        await include(page, 'l.txt').click()
+        await page.getByRole('checkbox', { name: 'Amend last commit in lib' }).check()
+        await expect(message(page)).toHaveValue('Add lib')
+        // Files checked in two repositories: Amend can't run.
+        await include(page, 'a.txt').click()
+        await expect(commitButton(page)).toHaveAttribute('aria-disabled', 'true')
+        // Closes the row's tooltip, still open from checking it, so the button's can show.
+        await page.keyboard.press('Escape')
+        await commitButton(page).hover()
+        await expect(
+          page.getByRole('tooltip', {
+            name: 'Amend works on one repository at a time: check files in only one'
+          })
+        ).toBeVisible()
+        await saveScreenshot(page, 'git-amend-two-repositories')
+        // The untouched message follows the target to app; typed words stay where they are.
+        await include(page, 'l.txt').click()
+        await expect(message(page)).toHaveValue('Pushed from another clone')
+        await expect(page.getByRole('checkbox', { name: 'Amend last commit in app' })).toBeChecked()
+        await message(page).fill('Change a and l')
+        await include(page, 'l.txt').click()
+        await include(page, 'a.txt').click()
+        await expect(page.getByRole('checkbox', { name: 'Amend last commit in lib' })).toBeChecked()
+        await expect(message(page)).toHaveValue('Change a and l')
+        await page.getByRole('checkbox', { name: 'Amend last commit in lib' }).uncheck()
+        await expect(message(page)).toHaveValue('Change a and l')
+
+        // lib's commit lands but its push fails: app is never committed, and keeps the message.
+        await include(page, 'a.txt').click()
+        await page.getByRole('button', { name: 'Commit and Push' }).click()
+        const failure = page.getByRole('alert').filter({ hasText: 'Push failed in lib' })
+        await expect(failure.getByLabel('Git output')).toContainText(
+          'No configured push destination'
+        )
+        await expect(row(page, 'l.txt')).toHaveCount(0)
+        await expect(include(page, 'a.txt')).toBeChecked()
+        await expect(message(page)).toHaveValue('Change a and l')
+        expect(gitOutput(lib, 'log', '--format=%s')).toBe('Change a and l\nAdd lib')
+        expect(gitOutput(repo, 'log', '-1', '--format=%s')).toBe('Pushed from another clone')
+      },
+      { userDataDir: fixture.userData, env: fixture.env }
+    )
+  } finally {
+    await fixture.cleanup()
+  }
+})
+
+test("a conflicting Pull's merge is shown and concluded from the Commit panel", async () => {
+  const fixture = await commitFixture()
+  const { repo, remote } = fixture
+  const projects = join(repo, '..')
+  const other = join(projects, 'other')
+  git(projects, 'clone', '-q', remote, other)
+  await writeFile(join(other, 'a.txt'), 'theirs\n')
+  await writeFile(join(other, 'c.txt'), 'c.txt from the other clone\n')
+  git(other, 'commit', '-q', '-am', 'Theirs')
+  git(other, 'push', '-q')
+  await writeFile(join(repo, 'a.txt'), 'ours\n')
+  git(repo, 'commit', '-q', '-am', 'Ours')
+  try {
+    await withApp(
+      async (_app, page) => {
+        await showGit(page)
+        const app = changes(page).getByRole('treeitem', { name: 'app' })
+        await page.getByRole('button', { name: 'Pull', exact: true }).click()
+        await expect(
+          page.getByRole('alert').filter({ hasText: 'Pull failed in app' }).getByLabel('Git output')
+        ).toContainText('CONFLICT (content): Merge conflict in a.txt')
+        await expect(app).toHaveAccessibleDescription('branch main, merging, 1 to push, 1 to pull')
+        await expect(app).toContainText('Merging')
+        await expect(row(page, 'a.txt')).toHaveAccessibleDescription('conflicted')
+
+        await writeFile(join(repo, 'a.txt'), 'ours and theirs\n')
+        await include(page, 'a.txt').click()
+        await expect(
+          page.getByText(
+            'Committing concludes the merge in app and includes everything the merge already staged.'
+          )
+        ).toBeVisible()
+        await saveScreenshot(page, 'git-merging')
+        await message(page).fill('Merge theirs')
+        await commitButton(page).click()
+
+        await expect(app).toHaveAccessibleDescription('branch main, 2 to push')
+        await expect(changes(page).getByText('No changes')).toBeVisible()
+        expect(gitOutput(repo, 'log', '-1', '--format=%P %s').split(' ')).toHaveLength(4)
+        expect(gitOutput(repo, 'show', 'HEAD:c.txt')).toBe('c.txt from the other clone')
+      },
+      { userDataDir: fixture.userData, env: fixture.env }
+    )
+  } finally {
+    await fixture.cleanup()
+  }
+})
+
+test('a nested repository is listed as a folder that can be ignored or deleted, never added', async () => {
+  const fixture = await commitFixture()
+  const { repo } = fixture
+  git(repo, 'init', '-q', join(repo, 'vendor', 'lib'))
+  await writeFile(join(repo, 'new.txt'), 'new\n')
+  try {
+    await withApp(
+      async (_app, page) => {
+        await showGit(page)
+        await unversioned(page).click()
+        await expect(row(page, 'lib')).toHaveAccessibleDescription('nested repository, in vendor')
+        await expect(
+          changes(page).getByRole('checkbox', { name: 'vendor/lib is a nested repository' })
+        ).toBeDisabled()
+        await saveScreenshot(page, 'git-nested-repository')
+
+        await row(page, 'lib').click({ button: 'right' })
+        await expect(page.getByRole('menuitem', { name: /^Add to VCS/ })).toHaveAttribute(
+          'aria-disabled',
+          'true'
+        )
+        await page.getByRole('menuitem', { name: /^Delete/ }).click()
+        await page
+          .getByRole('alertdialog', { name: 'Delete folder "lib"?' })
+          .getByRole('button', { name: 'Cancel' })
+          .click()
+
+        // Add All adds the files and leaves the nested repository alone.
+        await contextMenu(page, 'Unversioned Files', 'Add All to VCS')
+        await expect(row(page, 'new.txt')).toHaveAccessibleDescription('added')
+        await expect(row(page, 'lib')).toHaveAccessibleDescription('nested repository, in vendor')
+
+        await contextMenu(page, 'lib', 'Add to .gitignore')
+        await expect(row(page, 'lib')).toHaveCount(0)
+        expect(await readFile(join(repo, '.gitignore'), 'utf8')).toBe('/vendor/lib/\n')
       },
       { userDataDir: fixture.userData, env: fixture.env }
     )

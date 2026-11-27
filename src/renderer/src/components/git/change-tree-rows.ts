@@ -16,6 +16,10 @@ export const trackedFiles = (group: GitGroup): ChangedFile[] =>
 
 export const untrackedFiles = (group: GitGroup): ChangedFile[] => group.files.filter(isUntracked)
 
+/** The untracked files that can be added to version control: a nested repository can't. */
+export const addableFiles = (group: GitGroup): ChangedFile[] =>
+  untrackedFiles(group).filter((file) => !file.nestedRepository)
+
 /** A row of the Commit panel's changes tree. */
 export type ChangeRow =
   | { type: 'group'; key: string; group: SourceControlGroup; expanded: boolean }

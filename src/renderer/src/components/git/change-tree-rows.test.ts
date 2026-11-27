@@ -16,7 +16,8 @@ const file = (root: string, path: string, kind: ChangedFile['kind'] = 'modified'
   path,
   absolutePath: `${root}/${path}`,
   originalPath: null,
-  kind
+  kind,
+  nestedRepository: false
 })
 
 const repo = (root: string, paths: string[], untracked: string[] = []): GitGroup => ({
@@ -29,6 +30,7 @@ const repo = (root: string, paths: string[], untracked: string[] = []): GitGroup
   upstream: null,
   ahead: null,
   behind: null,
+  operation: null,
   files: [
     ...paths.map((path) => file(root, path)),
     ...untracked.map((path) => file(root, path, 'untracked'))

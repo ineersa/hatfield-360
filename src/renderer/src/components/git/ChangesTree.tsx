@@ -31,11 +31,13 @@ import { useSourceControlStore } from '@/state/source-control-store'
 import type {
   ChangedFile,
   ChangeKind,
+  GitOperation,
   HunkKind,
   SourceControlGroup
 } from '../../../../shared/source-control-api'
 import { isDeleteKey } from '@/components/files/delete-key'
 import {
+  addableFiles,
   type ChangeRow,
   type CheckState,
   fileKey,
@@ -57,6 +59,14 @@ export const CHANGE_KINDS: Record<ChangeKind, { letter: string; label: string; t
   conflicted: { letter: 'C', label: 'conflicted', text: 'text-vcs-conflicted' }
 }
 
+/** What the group row says git is in the middle of, next to the branch. */
+const OPERATION_STATES: Record<GitOperation, string> = {
+  merge: 'Merging',
+  'cherry-pick': 'Cherry-picking',
+  revert: 'Reverting',
+  rebase: 'Rebasing'
+}
+
 const nameOf = (path: string): string => path.slice(path.lastIndexOf('/') + 1)
 const folderOf = (path: string): string => path.slice(0, Math.max(0, path.lastIndexOf('/')))
 
@@ -75,9 +85,9 @@ const fileCount = (count: number): string => (count === 1 ? '1 file' : `${count}
 const MENU_OPEN =
   'data-[state=open]:ring-1 data-[state=open]:ring-ring data-[state=open]:ring-inset'
 
-/** Opens the file in the editor, in the Files view, as the Files tree does; a deleted one has nothing to open. */
+/** Opens the file in the editor, in the Files view, as the Files tree does; a deleted one or a folder has nothing to open. */
 function openFile(file: ChangedFile): void {
-  if (file.kind === 'deleted') return
+  if (file.kind === 'deleted' || file.nestedRepository) return
   useShellLayoutStore.getState().showFiles()
   useEditorTabStore.getState().open(file.absolutePath)
 }
@@ -86,10 +96,12 @@ function openFile(file: ChangedFile): void {
 function RowCheckbox({
   state,
   label,
+  disabled = false,
   onToggle
 }: {
   state: CheckState
   label: string
+  disabled?: boolean
   onToggle: () => void
 }): React.JSX.Element {
   return (
@@ -97,6 +109,7 @@ function RowCheckbox({
       type="checkbox"
       tabIndex={-1}
       aria-label={label}
+      disabled={disabled}
       checked={state === 'checked'}
       ref={(input) => {
         if (input) input.indeterminate = state === 'mixed'
@@ -209,10 +222,20 @@ function GroupRowContent({
         />
       ) : null}
       <RootFolderIcon className="size-4.5 shrink-0" />
-      <span className="type-project-row ml-1 min-w-0 shrink truncate">{group.name}</span>
-      <span className="type-hint ml-1 flex min-w-0 shrink-[2] items-center gap-1">
+      <span className="type-project-row ml-1 max-w-1/2 shrink-0 truncate">{group.name}</span>
+      {/* A merge or other operation under way takes the branch's place: the row has no room for both. */}
+      <span
+        className={cn(
+          'type-hint ml-1 flex min-w-0 shrink items-center gap-1',
+          group.operation !== null && 'text-vcs-conflicted'
+        )}
+      >
         <GitBranch className="size-3.5 shrink-0" aria-hidden />
-        <span className="truncate">{group.branch ?? 'detached'}</span>
+        <span className="truncate">
+          {group.operation === null
+            ? (group.branch ?? 'detached')
+            : OPERATION_STATES[group.operation]}
+        </span>
       </span>
       {group.ahead ? (
         <span className="type-hint ml-1 flex shrink-0 items-center tabular-nums">
@@ -246,6 +269,13 @@ function groupTip(group: SourceControlGroup): ReactNode {
           ? 'No upstream branch'
           : `Tracking ${group.upstream}${sync ? ` · ${sync}` : ''}`}
       </span>
+      {group.operation === null ? null : (
+        <span className="text-tooltip-muted-foreground">
+          {group.operation === 'rebase'
+            ? 'Rebasing: finish it in a terminal'
+            : `${OPERATION_STATES[group.operation]}: committing concludes it`}
+        </span>
+      )}
     </span>
   )
 }
@@ -276,10 +306,21 @@ function FileRowContent({
     <>
       <RowCheckbox
         state={(untracked ? toAdd : checked).has(key) ? 'checked' : 'unchecked'}
-        label={untracked ? `Select ${file.path} to add` : `Include ${file.path}`}
+        label={
+          file.nestedRepository
+            ? `${file.path} is a nested repository`
+            : untracked
+              ? `Select ${file.path} to add`
+              : `Include ${file.path}`
+        }
+        disabled={file.nestedRepository}
         onToggle={() => (untracked ? toggleToAdd : toggleFile)(group.root, file.path)}
       />
-      <FileTreeIcon kind="file" name={nameOf(file.path)} className="size-4 shrink-0" />
+      <FileTreeIcon
+        kind={file.nestedRepository ? 'folder' : 'file'}
+        name={nameOf(file.path)}
+        className="size-4 shrink-0"
+      />
       <span className={cn('ml-1 min-w-0 truncate', kind.text, onSelection)}>
         {nameOf(file.path)}
       </span>
@@ -351,7 +392,7 @@ function AddToVcsButton({
 }
 
 function fileDescription(file: ChangedFile): string {
-  const kind = CHANGE_KINDS[file.kind].label
+  const kind = file.nestedRepository ? 'nested repository' : CHANGE_KINDS[file.kind].label
   const where = folderOf(file.path)
   return [
     file.originalPath === null ? kind : `${kind} from ${file.originalPath}`,
@@ -423,9 +464,10 @@ export function ChangesTree({
   }
 
   const toggleCheck = (row: ChangeRow): void => {
-    if (row.type === 'file')
-      (isUntracked(row.file) ? toggleToAdd : toggleFile)(row.group.root, row.file.path)
-    else if (row.type === 'unversioned') toggleUnversioned(row.group)
+    if (row.type === 'file') {
+      if (!row.file.nestedRepository)
+        (isUntracked(row.file) ? toggleToAdd : toggleFile)(row.group.root, row.file.path)
+    } else if (row.type === 'unversioned') toggleUnversioned(row.group)
     else if (
       row.type === 'group' &&
       row.group.status === 'git' &&
@@ -571,7 +613,11 @@ export function ChangesTree({
               aria-label={row.group.name}
               aria-description={
                 row.group.status === 'git'
-                  ? [`branch ${row.group.branch ?? 'detached'}`, syncSummary(row.group)]
+                  ? [
+                      `branch ${row.group.branch ?? 'detached'}`,
+                      row.group.operation && OPERATION_STATES[row.group.operation].toLowerCase(),
+                      syncSummary(row.group)
+                    ]
                       .filter(Boolean)
                       .join(', ')
                   : undefined
@@ -595,7 +641,7 @@ export function ChangesTree({
       const { group, files } = row
       return withMenu(
         row.key,
-        <UnversionedMenu group={group} files={files} requests={requests} />,
+        <UnversionedMenu group={group} requests={requests} />,
         null,
         <div
           {...common}
@@ -613,11 +659,13 @@ export function ChangesTree({
             className={cn('size-4 shrink-0 text-muted-foreground', row.expanded && 'rotate-90')}
             aria-hidden
           />
-          <RowCheckbox
-            state={filesCheckState(group.root, files, toAdd)}
-            label={`Select all unversioned files in ${group.name} to add`}
-            onToggle={() => toggleUnversioned(group)}
-          />
+          {addableFiles(group).length > 0 ? (
+            <RowCheckbox
+              state={filesCheckState(group.root, addableFiles(group), toAdd)}
+              label={`Select all unversioned files in ${group.name} to add`}
+              onToggle={() => toggleUnversioned(group)}
+            />
+          ) : null}
           <span className="ml-1 min-w-0 truncate">Unversioned Files</span>
           <span
             className={cn(
