@@ -31,7 +31,7 @@ const run = (root: string, args: string[], input?: string, signal?: AbortSignal)
 const query = (root: string, args: string[]): Promise<GitRun> =>
   runGitWithOutput(root, args, { parsed: true })
 
-async function runOrThrow(root: string, args: string[]): Promise<string> {
+export async function runOrThrow(root: string, args: string[]): Promise<string> {
   const result = await query(root, args)
   if (result.exitCode !== 0) throw new Error(result.output.trim() || `git ${args[0]} failed`)
   return result.stdout
@@ -190,7 +190,7 @@ export async function readWorkingTreeStatus(root: string): Promise<WorkingTreeSt
  * The request's paths relative to `root` with `/` separators, refusing any that isn't a string
  * naming something inside it.
  */
-function repositoryPaths(root: string, paths: unknown): string[] {
+export function repositoryPaths(root: string, paths: unknown): string[] {
   if (!Array.isArray(paths)) throw new Error('Invalid file list.')
   if (paths.length > MAX_PATHS)
     throw new Error(

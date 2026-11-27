@@ -1,10 +1,19 @@
+import { CircleStop, Sparkles, Undo2 } from 'lucide-react'
+import { PanelHeaderButton } from '@/components/shell/PanelHeaderButton'
 import { Spinner } from '@/components/ui/spinner'
 import { Textarea } from '@/components/ui/textarea'
 import { PRIMARY_BUTTON, SECONDARY_BUTTON } from '@/components/ui/action-button-classes'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { rendererPlatform } from '@/lib/shortcut-keys'
 import { useSourceControlStore } from '@/state/source-control-store'
-import { amendTarget, commitLabel, commitPlan, concludesOperation, gitGroups } from './commit-plan'
+import {
+  amendTarget,
+  commitLabel,
+  commitPlan,
+  concludesOperation,
+  generatePlan,
+  gitGroups
+} from './commit-plan'
 import { OPERATION_NAMES } from './operation-notice'
 
 /** The message box's id, for Commit File… to put focus in it. */
@@ -67,6 +76,12 @@ export function CommitBox(): React.JSX.Element {
   const setMessage = useSourceControlStore((state) => state.setMessage)
   const setAmend = useSourceControlStore((state) => state.setAmend)
   const commit = useSourceControlStore((state) => state.commit)
+  const generating = useSourceControlStore((state) => state.generating)
+  const generateMessage = useSourceControlStore((state) => state.generateMessage)
+  const cancelGenerate = useSourceControlStore((state) => state.cancelGenerate)
+  const generated = useSourceControlStore((state) => state.generated)
+  const restorePrevious = useSourceControlStore((state) => state.restorePrevious)
+  const generate = generatePlan(groups ?? [], checked, selectedRoot, amend)
   const plan = commitPlan(groups ?? [], checked, selectedRoot, amend)
   const checkedCount = plan.work.reduce((sum, target) => sum + target.files.length, 0)
   const target = amendTarget(groups ?? [], checked, selectedRoot)
@@ -83,13 +98,15 @@ export function CommitBox(): React.JSX.Element {
   const concluding = plan.work.filter(({ group }) => concludesOperation(group))
   const blocked =
     plan.blocked ??
-    (message.trim() === ''
-      ? 'Write a commit message'
-      : plan.work.length === 0
-        ? 'Check the files to commit'
-        : running !== null
-          ? 'Wait for the current action to finish'
-          : null)
+    (generating
+      ? 'Wait for the message being written'
+      : message.trim() === ''
+        ? 'Write a commit message'
+        : plan.work.length === 0
+          ? 'Check the files to commit'
+          : running !== null
+            ? 'Wait for the current action to finish'
+            : null)
   const files = checkedCount === 1 ? '1 file' : `${checkedCount} files`
   const [concluded] = concluding
   const what = amend
@@ -102,28 +119,60 @@ export function CommitBox(): React.JSX.Element {
 
   return (
     <div className="flex shrink-0 flex-col gap-2 border-t border-separator p-2">
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <label className="type-body flex w-fit items-center gap-2 select-none has-disabled:text-muted-foreground">
-            <input
-              type="checkbox"
-              checked={amend}
-              disabled={running !== null || (amendBlocked !== null && !amend)}
-              aria-description={amendBlocked ?? undefined}
-              onChange={(event) => void setAmend(event.target.checked)}
-              className="accent-primary"
-            />
-            {amendLabel}
-          </label>
-        </TooltipTrigger>
-        {amendBlocked === null ? null : <TooltipContent side="top">{amendBlocked}</TooltipContent>}
-      </Tooltip>
+      <div className="flex items-center justify-between gap-2">
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <label className="type-body flex w-fit items-center gap-2 select-none has-disabled:text-muted-foreground">
+              <input
+                type="checkbox"
+                checked={amend}
+                disabled={running !== null || generating || (amendBlocked !== null && !amend)}
+                aria-description={amendBlocked ?? undefined}
+                onChange={(event) => void setAmend(event.target.checked)}
+                className="accent-primary"
+              />
+              {amendLabel}
+            </label>
+          </TooltipTrigger>
+          {amendBlocked === null ? null : (
+            <TooltipContent side="top">{amendBlocked}</TooltipContent>
+          )}
+        </Tooltip>
+        <span className="flex items-center gap-1">
+          {generated !== null && generated.message === message && !generating ? (
+            <PanelHeaderButton label="Restore Previous Message" onClick={restorePrevious}>
+              <Undo2 className="size-4" strokeWidth={1.75} aria-hidden />
+            </PanelHeaderButton>
+          ) : null}
+          {generating ? (
+            <PanelHeaderButton label="Stop Generating" onClick={cancelGenerate}>
+              <CircleStop className="size-4" strokeWidth={1.75} aria-hidden />
+            </PanelHeaderButton>
+          ) : (
+            <PanelHeaderButton
+              label="Generate Commit Message"
+              disabled={generate.blocked !== null}
+              tip={
+                generate.blocked ??
+                (amend
+                  ? 'Write a message for the amended commit with an agent'
+                  : 'Write a message for the checked files with an agent')
+              }
+              onClick={() => void generateMessage()}
+            >
+              <Sparkles className="size-4" strokeWidth={1.75} aria-hidden />
+            </PanelHeaderButton>
+          )}
+        </span>
+      </div>
       <Textarea
         id={COMMIT_MESSAGE_ID}
         aria-label="Commit message"
-        placeholder="Commit message"
+        placeholder={generating ? 'Writing a commit message…' : 'Commit message'}
         rows={3}
         spellCheck={false}
+        readOnly={generating}
+        aria-busy={generating || undefined}
         value={message}
         onChange={(event) => setMessage(event.target.value)}
         onKeyDown={(event) => {

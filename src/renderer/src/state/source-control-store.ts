@@ -11,6 +11,7 @@ import {
   amendTarget,
   commitPlan,
   concludesOperation,
+  generatePlan,
   gitGroups,
   pullPlan
 } from '@/components/git/commit-plan'
@@ -103,6 +104,18 @@ type SourceControlState = {
    * message git prepared for concluding an operation. It follows its source while untouched.
    */
   filled: { root: string; message: string; by: 'amend' | 'operation' } | null
+  /** An agent is writing the message; the box stays as it is until the message arrives. */
+  generating: boolean
+  /** The last generated message and what the box held before it, while that was text of the user's. */
+  generated: { message: string; previous: string } | null
+  /** Puts back what the box held before the generated message. */
+  restorePrevious: () => void
+  /** Starts the agent that writes messages, so Generate answers quickly once clicked. */
+  warmGenerator: () => void
+  /** Puts an agent's message for the checked files (with Amend, the last commit too) in the box. */
+  generateMessage: () => Promise<void>
+  /** Stops the agent writing the message; the box keeps what it held. */
+  cancelGenerate: () => void
   /**
    * Reads every group's status again; quietly unless `shown`, which spins Refresh. Reads asked
    * for while one runs share a single read after it.
@@ -386,6 +399,52 @@ export const useSourceControlStore = create<SourceControlState>((set, get, store
     failure: null,
     message: '',
     amend: false,
+    generating: false,
+    generated: null,
+    restorePrevious: () => {
+      const { generated, message } = get()
+      if (generated === null || generated.message !== message) return
+      set({ message: generated.previous, generated: null })
+    },
+    warmGenerator: () => {
+      void window.desktop.warmCommitMessageAgent().catch(() => undefined)
+    },
+    generateMessage: async () => {
+      const { groups, checked, selected, amend, generating, message } = get()
+      const previous = untouched(get()) ? null : message
+      const { target } = generatePlan(groups ?? [], checked, selected?.root ?? null, amend)
+      if (target === null || generating) return
+      set({ generating: true, failure: null })
+      try {
+        const outcome = await window.desktop.generateCommitMessage({
+          root: target.group.root,
+          paths: target.files.map((file) => file.path),
+          amend
+        })
+        if (outcome.ok)
+          set({
+            message: outcome.message,
+            filled: null,
+            generated: previous === null ? null : { message: outcome.message, previous }
+          })
+        else if (!outcome.cancelled)
+          set({
+            failure: { title: 'Generating the commit message failed', output: outcome.output }
+          })
+      } catch (error) {
+        set({
+          failure: {
+            title: 'Generating the commit message failed',
+            output: mainErrorMessage(error)
+          }
+        })
+      } finally {
+        set({ generating: false })
+      }
+    },
+    cancelGenerate: () => {
+      if (get().generating) void window.desktop.cancelCommitMessage()
+    },
     filled: null,
     refresh: async (shown = false) => {
       if (shown) {

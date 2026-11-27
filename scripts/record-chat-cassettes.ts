@@ -9,9 +9,24 @@ import { dirname, join, resolve } from 'node:path'
 import type { ChatEvent } from '../src/shared/chat-agent-api'
 import { isPlainObject } from '../src/shared/plain-object'
 import { ChatAgentSession } from '../src/main/chat/chat-agent'
-import { chatAgentCommand, resolveClaude } from '../src/main/chat/chat-agent-launch'
+import { CommitMessageAgent } from '../src/main/chat/commit-message-agent'
+import {
+  type ChatAgentCommand,
+  chatAgentCommand,
+  resolveClaude
+} from '../src/main/chat/chat-agent-launch'
 import { WorkspaceMapFile } from '../src/main/chat/workspace-map-file'
+import {
+  commitMessageContext,
+  commitMessagePrompt,
+  contextFileDiff
+} from '../src/main/git/commit-message-context'
 import { normalize, serializeCassette } from '../tests/fixtures/acp/cassette.mjs'
+import {
+  COMMIT_MESSAGE_INSTRUCTIONS,
+  COMMIT_MESSAGE_PATH,
+  makeCommitMessageRepo
+} from '../tests/fixtures/acp/commit-message-repo.mjs'
 
 const root = resolve(import.meta.dirname, '..')
 const fixtures = join(root, 'tests', 'fixtures', 'acp')
@@ -51,6 +66,13 @@ const is =
     event.kind === kind && also(event)
 
 type Script = (chat: ChatAgentSession, driver: Driver, cwd: string) => Promise<void>
+
+/** A recording's agent command: the adapter behind acp-tee.mjs, which logs both directions. */
+function teedCommand(claude: string, log: string): ChatAgentCommand {
+  process.env.HATFIELD_CHAT_AGENT_SCRIPT = join(dirname(adapterPackage), 'dist', 'index.js')
+  const command = chatAgentCommand(claude, 'cassette')
+  return { ...command, args: [join(fixtures, 'acp-tee.mjs'), log, ...command.args] }
+}
 
 const turn = (driver: Driver) => driver.next(is('turn-end'))
 
@@ -110,35 +132,47 @@ const SCRIPTS: Record<string, Script> = {
   }
 }
 
-async function record(name: string, script: Script, claude: string): Promise<void> {
+/**
+ * The commit-message session as the Commit panel runs it: warmed when the Git view shows, one
+ * message for the checked greeting change, then the next message's session made ready.
+ */
+async function commitMessage(claude: string, cwd: string, log: string): Promise<void> {
+  makeCommitMessageRepo(cwd)
+  const agent = new CommitMessageAgent(async () => ({ command: teedCommand(claude, log), cwd }))
+  await agent.warm('haiku', 'low')
+  const context = await commitMessageContext(cwd, { paths: [COMMIT_MESSAGE_PATH], amend: false })
+  let diffs = 0
+  const reply = await agent.write(
+    {
+      prompt: commitMessagePrompt(context, COMMIT_MESSAGE_INSTRUCTIONS),
+      model: 'haiku',
+      effort: 'low',
+      diff: (path) => {
+        diffs += 1
+        return contextFileDiff(cwd, context, path)
+      }
+    },
+    new AbortController().signal
+  )
+  if (reply.stopReason !== 'end_turn' || diffs === 0)
+    throw new Error(`commit-message: ended ${reply.stopReason} after ${diffs} diffs: ${reply.text}`)
+  process.stdout.write(`  message: ${reply.text}\n`)
+  await agent.warm('haiku', 'low')
+  agent.end()
+}
+
+async function record(
+  name: string,
+  script: Script | 'commit-message',
+  claude: string
+): Promise<void> {
   const work = await mkdtemp(join(tmpdir(), `chat-cassette-${name}-`))
   try {
     const cwd = join(work, 'repo')
     await cp(join(fixtures, 'repo'), cwd, { recursive: true })
     const log = join(work, 'log.jsonl')
-    const mapFile = new WorkspaceMapFile(join(work, 'map.workspace.md'))
-    const driver = new Driver()
-    process.env.HATFIELD_CHAT_AGENT_SCRIPT = join(dirname(adapterPackage), 'dist', 'index.js')
-    const chat = new ChatAgentSession(
-      {
-        command: async () => {
-          const command = chatAgentCommand(claude, 'cassette')
-          return { ...command, args: [join(fixtures, 'acp-tee.mjs'), log, ...command.args] }
-        },
-        cwd,
-        additionalDirectories: [],
-        mapFile,
-        preferred: { model: 'haiku', effort: 'medium' }
-      },
-      driver.receive,
-      () => undefined
-    )
-    const ready = driver.next(is('ready'))
-    void chat.open()
-    await ready
-    await script(chat, driver, cwd)
-    chat.end()
-    await chat.exited()
+    if (script === 'commit-message') await commitMessage(claude, cwd, log)
+    else await chatSession(claude, cwd, log, work, script)
     const entries = (await readFile(log, 'utf8'))
       .split('\n')
       .filter(Boolean)
@@ -158,9 +192,42 @@ async function record(name: string, script: Script, claude: string): Promise<voi
   }
 }
 
+/** A chat session in the cassette project, driven by its script. */
+async function chatSession(
+  claude: string,
+  cwd: string,
+  log: string,
+  work: string,
+  script: Script
+): Promise<void> {
+  const mapFile = new WorkspaceMapFile(join(work, 'map.workspace.md'))
+  const driver = new Driver()
+  const chat = new ChatAgentSession(
+    {
+      command: async () => teedCommand(claude, log),
+      cwd,
+      additionalDirectories: [],
+      mapFile,
+      preferred: { model: 'haiku', effort: 'medium' }
+    },
+    driver.receive,
+    () => undefined
+  )
+  const ready = driver.next(is('ready'))
+  void chat.open()
+  await ready
+  await script(chat, driver, cwd)
+  chat.end()
+  await chat.exited()
+}
+
 const claude = await resolveClaude({ executable: 'claude', args: [] }, root)
 const only = process.argv.slice(2)
-for (const [name, script] of Object.entries(SCRIPTS)) {
+const sessions: [string, Script | 'commit-message'][] = [
+  ...Object.entries(SCRIPTS),
+  ['commit-message', 'commit-message']
+]
+for (const [name, script] of sessions) {
   if (only.length > 0 && !only.includes(name)) continue
   await record(name, script, claude)
 }

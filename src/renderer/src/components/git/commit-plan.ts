@@ -147,3 +147,28 @@ export function pullPlan(
         : `Pull ${nameList(targets)}, one after another; ${nameList(skipped)} can't be pulled`
   }
 }
+
+/**
+ * The repository and files a generated message describes, as Commit would take them: one
+ * repository's checked files, or with Amend its last commit and any checked files; `blocked`
+ * says why there is none.
+ */
+export function generatePlan(
+  groups: readonly SourceControlGroup[],
+  checked: ReadonlySet<string>,
+  selectedRoot: string | null,
+  amend: boolean
+): { target: CommitWork | null; blocked: string | null } {
+  const targets = amend
+    ? [amendTarget(groups, checked, selectedRoot)]
+    : checkedFilesByGroup(groups, checked, trackedFiles)
+  const [target] = targets
+  if (targets.length > 1 || target === 'several')
+    return {
+      target: null,
+      blocked: 'Generate works on one repository at a time: check files in only one'
+    }
+  if (target === undefined || target === null)
+    return { target: null, blocked: 'Check the files the message is for' }
+  return { target, blocked: null }
+}

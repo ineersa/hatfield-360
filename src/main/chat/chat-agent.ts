@@ -1,8 +1,6 @@
 import {
-  client,
   type ClientContext,
   McpOverAcpProvider,
-  ndJsonStream,
   type RequestPermissionResponse,
   type SessionConfigOption
 } from '@agentclientprotocol/sdk/unstable'
@@ -11,9 +9,8 @@ import {
   type McpServerAdapter
 } from '@agentclientprotocol/sdk/experimental/mcp-server'
 import { McpServer } from '@modelcontextprotocol/server'
-import { type ChildProcess, spawn } from 'node:child_process'
+import type { ChildProcess } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
-import { Readable, Writable } from 'node:stream'
 import * as z from 'zod'
 import {
   type ChatConfigId,
@@ -22,6 +19,7 @@ import {
   type ChatEventBody,
   type ChatStopReason
 } from '../../shared/chat-agent-api'
+import { startAcpAgent } from './acp-agent-process'
 import type { ChatAgentCommand } from './chat-agent-launch'
 import { chatConfigOptions, chatEventsFor, permissionOptions } from './chat-session-updates'
 import {
@@ -31,9 +29,6 @@ import {
   PLAYBOOK_TOOL_DESCRIPTION
 } from './chat-session-options'
 import type { WorkspaceMapFile } from './workspace-map-file'
-
-/** Lines of the agent's stderr kept to explain a failed start or crash. */
-const STDERR_LINES = 20
 
 /** What a chat needs from the rest of the app, given when it starts. */
 export type ChatSetup = {
@@ -69,7 +64,7 @@ export class ChatAgentSession {
   private mapReply = ''
   private configOptions: ChatConfigOption[] = []
   private readonly permissions = new Map<string, PendingPermission>()
-  private readonly stderr: string[] = []
+  private stderr: string[] = []
   private playbook: McpServerAdapter | null = null
   private ended = false
 
@@ -225,63 +220,52 @@ export class ChatAgentSession {
   private readonly provider = new McpOverAcpProvider()
 
   private spawn(command: ChatAgentCommand): ClientContext {
-    const child = spawn(command.file, command.args, {
-      cwd: this.setup.cwd,
-      env: command.env,
-      stdio: ['pipe', 'pipe', 'pipe']
-    })
+    const started = startAcpAgent(command, this.setup.cwd, (app) =>
+      app
+        .onRequest('mcp/message', this.provider.handleRequest)
+        .onNotification('session/update', ({ params }) => {
+          if (
+            params.sessionId === this.mapSessionId &&
+            params.update.sessionUpdate === 'agent_message_chunk' &&
+            params.update.content.type === 'text'
+          )
+            this.mapReply += params.update.content.text
+          if (params.sessionId !== this.sessionId && params.sessionId !== this.mapSessionId) return
+          for (const body of chatEventsFor(params.update)) {
+            if (body.kind === 'config') {
+              // The map session's settings aren't the chat's.
+              if (params.sessionId !== this.sessionId) continue
+              this.configOptions = body.configOptions
+            }
+            this.send(body)
+          }
+        })
+        .onRequest('session/request_permission', ({ params }) => {
+          if (this.ended) return CANCELLED
+          const requestId = randomUUID()
+          return new Promise<RequestPermissionResponse>((resolve) => {
+            this.permissions.set(requestId, { resolve })
+            this.send({
+              kind: 'permission',
+              requestId,
+              toolCallId: params.toolCall.toolCallId,
+              title: params.toolCall.title ?? 'Permission needed',
+              options: permissionOptions(params.options)
+            })
+          })
+        })
+    )
+    const { child } = started
     this.child = child
-    child.stderr.setEncoding('utf8')
-    child.stderr.on('data', (chunk: string) => {
-      this.stderr.push(...chunk.split('\n').filter(Boolean))
-      this.stderr.splice(0, Math.max(0, this.stderr.length - STDERR_LINES))
-    })
+    this.stderr = started.stderr
     child.on('error', (error) => this.fail(error))
     child.on('exit', (code, signal) => {
       if (this.ended) return
       this.fail(new Error(`The agent exited (${signal ?? `code ${code ?? '?'}`}).`))
     })
-    const stream = ndJsonStream(
-      Writable.toWeb(child.stdin) as WritableStream<Uint8Array>,
-      Readable.toWeb(child.stdout) as ReadableStream<Uint8Array>
-    )
-    const app = client({ name: 'hatfield-360' })
-      .onRequest('mcp/message', this.provider.handleRequest)
-      .onNotification('session/update', ({ params }) => {
-        if (
-          params.sessionId === this.mapSessionId &&
-          params.update.sessionUpdate === 'agent_message_chunk' &&
-          params.update.content.type === 'text'
-        )
-          this.mapReply += params.update.content.text
-        if (params.sessionId !== this.sessionId && params.sessionId !== this.mapSessionId) return
-        for (const body of chatEventsFor(params.update)) {
-          if (body.kind === 'config') {
-            // The map session's settings aren't the chat's.
-            if (params.sessionId !== this.sessionId) continue
-            this.configOptions = body.configOptions
-          }
-          this.send(body)
-        }
-      })
-      .onRequest('session/request_permission', ({ params }) => {
-        if (this.ended) return CANCELLED
-        const requestId = randomUUID()
-        return new Promise<RequestPermissionResponse>((resolve) => {
-          this.permissions.set(requestId, { resolve })
-          this.send({
-            kind: 'permission',
-            requestId,
-            toolCallId: params.toolCall.toolCallId,
-            title: params.toolCall.title ?? 'Permission needed',
-            options: permissionOptions(params.options)
-          })
-        })
-      })
-    const connection = app.connect(stream)
-    this.connectionLost = connection.signal
-    this.agent = connection.agent
-    return connection.agent
+    this.connectionLost = started.connectionLost
+    this.agent = started.agent
+    return started.agent
   }
 
   private playbookServer(): McpServerAdapter {

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { ChangedFile, GitOperation } from '../../../../shared/source-control-api'
 import { fileKey, type GitGroup } from './change-tree-rows'
-import { amendTarget, commitLabel, commitPlan, pullPlan } from './commit-plan'
+import { amendTarget, commitLabel, commitPlan, generatePlan, pullPlan } from './commit-plan'
 
 const file = (root: string, path: string): ChangedFile => ({
   path,
@@ -48,6 +48,30 @@ describe('amendTarget', () => {
       files: []
     })
     expect(amendTarget(groups, checkedIn('/app', '/lib'), null)).toBe('several')
+  })
+})
+
+describe('generatePlan', () => {
+  const groups = [repo('/app'), repo('/lib')]
+
+  it('describes one repository’s checked files, or with Amend its last commit even with none checked', () => {
+    expect(generatePlan(groups, checkedIn('/lib'), '/app', false)).toMatchObject({
+      target: { group: { root: '/lib' }, files: [{ path: 'a.ts' }] },
+      blocked: null
+    })
+    expect(generatePlan(groups, new Set(), '/lib', false)).toEqual({
+      target: null,
+      blocked: 'Check the files the message is for'
+    })
+    expect(generatePlan(groups, new Set(), '/lib', true)).toMatchObject({
+      target: { group: { root: '/lib' }, files: [] },
+      blocked: null
+    })
+    for (const amend of [false, true])
+      expect(generatePlan(groups, checkedIn('/app', '/lib'), null, amend)).toEqual({
+        target: null,
+        blocked: 'Generate works on one repository at a time: check files in only one'
+      })
   })
 })
 
