@@ -1,4 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
+import { markdownMenuItems } from '@/components/text-menu/markdown-menu-items'
+import { TextContextMenu } from '@/components/text-menu/TextContextMenu'
 import { defaultRehypePlugins, type Components } from 'streamdown'
 import { MessageResponse } from '@/components/ai-elements/message'
 import { useChatStore } from '@/state/chat-store'
@@ -170,16 +172,20 @@ export function ChatMarkdown({
   const files = useReplyFiles(streaming)
   return (
     <ReplyFilesContext.Provider value={files}>
-      <MessageResponse
-        className="markdown-preview chat-markdown"
-        components={COMPONENTS}
-        rehypePlugins={REHYPE_PLUGINS}
-        skipHtml
-        linkSafety={{ enabled: false }}
-        isAnimating={streaming}
-      >
-        {text}
-      </MessageResponse>
+      <TextContextMenu renderItems={markdownMenuItems}>
+        <div data-text-scope>
+          <MessageResponse
+            className="markdown-preview chat-markdown"
+            components={COMPONENTS}
+            rehypePlugins={REHYPE_PLUGINS}
+            skipHtml
+            linkSafety={{ enabled: false }}
+            isAnimating={streaming}
+          >
+            {text}
+          </MessageResponse>
+        </div>
+      </TextContextMenu>
     </ReplyFilesContext.Provider>
   )
 }

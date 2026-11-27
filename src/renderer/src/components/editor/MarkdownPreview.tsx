@@ -1,4 +1,6 @@
 import { useCallback, useLayoutEffect, useRef, useSyncExternalStore } from 'react'
+import { markdownMenuItems } from '@/components/text-menu/markdown-menu-items'
+import { TextContextMenu } from '@/components/text-menu/TextContextMenu'
 import Markdown, { type Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { cssFontFamily } from '@/lib/css-font-family'
@@ -105,17 +107,19 @@ export function MarkdownPreview({ path }: { path: string }): React.JSX.Element {
   }, [path])
 
   return (
-    <div
-      ref={container}
-      aria-label="Markdown preview"
-      data-markdown-path={path}
-      className="min-h-0 flex-1 overflow-y-auto px-8 py-6"
-    >
-      <div className="markdown-preview mx-auto max-w-3xl">
-        <Markdown remarkPlugins={[remarkGfm]} skipHtml components={COMPONENTS}>
-          {text}
-        </Markdown>
+    <TextContextMenu renderItems={markdownMenuItems}>
+      <div
+        ref={container}
+        aria-label="Markdown preview"
+        data-markdown-path={path}
+        className="min-h-0 flex-1 overflow-y-auto px-8 py-6"
+      >
+        <div data-text-scope className="markdown-preview mx-auto max-w-3xl">
+          <Markdown remarkPlugins={[remarkGfm]} skipHtml components={COMPONENTS}>
+            {text}
+          </Markdown>
+        </div>
       </div>
-    </div>
+    </TextContextMenu>
   )
 }

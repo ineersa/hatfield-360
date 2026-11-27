@@ -13,7 +13,8 @@ import {
   TriangleAlert
 } from 'lucide-react'
 import { Dialog } from 'radix-ui'
-import { TextContextMenu } from '@/components/text-menu/TextContextMenu'
+import { copyText, TextContextMenu } from '@/components/text-menu/TextContextMenu'
+import { ContextMenuItem, ContextMenuSeparator } from '@/components/ui/context-menu'
 import { Fragment, useEffect, useRef, useState } from 'react'
 import { RootFolderIcon } from '@/components/icons/RootFolderIcon'
 import { AgentProviderIcon } from '@/components/icons/AgentProviderIcon'
@@ -271,84 +272,111 @@ function ResultItem({
     if (selected) ref.current?.scrollIntoView({ block: 'nearest' })
   }, [selected])
   return (
-    <li
-      ref={ref}
-      aria-label={`${hit.kind === 'observation' ? 'Observation' : 'Reflection'} from ${stamp(hit.at)}`}
-      aria-current={selected || undefined}
-      onMouseDown={onSelect}
-      className={cn(
-        'flex flex-col gap-2 border-l-2 py-3 pr-4 pl-3.5',
-        selected ? 'border-l-ring bg-hover' : 'border-l-transparent'
+    <TextContextMenu
+      renderItems={(_element, choose) => (
+        <>
+          {source.kind === 'unknown' ? null : (
+            <ContextMenuItem onSelect={() => choose(onOpen)}>
+              {source.kind === 'live' ? <SquareTerminal aria-hidden /> : <Play aria-hidden />}
+              {source.kind === 'live' ? 'Open Terminal' : 'Resume'}
+            </ContextMenuItem>
+          )}
+          <ContextMenuItem onSelect={() => setContext(!context)}>
+            <ChevronRight aria-hidden />
+            {context ? 'Hide Context' : 'Show Context'}
+          </ContextMenuItem>
+          <ContextMenuSeparator />
+          <ContextMenuItem onSelect={() => copyText(hit.content)}>
+            <Copy aria-hidden />
+            Copy Memory
+          </ContextMenuItem>
+          <ContextMenuItem onSelect={() => copyText(hit.sessionId)}>
+            <Copy aria-hidden />
+            Copy Session ID
+          </ContextMenuItem>
+        </>
       )}
     >
-      <div className="flex items-center gap-2">
-        <span className="type-hint text-foreground capitalize">{hit.kind}</span>
-        {hit.importance ? (
-          <span
-            className={cn(
-              'type-hint rounded-component border px-1.5 leading-normal',
-              importanceClass[hit.importance]
-            )}
-          >
-            {hit.importance}
+      <li
+        ref={ref}
+        data-text-scope
+        aria-label={`${hit.kind === 'observation' ? 'Observation' : 'Reflection'} from ${stamp(hit.at)}`}
+        aria-current={selected || undefined}
+        onMouseDown={onSelect}
+        className={cn(
+          'flex flex-col gap-2 border-l-2 py-3 pr-4 pl-3.5',
+          selected ? 'border-l-ring bg-hover' : 'border-l-transparent'
+        )}
+      >
+        <div className="flex items-center gap-2">
+          <span className="type-hint text-foreground capitalize">{hit.kind}</span>
+          {hit.importance ? (
+            <span
+              className={cn(
+                'type-hint rounded-component border px-1.5 leading-normal',
+                importanceClass[hit.importance]
+              )}
+            >
+              {hit.importance}
+            </span>
+          ) : null}
+          <span className="flex-1" />
+          <span className="type-hint tabular-nums" title={new Date(hit.at).toLocaleString()}>
+            {stamp(hit.at)}
           </span>
-        ) : null}
-        <span className="flex-1" />
-        <span className="type-hint tabular-nums" title={new Date(hit.at).toLocaleString()}>
-          {stamp(hit.at)}
-        </span>
-      </div>
-      <p className="type-body break-words whitespace-pre-wrap text-foreground">
-        <Highlighted text={hit.content} terms={terms} />
-      </p>
-      {context ? <Evidence project={project} hit={hit} /> : null}
-      <div className="flex min-w-0 items-center gap-2">
-        <SessionSource source={source} hit={hit} />
-        <span className="flex-1" />
-        <button
-          type="button"
-          aria-expanded={context}
-          onClick={() => setContext(!context)}
-          className={cn(buttonClass, quietClass)}
-        >
-          <ChevronRight className={cn('size-4', context && 'rotate-90')} aria-hidden />
-          Context
-        </button>
-        {source.kind === 'unknown' ? (
+        </div>
+        <p className="type-body break-words whitespace-pre-wrap text-foreground">
+          <Highlighted text={hit.content} terms={terms} />
+        </p>
+        {context ? <Evidence project={project} hit={hit} /> : null}
+        <div className="flex min-w-0 items-center gap-2">
+          <SessionSource source={source} hit={hit} />
+          <span className="flex-1" />
           <button
             type="button"
-            onClick={() => {
-              void window.desktop.writeTerminalClipboard(hit.sessionId).then(
-                () => notify({ severity: 'info', title: 'Session ID copied' }),
-                (error: unknown) =>
-                  notify({
-                    severity: 'error',
-                    title: "Couldn't copy the session ID",
-                    body: mainErrorMessage(error)
-                  })
-              )
-            }}
+            aria-expanded={context}
+            onClick={() => setContext(!context)}
             className={cn(buttonClass, quietClass)}
           >
-            <Copy className="size-4" aria-hidden />
-            Copy session ID
+            <ChevronRight className={cn('size-4', context && 'rotate-90')} aria-hidden />
+            Context
           </button>
-        ) : (
-          <button
-            type="button"
-            onClick={onOpen}
-            className={cn(buttonClass, selected ? primaryClass : outlineClass)}
-          >
-            {source.kind === 'live' ? (
-              <SquareTerminal className="size-4" aria-hidden />
-            ) : (
-              <Play className="size-4" aria-hidden />
-            )}
-            {source.kind === 'live' ? 'Open terminal' : 'Resume'}
-          </button>
-        )}
-      </div>
-    </li>
+          {source.kind === 'unknown' ? (
+            <button
+              type="button"
+              onClick={() => {
+                void window.desktop.writeTerminalClipboard(hit.sessionId).then(
+                  () => notify({ severity: 'info', title: 'Session ID copied' }),
+                  (error: unknown) =>
+                    notify({
+                      severity: 'error',
+                      title: "Couldn't copy the session ID",
+                      body: mainErrorMessage(error)
+                    })
+                )
+              }}
+              className={cn(buttonClass, quietClass)}
+            >
+              <Copy className="size-4" aria-hidden />
+              Copy session ID
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={onOpen}
+              className={cn(buttonClass, selected ? primaryClass : outlineClass)}
+            >
+              {source.kind === 'live' ? (
+                <SquareTerminal className="size-4" aria-hidden />
+              ) : (
+                <Play className="size-4" aria-hidden />
+              )}
+              {source.kind === 'live' ? 'Open terminal' : 'Resume'}
+            </button>
+          )}
+        </div>
+      </li>
+    </TextContextMenu>
   )
 }
 

@@ -99,19 +99,19 @@ function TextMenuItems({
 
 /**
  * A right-click menu with Cut, Copy, Paste and Select All for the text under the pointer, after a
- * place's own `items`. Wraps one element; a menu of an element inside it takes precedence.
+ * place's own items. Wraps one element; a menu of an element inside it takes precedence.
  */
 export function TextContextMenu({
   children,
-  items
+  renderItems
 }: {
   children: ReactNode
   /** The place's own items for the element the click landed on, or null for none. */
-  items?: (element: Element, choose: (action: () => void) => void) => ReactNode
+  renderItems?: (element: Element, choose: (action: () => void) => void) => ReactNode
 }): React.JSX.Element {
   const [opened, setOpened] = useState<{ target: TextMenuTarget; element: Element } | null>(null)
   const afterMenu = useAfterMenu()
-  const own = opened && items ? items(opened.element, afterMenu.choose) : null
+  const own = opened && renderItems ? renderItems(opened.element, afterMenu.choose) : null
   return (
     <ContextMenu>
       <ContextMenuTrigger

@@ -1,7 +1,15 @@
-import { CircleAlert, Eye, FileX, X } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { CircleAlert, Crosshair, Eye, FileX, X } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ScrollingTabList } from '@/components/shell/ScrollingTabList'
 import { FileTreeIcon } from '@/components/icons/FileTreeIcon'
+import { locateInTree } from '@/components/files/file-tree-rows'
+import { TabContextMenu, type TabMenu } from '@/components/shell/TabContextMenu'
+import { PathMenuItems } from '@/components/tree/PathMenuItems'
+import {
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuShortcut
+} from '@/components/ui/context-menu'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -14,6 +22,7 @@ import {
 import { cn } from '@/lib/class-names'
 import { appCommandForKey, appShortcutLabel } from '@/lib/keymap-match'
 import { useKeymapStore } from '@/state/keymap-store'
+import { useFileTreeStore } from '@/state/file-tree-store'
 import { type EditorTab, useEditorTabStore } from '@/state/editor-tab-store'
 import { CodeEditor } from './CodeEditor'
 import { loadDocument, saveDocument } from './editor-documents'
@@ -75,6 +84,7 @@ function TabStatus({ tab }: { tab: EditorTab }): React.JSX.Element | null {
 
 function Tab({
   tab,
+  menu,
   label,
   active,
   dragging,
@@ -85,6 +95,7 @@ function Tab({
   onDragEnd
 }: {
   tab: EditorTab
+  menu: TabMenu
   label: TabLabel
   active: boolean
   dragging: boolean
@@ -98,70 +109,100 @@ function Tab({
   const title = label.folder ? `${label.name} ${label.folder}` : label.name
   const state = [tab.dirty && 'unsaved', tab.deleted && 'deleted on disk'].filter(Boolean)
   return (
-    <div
-      draggable
-      data-path={tab.path}
-      data-dirty={tab.dirty || undefined}
-      data-deleted={tab.deleted || undefined}
-      onDragStart={(event) => {
-        event.dataTransfer.effectAllowed = 'move'
-        event.dataTransfer.setData('text/plain', tab.path)
-        onDragStart()
-      }}
-      onDragOver={(event) => {
-        if (onDragOver()) event.preventDefault()
-      }}
-      onDrop={(event) => event.preventDefault()}
-      onDragEnd={onDragEnd}
-      // Middle click closes, as in IDEs and browsers.
-      onAuxClick={(event) => {
-        if (event.button === 1) onClose()
-      }}
-      className={cn(
-        'type-tab group flex max-w-60 min-w-0 shrink-0 items-stretch border-r border-separator select-none',
-        active
-          ? 'bg-island text-foreground'
-          : 'text-muted-foreground hover:bg-tab-hover hover:text-foreground',
-        dragging && 'opacity-50'
-      )}
-    >
-      {/* The whole tab box selects it, not just its text. */}
-      <button
-        type="button"
-        role="tab"
-        aria-selected={active}
-        aria-label={[title, ...state].join(', ')}
-        title={tab.deleted ? `${tab.path} (deleted on disk)` : tab.path}
-        onClick={onActivate}
-        className="flex min-w-0 flex-1 items-center gap-2 pr-2 pl-3 outline-none focus-visible:underline"
-      >
-        <FileTreeIcon kind="file" name={label.name} className="size-4 shrink-0" />
-        <span className={cn('truncate', tab.deleted && 'line-through')}>{label.name}</span>
-        {label.folder ? <span className="type-hint truncate">{label.folder}</span> : null}
-      </button>
-      <button
-        type="button"
-        aria-label={`Close ${title}`}
-        title={`Close (${appShortcutLabel(keymap, 'close-editor-tab')})`}
-        onClick={onClose}
+    <TabContextMenu id={tab.path} menu={menu}>
+      <div
+        draggable
+        data-path={tab.path}
+        data-dirty={tab.dirty || undefined}
+        data-deleted={tab.deleted || undefined}
+        onDragStart={(event) => {
+          event.dataTransfer.effectAllowed = 'move'
+          event.dataTransfer.setData('text/plain', tab.path)
+          onDragStart()
+        }}
+        onDragOver={(event) => {
+          if (onDragOver()) event.preventDefault()
+        }}
+        onDrop={(event) => event.preventDefault()}
+        onDragEnd={onDragEnd}
+        // Middle click closes, as in IDEs and browsers.
+        onAuxClick={(event) => {
+          if (event.button === 1) onClose()
+        }}
         className={cn(
-          'group/close flex shrink-0 items-center pr-2 text-muted-foreground hover:text-foreground focus-visible:opacity-100',
-          active || tab.dirty ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+          'type-tab group flex max-w-60 min-w-0 shrink-0 items-stretch border-r border-separator select-none',
+          active
+            ? 'bg-island text-foreground'
+            : 'text-muted-foreground hover:bg-tab-hover hover:text-foreground',
+          dragging && 'opacity-50'
         )}
       >
-        <span className="flex size-5 items-center justify-center rounded-button group-hover/close:bg-hover">
-          {/* An unsaved tab shows a dot where its close button is, until the pointer is over it. */}
-          {tab.dirty ? (
-            <>
-              <span className="size-2 rounded-full bg-foreground group-hover:hidden" aria-hidden />
-              <X className="hidden size-3.5 group-hover:block" aria-hidden />
-            </>
-          ) : (
-            <X className="size-3.5" aria-hidden />
+        {/* The whole tab box selects it, not just its text. */}
+        <button
+          type="button"
+          role="tab"
+          aria-selected={active}
+          aria-label={[title, ...state].join(', ')}
+          title={tab.deleted ? `${tab.path} (deleted on disk)` : tab.path}
+          onClick={onActivate}
+          className="flex min-w-0 flex-1 items-center gap-2 pr-2 pl-3 outline-none focus-visible:underline"
+        >
+          <FileTreeIcon kind="file" name={label.name} className="size-4 shrink-0" />
+          <span className={cn('truncate', tab.deleted && 'line-through')}>{label.name}</span>
+          {label.folder ? <span className="type-hint truncate">{label.folder}</span> : null}
+        </button>
+        <button
+          type="button"
+          aria-label={`Close ${title}`}
+          title={`Close (${appShortcutLabel(keymap, 'close-editor-tab')})`}
+          onClick={onClose}
+          className={cn(
+            'group/close flex shrink-0 items-center pr-2 text-muted-foreground hover:text-foreground focus-visible:opacity-100',
+            active || tab.dirty ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
           )}
-        </span>
-      </button>
-    </div>
+        >
+          <span className="flex size-5 items-center justify-center rounded-button group-hover/close:bg-hover">
+            {/* An unsaved tab shows a dot where its close button is, until the pointer is over it. */}
+            {tab.dirty ? (
+              <>
+                <span
+                  className="size-2 rounded-full bg-foreground group-hover:hidden"
+                  aria-hidden
+                />
+                <X className="hidden size-3.5 group-hover:block" aria-hidden />
+              </>
+            ) : (
+              <X className="size-3.5" aria-hidden />
+            )}
+          </span>
+        </button>
+      </div>
+    </TabContextMenu>
+  )
+}
+
+/** Show in Files, then the path items, for a tab's file. */
+function TabFileItems({
+  path,
+  choose
+}: {
+  path: string
+  choose: (action: () => void) => void
+}): React.JSX.Element {
+  const roots = useFileTreeStore((state) => state.roots)
+  const select = useFileTreeStore((state) => state.select)
+  const keymap = useKeymapStore((state) => state.shell)
+  const inTree = locateInTree(roots, path) !== null
+  return (
+    <>
+      <ContextMenuItem disabled={!inTree} onSelect={() => choose(() => select(path, true))}>
+        <Crosshair aria-hidden />
+        Select Opened File
+        <ContextMenuShortcut>{appShortcutLabel(keymap, 'select-opened-file')}</ContextMenuShortcut>
+      </ContextMenuItem>
+      <ContextMenuSeparator />
+      <PathMenuItems path={path} relative={inTree} />
+    </>
   )
 }
 
@@ -173,7 +214,11 @@ export function EditorTabs({ hidden }: { hidden: boolean }): React.JSX.Element {
   const move = useEditorTabStore((state) => state.move)
   const close = useEditorTabStore((state) => state.close)
   const togglePreview = useEditorTabStore((state) => state.togglePreview)
-  const [closing, setClosing] = useState<string | null>(null)
+  const keymap = useKeymapStore((state) => state.shell)
+  // Unsaved tabs waiting to be asked about, one at a time.
+  const [closeQueue, setCloseQueue] = useState<string[]>([])
+  const closing = closeQueue[0] ?? null
+  const askedAbout = (): void => setCloseQueue((queue) => queue.slice(1))
   const [dragged, setDragged] = useState<string | null>(null)
   const [focusRequest, setFocusRequest] = useState(0)
   const labels = useMemo(() => tabLabels(tabs.map((tab) => tab.path)), [tabs])
@@ -197,10 +242,19 @@ export function EditorTabs({ hidden }: { hidden: boolean }): React.JSX.Element {
     [hidden]
   )
 
-  const requestClose = (tab: EditorTab): void => {
-    if (tab.dirty) setClosing(tab.path)
-    else close(tab.path)
-  }
+  // Closes saved tabs at once; asks about each unsaved one before closing it.
+  const requestClose = useCallback(
+    (paths: readonly string[]): void => {
+      const asked: string[] = []
+      for (const tab of useEditorTabStore.getState().tabs) {
+        if (!paths.includes(tab.path)) continue
+        if (tab.dirty) asked.push(tab.path)
+        else close(tab.path)
+      }
+      if (asked.length > 0) setCloseQueue(asked)
+    },
+    [close]
+  )
 
   // Close Tab and Select Next/Previous Tab, after the editor and other controls had the key.
   // Terminals share some of these keys; they act only while on screen, and never are with the editor.
@@ -214,8 +268,7 @@ export function EditorTabs({ hidden }: { hidden: boolean }): React.JSX.Element {
       const tab = state.tabs[index]
       if (!tab) return
       if (command === 'close-editor-tab') {
-        if (tab.dirty) setClosing(tab.path)
-        else state.close(tab.path)
+        requestClose([tab.path])
       } else if (command === 'next-editor-tab' || command === 'previous-editor-tab') {
         const step = command === 'next-editor-tab' ? 1 : -1
         const next = state.tabs.at((index + step) % state.tabs.length)
@@ -226,7 +279,7 @@ export function EditorTabs({ hidden }: { hidden: boolean }): React.JSX.Element {
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [hidden])
+  }, [hidden, requestClose])
   const closingName = closing ? fileName(closing) : ''
 
   return (
@@ -244,7 +297,13 @@ export function EditorTabs({ hidden }: { hidden: boolean }): React.JSX.Element {
                 activate(tab.path)
                 setFocusRequest((count) => count + 1)
               }}
-              onClose={() => requestClose(tab)}
+              menu={{
+                tabs: tabs.map((each) => each.path),
+                close: requestClose,
+                closeShortcut: appShortcutLabel(keymap, 'close-editor-tab'),
+                renderItems: (choose) => <TabFileItems path={tab.path} choose={choose} />
+              }}
+              onClose={() => requestClose([tab.path])}
               onDragStart={() => setDragged(tab.path)}
               onDragOver={() => {
                 if (dragged === null) return false
@@ -301,10 +360,11 @@ export function EditorTabs({ hidden }: { hidden: boolean }): React.JSX.Element {
       <AlertDialog
         open={closing !== null}
         onOpenChange={(open) => {
-          if (!open) setClosing(null)
+          // Cancel stops closing the rest too.
+          if (!open) setCloseQueue([])
         }}
       >
-        <AlertDialogContent>
+        <AlertDialogContent key={closing}>
           <AlertDialogTitle>Save changes to {closingName}?</AlertDialogTitle>
           <AlertDialogDescription>
             Your changes will be lost if you close the tab without saving them.
@@ -312,8 +372,11 @@ export function EditorTabs({ hidden }: { hidden: boolean }): React.JSX.Element {
           <AlertDialogFooter>
             <AlertDialogAction
               className="mr-auto"
-              onClick={() => {
+              onClick={(event) => {
+                // The dialog stays for the next unsaved tab, if any.
+                event.preventDefault()
                 if (closing) close(closing)
+                askedAbout()
               }}
             >
               Don't Save
@@ -322,8 +385,10 @@ export function EditorTabs({ hidden }: { hidden: boolean }): React.JSX.Element {
             <AlertDialogAction
               primary
               autoFocus
-              onClick={() => {
+              onClick={(event) => {
+                event.preventDefault()
                 const path = closing
+                askedAbout()
                 // Closed only once the file holds the tab's text: edits made while saving stay open.
                 if (path) void saveDocument(path).then((saved) => saved && close(path))
               }}

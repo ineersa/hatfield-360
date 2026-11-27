@@ -50,6 +50,7 @@ export function TerminalTabs({ hidden }: { hidden: boolean }): React.JSX.Element
   const activateTab = useTerminalStore((state) => state.activateTab)
   const closeTab = useTerminalStore((state) => state.closeTab)
   const keymap = useKeymapStore((state) => state.shell)
+  const tabIds = tabs.map((tab) => tab.id)
 
   return (
     <div className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-island" hidden={hidden}>
@@ -59,6 +60,8 @@ export function TerminalTabs({ hidden }: { hidden: boolean }): React.JSX.Element
           {tabs.map((tab) => (
             <StripTab
               key={tab.id}
+              id={tab.id}
+              menu={{ tabs: tabIds, close: (ids) => ids.forEach((id) => closeTab(id)) }}
               title={tab.title}
               label={tab.label}
               active={tab.id === activeTabId}

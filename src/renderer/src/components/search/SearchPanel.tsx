@@ -1,4 +1,5 @@
 import { CaseSensitive, PackageOpen, Regex, WholeWord, X } from 'lucide-react'
+import { FileResultMenu } from './FileResultMenu'
 import { type KeyboardEvent, type ReactNode, useEffect, useMemo, useRef, useState } from 'react'
 import { separatorOf } from '@/components/editor/editor-tab-labels'
 import { FileTreeIcon } from '@/components/icons/FileTreeIcon'
@@ -272,36 +273,50 @@ export function SearchPanel(): React.JSX.Element {
         >
           {files.map((file: SearchFileResult, fileIndex) => (
             <div key={file.path} role="group" aria-label={fileName(file.path)}>
-              <div className="type-tree-row flex h-tree-row items-center gap-1.5 px-1.5">
-                <FileTreeIcon kind="file" name={fileName(file.path)} className="size-4 shrink-0" />
-                <span className="shrink-0">{fileName(file.path)}</span>
-                <span className="type-hint min-w-0 flex-1 truncate">
-                  {folderLabel(file.path, namedFolders)}
-                </span>
-                <span className="type-hint shrink-0">{file.matches.length}</span>
-              </div>
+              <FileResultMenu
+                path={file.path}
+                onOpen={() => open(firstIndex[fileIndex] ?? 0, true)}
+              >
+                <div className="type-tree-row flex h-tree-row items-center gap-1.5 px-1.5">
+                  <FileTreeIcon
+                    kind="file"
+                    name={fileName(file.path)}
+                    className="size-4 shrink-0"
+                  />
+                  <span className="shrink-0">{fileName(file.path)}</span>
+                  <span className="type-hint min-w-0 flex-1 truncate">
+                    {folderLabel(file.path, namedFolders)}
+                  </span>
+                  <span className="type-hint shrink-0">{file.matches.length}</span>
+                </div>
+              </FileResultMenu>
               {file.matches.map((match, matchIndex) => {
                 const at = (firstIndex[fileIndex] ?? 0) + matchIndex
                 const selected = at === active
                 return (
-                  <div
+                  <FileResultMenu
                     key={`${match.line}:${match.start}`}
-                    id={optionId(at)}
-                    role="option"
-                    aria-selected={selected}
-                    aria-label={`${fileName(file.path)} line ${match.line}: ${match.text.trim()}`}
-                    onClick={() => open(at, false)}
-                    onDoubleClick={() => open(at, true)}
-                    className={cn(
-                      'type-tree-row flex h-tree-row cursor-default items-center gap-2 rounded-component pr-1.5 pl-7 select-none',
-                      selected
-                        ? 'bg-selection-inactive group-focus-within/results:bg-selection group-focus-within/results:text-selection-foreground'
-                        : 'hover:bg-row-hover'
-                    )}
+                    path={file.path}
+                    onOpen={() => open(at, true)}
                   >
-                    <MatchText match={match} />
-                    <span className="type-hint shrink-0">{match.line}</span>
-                  </div>
+                    <div
+                      id={optionId(at)}
+                      role="option"
+                      aria-selected={selected}
+                      aria-label={`${fileName(file.path)} line ${match.line}: ${match.text.trim()}`}
+                      onClick={() => open(at, false)}
+                      onDoubleClick={() => open(at, true)}
+                      className={cn(
+                        'type-tree-row flex h-tree-row cursor-default items-center gap-2 rounded-component pr-1.5 pl-7 select-none',
+                        selected
+                          ? 'bg-selection-inactive group-focus-within/results:bg-selection group-focus-within/results:text-selection-foreground'
+                          : 'hover:bg-row-hover'
+                      )}
+                    >
+                      <MatchText match={match} />
+                      <span className="type-hint shrink-0">{match.line}</span>
+                    </div>
+                  </FileResultMenu>
                 )
               })}
             </div>

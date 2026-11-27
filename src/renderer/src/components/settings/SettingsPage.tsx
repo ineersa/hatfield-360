@@ -19,6 +19,8 @@ import { MemorySearchSettings } from './MemorySearchSettings'
 import { FONT_PICKER_ATTRIBUTE, FontPicker } from './FontPicker'
 import { NumberStepper } from './NumberStepper'
 import { ResetButton } from './ResetButton'
+import { settingMenuItems } from './setting-menu-items'
+import { TextContextMenu } from '@/components/text-menu/TextContextMenu'
 
 const PREVIEW_TEXT = 'The quick brown fox jumps over the lazy dog · 0O 1lI {}'
 
@@ -288,74 +290,76 @@ export function SettingsPage(): React.JSX.Element {
   }, [close])
 
   return (
-    <div className="flex min-h-0 w-full flex-1 justify-center overflow-y-auto px-8 py-8">
-      <div className="flex w-full max-w-2xl flex-col">
-        <header className="flex flex-wrap items-center gap-2 pb-2">
-          <h1 className="type-page-title flex-1">Settings</h1>
-          <ResetAllButton />
-          <button
-            type="button"
-            onClick={() => void openFile()}
-            className="type-button flex h-control shrink-0 items-center gap-2 rounded-button px-2.5 whitespace-nowrap text-link hover:bg-hover focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-          >
-            <FileJson className="size-4" aria-hidden />
-            Open settings.json
-          </button>
-          <button
-            type="button"
-            onClick={() => void openKeybindings()}
-            className="type-button flex h-control shrink-0 items-center gap-2 rounded-button px-2.5 whitespace-nowrap text-link hover:bg-hover focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-          >
-            <FileJson className="size-4" aria-hidden />
-            Open keybindings.json
-          </button>
-          <button
-            type="button"
-            aria-label="Close Settings"
-            onClick={close}
-            className="flex size-icon-button items-center justify-center rounded-button text-muted-foreground hover:bg-hover hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-          >
-            <X className="size-4" aria-hidden />
-          </button>
-        </header>
-        {editable ? null : (
-          <p
-            role="status"
-            aria-label="Settings file errors"
-            className="rounded-banner border border-error-border bg-error-background px-3 py-2"
-          >
-            settings.json has errors, so settings can't be changed here. Fix the file with Open
-            settings.json.
-          </p>
-        )}
-        <div className="flex flex-col divide-y divide-separator">
-          <ColorThemeSettings />
-          <IconThemeSetting />
-          {FONT_SETTINGS.map((setting) => (
-            <FontSetting key={setting.familyKey} {...setting} />
-          ))}
-          <FlagSetting
-            settingKey="terminal.gpuAcceleration"
-            label="Terminal GPU rendering"
-            description="Draws terminals with WebGL. Turn it off if terminal text looks garbled or flickers."
-          />
-          <FlagSetting
-            settingKey="terminal.trimLeadingWhitespaceOnCopy"
-            label="Trim leading whitespace on copy"
-            description="Remove spaces and tabs at the start of each copied line. Terminal output stays unchanged."
-          />
-          <div>
+    <TextContextMenu renderItems={settingMenuItems}>
+      <div className="flex min-h-0 w-full flex-1 justify-center overflow-y-auto px-8 py-8">
+        <div className="flex w-full max-w-2xl flex-col">
+          <header className="flex flex-wrap items-center gap-2 pb-2">
+            <h1 className="type-page-title flex-1">Settings</h1>
+            <ResetAllButton />
+            <button
+              type="button"
+              onClick={() => void openFile()}
+              className="type-button flex h-control shrink-0 items-center gap-2 rounded-button px-2.5 whitespace-nowrap text-link hover:bg-hover focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+            >
+              <FileJson className="size-4" aria-hidden />
+              Open settings.json
+            </button>
+            <button
+              type="button"
+              onClick={() => void openKeybindings()}
+              className="type-button flex h-control shrink-0 items-center gap-2 rounded-button px-2.5 whitespace-nowrap text-link hover:bg-hover focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+            >
+              <FileJson className="size-4" aria-hidden />
+              Open keybindings.json
+            </button>
+            <button
+              type="button"
+              aria-label="Close Settings"
+              onClick={close}
+              className="flex size-icon-button items-center justify-center rounded-button text-muted-foreground hover:bg-hover hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+            >
+              <X className="size-4" aria-hidden />
+            </button>
+          </header>
+          {editable ? null : (
+            <p
+              role="status"
+              aria-label="Settings file errors"
+              className="rounded-banner border border-error-border bg-error-background px-3 py-2"
+            >
+              settings.json has errors, so settings can't be changed here. Fix the file with Open
+              settings.json.
+            </p>
+          )}
+          <div className="flex flex-col divide-y divide-separator">
+            <ColorThemeSettings />
+            <IconThemeSetting />
+            {FONT_SETTINGS.map((setting) => (
+              <FontSetting key={setting.familyKey} {...setting} />
+            ))}
             <FlagSetting
-              settingKey="notifications.agentSounds"
-              label="Agent notification sounds"
-              description="Play a cue for agent completion, input requests, and failures when you’re not viewing the agent’s terminal in the focused app."
+              settingKey="terminal.gpuAcceleration"
+              label="Terminal GPU rendering"
+              description="Draws terminals with WebGL. Turn it off if terminal text looks garbled or flickers."
             />
-            <AgentSoundPreviews />
+            <FlagSetting
+              settingKey="terminal.trimLeadingWhitespaceOnCopy"
+              label="Trim leading whitespace on copy"
+              description="Remove spaces and tabs at the start of each copied line. Terminal output stays unchanged."
+            />
+            <div>
+              <FlagSetting
+                settingKey="notifications.agentSounds"
+                label="Agent notification sounds"
+                description="Play a cue for agent completion, input requests, and failures when you’re not viewing the agent’s terminal in the focused app."
+              />
+              <AgentSoundPreviews />
+            </div>
+            <AgentLaunchSettings />
+            <MemorySearchSettings />
           </div>
-          <AgentLaunchSettings />
-          <MemorySearchSettings />
         </div>
       </div>
-    </div>
+    </TextContextMenu>
   )
 }

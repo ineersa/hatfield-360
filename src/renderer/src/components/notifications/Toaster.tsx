@@ -1,6 +1,8 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import { type AppNotification, useNotificationStore } from '@/state/notification-store'
+import { TextContextMenu } from '@/components/text-menu/TextContextMenu'
 import { NotificationContent } from './NotificationContent'
+import { notificationMenuItems } from './notification-menu-items'
 
 /** Long enough to read a two-line message, as JetBrains balloons stay about this long. */
 const AUTO_CLOSE_MS = 12_000
@@ -25,27 +27,39 @@ function Toast({ notification }: { notification: AppNotification }): React.JSX.E
   }, [paused, id, closeToast])
 
   return (
-    <div
-      role="alert"
-      aria-labelledby={titleId}
-      data-severity={notification.severity}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      onFocus={() => setFocused(true)}
-      onBlur={(event) => {
-        if (!event.currentTarget.contains(event.relatedTarget)) setFocused(false)
-      }}
-      className="pointer-events-auto w-toast rounded-popup border border-toast-border bg-toast p-3 text-toast-foreground shadow-lg"
+    <TextContextMenu
+      renderItems={(element, choose) =>
+        notificationMenuItems({
+          notification,
+          element,
+          choose,
+          close: { label: 'Close', run: () => closeToast(id) }
+        })
+      }
     >
-      <NotificationContent
-        notification={notification}
-        titleId={titleId}
-        closeLabel="Close"
-        onClose={() => closeToast(id)}
-        showTime={false}
-        scrollBody
-      />
-    </div>
+      <div
+        role="alert"
+        data-text-scope
+        aria-labelledby={titleId}
+        data-severity={notification.severity}
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
+        onFocus={() => setFocused(true)}
+        onBlur={(event) => {
+          if (!event.currentTarget.contains(event.relatedTarget)) setFocused(false)
+        }}
+        className="pointer-events-auto w-toast rounded-popup border border-toast-border bg-toast p-3 text-toast-foreground shadow-lg"
+      >
+        <NotificationContent
+          notification={notification}
+          titleId={titleId}
+          closeLabel="Close"
+          onClose={() => closeToast(id)}
+          showTime={false}
+          scrollBody
+        />
+      </div>
+    </TextContextMenu>
   )
 }
 
