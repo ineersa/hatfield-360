@@ -1,7 +1,7 @@
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { lookedUpPath } from './chat-agent-launch'
+import { lookedUpPath } from './shell-lookup'
 
 describe('lookedUpPath', () => {
   it('takes a path as printed', () => {

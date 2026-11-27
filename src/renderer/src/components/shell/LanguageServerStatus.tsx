@@ -18,7 +18,10 @@ export function LanguageServerStatus(): React.JSX.Element | null {
   const openPanel = useNotificationStore((state) => state.togglePanel)
   const panelOpen = useNotificationStore((state) => state.panelOpen)
   if (!status) return null
-  const label = `${status.server} language server ${STATE_LABELS[status.state]}`
+  const label =
+    status.state === 'ready' && status.progress
+      ? `${status.server} language server: ${status.progress}`
+      : `${status.server} language server ${STATE_LABELS[status.state]}`
   if (status.state !== 'failed') {
     return (
       <span role="status" className="mr-auto truncate">

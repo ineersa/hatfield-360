@@ -17,3 +17,14 @@ export function exitFailure(server: string, exit: ServerExit): string | null {
   const how = exit.signal ? `was killed (${exit.signal})` : `exited with code ${String(exit.code)}`
   return `The ${server} language server ${how}.`
 }
+
+/** Longer stderr lines are source a crash dumped (a whole minified bundle), not a message. */
+const MAX_LINE = 500
+
+/** The failure notice: what happened, the server's last stderr lines and where its full log is. */
+export function failureNotice(failure: string, stderr: readonly string[], logPath: string): string {
+  const lines = stderr.map((line) =>
+    line.length > MAX_LINE ? `[a ${String(line.length)}-character line, left out]` : line
+  )
+  return [failure, ...lines, `Full log: ${logPath}`].join('\n')
+}

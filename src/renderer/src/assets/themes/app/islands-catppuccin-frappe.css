@@ -83,6 +83,13 @@
   --info: #ca9ee6;
   --info-background: #233558;
   --info-border: #2e4d89;
+  /* Changed files: FILESTATUS_* of editor/catppuccin-frappe.json, adjusted where needed to read at 4.5:1 on island and inactive selection. */
+  --vcs-modified: #a7bef2; /* #8caaee lightened for 4.5:1 */
+  --vcs-added: #a6d189;
+  --vcs-deleted: #b8bbc8; /* #626880 lightened for 4.5:1 */
+  --vcs-renamed: #80c7c7; /* #3a8484 lightened for 4.5:1 */
+  --vcs-untracked: #e6b096; /* #dd9471 lightened for 4.5:1 */
+  --vcs-conflicted: #f1ac88; /* #ef9f76 lightened for 4.5:1 */
   --scrollbar-thumb: #414559;
   --scrollbar-thumb-hover: #51576d;
   --island-radius: 10px;

@@ -10,6 +10,10 @@ import {
   ErrorAction,
   type Message,
   type SymbolInformation,
+  WorkDoneProgress,
+  WorkDoneProgressCreateRequest,
+  type WorkDoneProgressBegin,
+  type WorkDoneProgressReport,
   type WorkspaceSymbol as LspWorkspaceSymbol,
   WorkspaceSymbolRequest
 } from 'vscode-languageclient/browser'
@@ -67,6 +71,8 @@ type Client = {
   client: MonacoLanguageClient
   files: Set<string>
   state: 'starting' | 'ready'
+  /** The server's work in progress (indexing), by its token, in the order it began. */
+  progress: Map<string | number, { title: string; message?: string; percentage?: number }>
 }
 
 const clients = new Map<string, Client>()
@@ -88,8 +94,49 @@ const crashes = new Map<string, number[]>()
 const showStatus = (
   paths: Iterable<string>,
   server: string,
-  state: 'starting' | 'ready' | 'restarting' | 'failed'
-) => useLanguageServerStore.getState().setFiles(paths, { server, state })
+  state: 'starting' | 'ready' | 'restarting' | 'failed',
+  progress?: string
+) =>
+  useLanguageServerStore
+    .getState()
+    .setFiles(paths, { server, state, ...(progress === undefined ? {} : { progress }) })
+
+/** The latest work the server reported, as "Indexing 120/400 files 30%". */
+function progressText(entry: Client): string | undefined {
+  const work = [...entry.progress.values()].at(-1)
+  if (!work) return undefined
+  const percentage = work.percentage === undefined ? '' : ` ${String(Math.round(work.percentage))}%`
+  return `${work.title}${work.message ? ` ${work.message}` : ''}${percentage}`
+}
+
+const showClientStatus = (entry: Client, paths: Iterable<string> = entry.files) =>
+  showStatus(paths, entry.connection.server, entry.state, progressText(entry))
+
+/** Shows the work the server announced under `token` until it ends. */
+function trackProgress(entry: Client, token: string | number): void {
+  const listener = entry.client.onProgress(
+    WorkDoneProgress.type,
+    token,
+    (value: WorkDoneProgressBegin | WorkDoneProgressReport | { kind: 'end' }) => {
+      if (value.kind === 'end') {
+        entry.progress.delete(token)
+        listener.dispose()
+      } else {
+        const work = entry.progress.get(token) ?? { title: '' }
+        entry.progress.set(token, {
+          title: value.kind === 'begin' ? value.title : work.title,
+          ...((value.message ?? work.message) === undefined
+            ? {}
+            : { message: value.message ?? work.message }),
+          ...((value.percentage ?? work.percentage) === undefined
+            ? {}
+            : { percentage: value.percentage ?? work.percentage })
+        })
+      }
+      if (clients.get(entry.connection.id) === entry) showClientStatus(entry)
+    }
+  )
+}
 
 /** A crashed server is started again for its open files after a pause, until it crashes too often. */
 function restartAfterCrash(entry: Client, log: string | undefined): void {
@@ -135,10 +182,9 @@ window.desktop.subscribeLanguageServerStatus((status: LanguageServerStatus) => {
   }
   const entry = clients.get(status.id)
   if (!entry) return
-  const { server } = entry.connection
   if (status.state === 'starting' || status.state === 'ready') {
     entry.state = status.state
-    showStatus(entry.files, server, status.state)
+    showClientStatus(entry)
     return
   }
   if (status.state !== 'failed' && status.state !== 'stopped') return
@@ -188,10 +234,24 @@ function startClient(connection: LanguageServerConnection): Client {
     },
     messageTransports: { reader, writer: new ConnectionWriter(connection.id) }
   })
-  const entry: Client = { connection, reader, client, files: new Set(), state: 'starting' }
+  const entry: Client = {
+    connection,
+    reader,
+    client,
+    files: new Set(),
+    state: 'starting',
+    progress: new Map()
+  }
   clients.set(connection.id, entry)
+  // The client sends `initialized` before its own progress handler is in place, and a server that
+  // asks for progress at once (Intelephense, as it starts indexing) got an error and crashed. Ours
+  // is in place before `initialized` and, set again once started, replaces the client's own.
+  const handleProgress = () =>
+    client.onRequest(WorkDoneProgressCreateRequest.type, ({ token }) => trackProgress(entry, token))
+  handleProgress()
   client
     .start()
+    .then(handleProgress)
     .catch((error: unknown) => console.error(`Starting ${connection.server} failed:`, error))
   return entry
 }
@@ -251,7 +311,7 @@ export async function attachLanguageServer(path: string, languageId: string): Pr
     const entry = clients.get(result.connection.id) ?? startClient(result.connection)
     entry.files.add(path)
     fileConnections.set(path, result.connection.id)
-    showStatus([path], entry.connection.server, entry.state)
+    showClientStatus(entry, [path])
   } catch (error) {
     console.error(`Connecting ${path} to its language server failed:`, error)
   }

@@ -10,6 +10,7 @@ import { SEARCH_CHANNELS, type SearchEvent } from '../shared/search-api'
 import { SEARCH_EVERYWHERE_CHANNELS } from '../shared/search-everywhere-api'
 import { SETTINGS_CHANNELS, type SettingsView } from '../shared/settings-api'
 import { SHELL_LAYOUT_CHANNELS } from '../shared/shell-layout-api'
+import { SOURCE_CONTROL_CHANNELS } from '../shared/source-control-api'
 import { MEMORY_SEARCH_CHANNELS } from '../shared/memory-search-api'
 import { LANGUAGE_SERVER_CHANNELS, type LanguageServerStatus } from '../shared/language-server-api'
 import { TERMINAL_CHANNELS, type TerminalCommand, type TerminalExit } from '../shared/terminal-api'
@@ -74,6 +75,23 @@ const desktopApi: DesktopApi = {
     ipcRenderer.on(WORKTREE_CHANNELS.changed, listener)
     return () => ipcRenderer.removeListener(WORKTREE_CHANNELS.changed, listener)
   },
+  getSourceControlStatus: () => ipcRenderer.invoke(SOURCE_CONTROL_CHANNELS.status),
+  commitChanges: (request) => ipcRenderer.invoke(SOURCE_CONTROL_CHANNELS.commit, request),
+  getLastCommitMessage: (root) =>
+    ipcRenderer.invoke(SOURCE_CONTROL_CHANNELS.lastCommitMessage, root),
+  pushBranch: (root) => ipcRenderer.invoke(SOURCE_CONTROL_CHANNELS.push, root),
+  pullBranch: (root) => ipcRenderer.invoke(SOURCE_CONTROL_CHANNELS.pull, root),
+  rollbackChanges: (root, paths) =>
+    ipcRenderer.invoke(SOURCE_CONTROL_CHANNELS.rollback, root, paths),
+  fetchRemote: (root) => ipcRenderer.invoke(SOURCE_CONTROL_CHANNELS.fetch, root),
+  addUntrackedFiles: (root, paths) =>
+    ipcRenderer.invoke(SOURCE_CONTROL_CHANNELS.addUntracked, root, paths),
+  ignoreUntrackedFile: (root, path) =>
+    ipcRenderer.invoke(SOURCE_CONTROL_CHANNELS.ignoreUntracked, root, path),
+  launchHunk: (request) => ipcRenderer.invoke(SOURCE_CONTROL_CHANNELS.launchHunk, request),
+  abortGitOperation: (root, operation) =>
+    ipcRenderer.invoke(SOURCE_CONTROL_CHANNELS.abortOperation, root, operation),
+  cancelSourceControlAction: () => ipcRenderer.invoke(SOURCE_CONTROL_CHANNELS.cancel),
   listDirectory: (path) => ipcRenderer.invoke(FILE_TREE_CHANNELS.list, path),
   watchDirectories: (paths) => ipcRenderer.invoke(FILE_TREE_CHANNELS.watch, paths),
   copyPath: (path, form, lines) =>

@@ -2,7 +2,7 @@
   "$schema": "https://unpkg.com/knip@6/schema.json",
   "entry": ["config/*.mts", "tests/e2e/**/*.spec.ts"],
   "project": ["src/**/*.{ts,tsx,css}", "tests/**/*.ts", "config/*.mts"],
-  "ignoreBinaries": ["update-desktop-database"],
+  "ignoreBinaries": ["update-desktop-database", "mkfifo"],
   "ignoreIssues": {
     "src/renderer/src/components/ai-elements/**": ["exports", "types"],
     "src/renderer/src/components/ui/**": ["exports", "types"]

@@ -99,14 +99,15 @@ class TerminalSessions {
   async spawn(
     owner: WebContents,
     request: { cwd: string; cols: number; rows: number },
-    agent?: {
+    /** A program to run through the user's shell instead of the shell itself: an agent or hunk. */
+    command?: {
       id: string
       project: string | null
       executable: string
       args: string[]
       env: Record<string, string>
-      onClosing: () => void
-      onExit: () => string | undefined
+      onClosing?: () => void
+      onExit?: () => string | undefined
     }
   ): Promise<TerminalSession> {
     this.helperChecked ??= ensureSpawnHelperExecutable()
@@ -115,11 +116,11 @@ class TerminalSessions {
       platform: process.platform,
       appVersion: app.getVersion()
     })
-    const shell = agent
-      ? agentShellCommand(agent, request.cwd)
+    const shell = command
+      ? agentShellCommand(command, request.cwd)
       : defaultShell(process.env, process.platform)
-    const id = agent?.id ?? randomUUID()
-    const bootstrap = agent
+    const id = command?.id ?? randomUUID()
+    const bootstrap = command
       ? undefined
       : await agentStatusServer
           .prepareBootstrap({ terminalId: id, cwd: request.cwd })
@@ -137,7 +138,7 @@ class TerminalSessions {
           cwd: request.cwd,
           env: {
             ...env,
-            ...agent?.env,
+            ...command?.env,
             ...(bootstrap
               ? {
                   H360_STATUS_ENDPOINT: bootstrap.endpoint,
@@ -158,7 +159,7 @@ class TerminalSessions {
       pty,
       owner,
       cwd: request.cwd,
-      project: agent?.project ?? null,
+      project: command?.project ?? null,
       output: [],
       outputBytes: 0,
       flushTimer: null,
@@ -167,7 +168,7 @@ class TerminalSessions {
       detached: false,
       exited: new Promise((resolve) => pty.onExit(() => resolve())),
       ending: null,
-      onClosing: agent?.onClosing
+      onClosing: command?.onClosing
     }
     this.sessions.set(id, session)
     this.endWithOwner(owner)
@@ -176,7 +177,7 @@ class TerminalSessions {
       this.flushOutput(session)
       this.sessions.delete(id)
       closeBootstrap()
-      const error = agent?.onExit()
+      const error = command?.onExit?.()
       const exit: TerminalExit = {
         id,
         exitCode,

@@ -99,6 +99,13 @@
   --color-info: var(--info);
   --color-info-background: var(--info-background);
   --color-info-border: var(--info-border);
+  /* Changed files in the Commit panel, after each theme's JetBrains file status colours. */
+  --color-vcs-modified: var(--vcs-modified);
+  --color-vcs-added: var(--vcs-added);
+  --color-vcs-deleted: var(--vcs-deleted);
+  --color-vcs-renamed: var(--vcs-renamed);
+  --color-vcs-untracked: var(--vcs-untracked);
+  --color-vcs-conflicted: var(--vcs-conflicted);
   --color-scrollbar-thumb: var(--scrollbar-thumb);
   --color-scrollbar-thumb-hover: var(--scrollbar-thumb-hover);
   /* The terminal theme's background (terminal.colorTheme), set by the renderer. */

@@ -13,15 +13,12 @@ import {
   ChevronRight,
   ChevronsDownUp,
   CircleAlert,
-  Copy,
-  CopySlash,
   Crosshair,
   Eye,
   EyeOff,
   FolderInput,
   FolderMinus,
   FilePlus,
-  FolderOpen,
   FolderPlus,
   FolderX,
   GitBranch,
@@ -32,9 +29,16 @@ import {
 } from 'lucide-react'
 import { type KeyboardEvent, type ReactNode, useEffect, useMemo, useRef, useState } from 'react'
 import { FileTreeIcon } from '@/components/icons/FileTreeIcon'
+import { PanelHeaderButton } from '@/components/shell/PanelHeaderButton'
+import { treeIndent, treeRowClass } from '@/components/tree/tree-row-style'
+import { useLoadingShown } from '@/components/tree/use-loading-delay'
 import { Input } from '@/components/ui/input'
 import { RootFolderIcon } from '@/components/icons/RootFolderIcon'
 import { OpenTerminalMenuContent } from '@/components/terminal/OpenTerminalMenuContent'
+import { PathMenuItems } from '@/components/tree/PathMenuItems'
+import { useAfterMenu } from '@/components/tree/use-after-menu'
+import { DELETE_LABEL, isDeleteKey } from './delete-key'
+import { TrashDialog } from './TrashDialog'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -65,7 +69,6 @@ import {
 import { separatorOf } from '@/components/editor/editor-tab-labels'
 import { cn } from '@/lib/class-names'
 import { appCommandForKey, appShortcutLabel } from '@/lib/keymap-match'
-import { rendererPlatform } from '@/lib/shortcut-keys'
 import { useKeymapStore } from '@/state/keymap-store'
 import { useSearchStore } from '@/state/search-store'
 import { useEditorTabStore } from '@/state/editor-tab-store'
@@ -86,19 +89,8 @@ import {
 } from './file-tree-rows'
 import type { DirectoryEntry } from '../../../../shared/file-tree-api'
 
-/** A slow folder shows "Loading…" after this; a fast one never flashes it. */
-const LOADING_DELAY_MS = 150
 /** Typed letters within this gap add up to one name prefix to jump to. */
 const TYPE_AHEAD_GAP_MS = 700
-
-const REVEAL_LABEL =
-  rendererPlatform === 'darwin'
-    ? 'Reveal in Finder'
-    : /Windows/.test(navigator.userAgent)
-      ? 'Show in Explorer'
-      : 'Show in File Manager'
-
-const DELETE_LABEL = rendererPlatform === 'darwin' ? '⌘⌫' : 'Delete'
 
 /** headless-tree's hidden top item, whose children are the workspace roots. */
 const TREE_ID = '\0tree'
@@ -114,9 +106,6 @@ const TREE_ROW: Row = {
 
 /** Loading and Empty rows only say how a folder is; keys and selection pass them by. */
 const isNavigable = (row: Row): boolean => row.type !== 'loading' && row.type !== 'empty'
-
-const indent = (depth: number, extra = 1): string =>
-  `calc(${depth} * var(--file-tree-indent) + var(--spacing) * ${extra})`
 
 const isTruncated = (element: HTMLElement | null): boolean =>
   element !== null && element.scrollWidth > element.clientWidth
@@ -230,14 +219,11 @@ function TreeRow({
       aria-description={description}
       data-ignored={dimmed || undefined}
       className={cn(
-        'type-tree-row flex h-tree-row shrink-0 cursor-default items-center gap-1 rounded-component pr-2.5 outline-none select-none data-[state=open]:ring-1 data-[state=open]:ring-ring data-[state=open]:ring-inset',
-        dimmed && 'text-file-ignored',
-        // As in JetBrains trees: the selection takes the accent while the tree has focus.
-        selected
-          ? 'bg-selection-inactive group-focus-within/tree:bg-selection group-focus-within/tree:text-selection-foreground'
-          : 'hover:bg-row-hover focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-inset'
+        treeRowClass(selected),
+        'data-[state=open]:ring-1 data-[state=open]:ring-ring data-[state=open]:ring-inset',
+        dimmed && 'text-file-ignored'
       )}
-      style={{ paddingLeft: indent(row.depth) }}
+      style={{ paddingLeft: treeIndent(row.depth) }}
       onDoubleClick={onOpen}
       onContextMenu={onContextMenu}
     >
@@ -305,58 +291,6 @@ function ReloadItem({ path }: { path: string }): React.JSX.Element {
       Reload from Disk
     </ContextMenuItem>
   )
-}
-
-/** Copy Path, Copy Relative Path (below a root only) and reveal in the system file manager. */
-function PathItems({ path, relative }: { path: string; relative: boolean }): React.JSX.Element {
-  const copyPath = useFileTreeStore((state) => state.copyPath)
-  const reveal = useFileTreeStore((state) => state.reveal)
-  const keymap = useKeymapStore((state) => state.shell)
-  return (
-    <>
-      <ContextMenuItem onSelect={() => copyPath(path, 'absolute')}>
-        <Copy aria-hidden />
-        Copy Path
-        <ContextMenuShortcut>{appShortcutLabel(keymap, 'copy-absolute-path')}</ContextMenuShortcut>
-      </ContextMenuItem>
-      {relative ? (
-        <ContextMenuItem onSelect={() => copyPath(path, 'relative')}>
-          <CopySlash aria-hidden />
-          Copy Relative Path
-          <ContextMenuShortcut>
-            {appShortcutLabel(keymap, 'copy-relative-path')}
-          </ContextMenuShortcut>
-        </ContextMenuItem>
-      ) : null}
-      <ContextMenuItem onSelect={() => reveal(path)}>
-        <FolderOpen aria-hidden />
-        {REVEAL_LABEL}
-      </ContextMenuItem>
-    </>
-  )
-}
-
-/**
- * A menu action that runs once the menu has closed, keeping focus from returning to the row:
- * the search box or name field it moves focus to keeps it.
- */
-function useAfterMenu(): {
-  choose: (action: () => void) => void
-  onCloseAutoFocus: (event: Event) => void
-} {
-  const chosen = useRef<(() => void) | null>(null)
-  return {
-    choose: (action) => {
-      chosen.current = action
-    },
-    onCloseAutoFocus: (event) => {
-      const action = chosen.current
-      if (!action) return
-      event.preventDefault()
-      chosen.current = null
-      action()
-    }
-  }
 }
 
 /** New File… and New Folder…, creating in `folder`, once the menu has closed. */
@@ -450,7 +384,7 @@ function RootRow({
               <ContextMenuSeparator />
               <FindInFolderItem onSelect={() => afterMenu.choose(state.onFindInFolder)} />
               <ContextMenuSeparator />
-              <PathItems path={root.path} relative={false} />
+              <PathMenuItems path={root.path} relative={false} />
               <ContextMenuSeparator />
               <ReloadItem path={root.path} />
             </>
@@ -506,7 +440,7 @@ function WorktreeRow({
           <ContextMenuSeparator />
           <FindInFolderItem onSelect={() => afterMenu.choose(state.onFindInFolder)} />
           <ContextMenuSeparator />
-          <PathItems path={worktree.path} relative={false} />
+          <PathMenuItems path={worktree.path} relative={false} />
           <ContextMenuSeparator />
           <ReloadItem path={worktree.path} />
         </OpenTerminalMenuContent>
@@ -610,7 +544,7 @@ function EntryRow({
               <ContextMenuSeparator />
             </>
           ) : null}
-          <PathItems path={entry.path} relative />
+          <PathMenuItems path={entry.path} relative />
           {directory ? (
             <>
               <ContextMenuSeparator />
@@ -682,12 +616,7 @@ function StatusRow({
   loading: boolean
   onlyIgnored: boolean
 }): React.JSX.Element {
-  const [shown, setShown] = useState(!loading)
-  useEffect(() => {
-    if (shown) return undefined
-    const timer = setTimeout(() => setShown(true), LOADING_DELAY_MS)
-    return () => clearTimeout(timer)
-  }, [shown])
+  const shown = useLoadingShown(loading)
   const text = loading ? 'Loading…' : onlyIgnored ? 'Only ignored files' : 'Empty'
   return (
     <div
@@ -698,57 +627,10 @@ function StatusRow({
       aria-selected={false}
       onClick={undefined}
       className="type-hint flex h-tree-row shrink-0 items-center select-none"
-      style={{ paddingLeft: indent(row.depth, 6) }}
+      style={{ paddingLeft: treeIndent(row.depth, 6) }}
     >
       {shown ? text : null}
     </div>
-  )
-}
-
-/** Confirms moving entries to the system trash, naming them. */
-function DeleteDialog({
-  entries,
-  onClose
-}: {
-  entries: DirectoryEntry[]
-  onClose: () => void
-}): React.JSX.Element {
-  const trash = useFileTreeStore((state) => state.trash)
-  const [first] = entries
-  const one = entries.length === 1
-  const hasFolder = entries.some((entry) => entry.kind === 'directory')
-  return (
-    <AlertDialog open onOpenChange={(open) => !open && onClose()}>
-      <AlertDialogContent>
-        <AlertDialogTitle>
-          {one && first
-            ? `Delete ${first.kind === 'directory' ? 'folder' : 'file'} "${first.name}"?`
-            : `Delete ${entries.length} items?`}
-        </AlertDialogTitle>
-        <AlertDialogDescription>
-          {`${one ? 'It moves' : 'They move'} to the system trash${hasFolder ? ', folders with everything in them' : ''}, and can be restored from there.`}
-        </AlertDialogDescription>
-        {one ? null : (
-          <ul aria-label="Items to delete" className="type-hint max-h-40 overflow-y-auto">
-            {entries.map((entry) => (
-              <li key={entry.path} className="truncate">
-                {entry.name}
-              </li>
-            ))}
-          </ul>
-        )}
-        <AlertDialogFooter>
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
-          <AlertDialogAction
-            primary
-            autoFocus
-            onClick={() => trash(entries.map((entry) => entry.path))}
-          >
-            Move to Trash
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
   )
 }
 
@@ -839,44 +721,6 @@ function CreateDialog({
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
-  )
-}
-
-function HeaderButton({
-  label,
-  pressed,
-  disabled = false,
-  onClick,
-  tip,
-  children
-}: {
-  label: string
-  pressed?: boolean
-  disabled?: boolean
-  onClick: () => void
-  tip?: ReactNode
-  children: ReactNode
-}): React.JSX.Element {
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <button
-          type="button"
-          aria-label={label}
-          aria-pressed={pressed}
-          disabled={disabled}
-          onClick={onClick}
-          className={cn(
-            'flex size-icon-button items-center justify-center rounded-button text-muted-foreground hover:bg-hover hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none',
-            pressed && 'bg-selection-inactive text-foreground',
-            disabled && 'pointer-events-none opacity-40'
-          )}
-        >
-          {children}
-        </button>
-      </TooltipTrigger>
-      <TooltipContent side="bottom">{tip ?? label}</TooltipContent>
-    </Tooltip>
   )
 }
 
@@ -1109,10 +953,7 @@ export function FilesPanel(): React.JSX.Element {
       return
     }
     const plain = !event.ctrlKey && !event.metaKey && !event.altKey
-    const deleteKey =
-      (event.key === 'Delete' && plain) ||
-      (rendererPlatform === 'darwin' && event.metaKey && event.key === 'Backspace')
-    if (deleteKey) {
+    if (isDeleteKey(event)) {
       event.preventDefault()
       askDelete(item)
       return
@@ -1237,7 +1078,7 @@ export function FilesPanel(): React.JSX.Element {
     <>
       <div className="flex h-panel-header shrink-0 items-center gap-1 pt-1 pr-2 pl-4">
         <h2 className="type-panel-title flex-1 truncate">Files</h2>
-        <HeaderButton
+        <PanelHeaderButton
           label="Select Opened File"
           disabled={!canSelectOpenedFile}
           onClick={selectOpenedFile}
@@ -1251,11 +1092,11 @@ export function FilesPanel(): React.JSX.Element {
           }
         >
           <Crosshair className="size-4.5" strokeWidth={1.75} aria-hidden />
-        </HeaderButton>
-        <HeaderButton label="Collapse All" onClick={collapseAll}>
+        </PanelHeaderButton>
+        <PanelHeaderButton label="Collapse All" onClick={collapseAll}>
           <ChevronsDownUp className="size-4.5" strokeWidth={1.75} aria-hidden />
-        </HeaderButton>
-        <HeaderButton
+        </PanelHeaderButton>
+        <PanelHeaderButton
           label="Hide Ignored Files"
           pressed={hideIgnored}
           onClick={toggleHideIgnored}
@@ -1275,10 +1116,10 @@ export function FilesPanel(): React.JSX.Element {
           ) : (
             <Eye className="size-4.5" strokeWidth={1.75} aria-hidden />
           )}
-        </HeaderButton>
-        <HeaderButton label="Add Folder to Workspace" onClick={() => void addFolder()}>
+        </PanelHeaderButton>
+        <PanelHeaderButton label="Add Folder to Workspace" onClick={() => void addFolder()}>
           <FolderPlus className="size-4.5" strokeWidth={1.75} aria-hidden />
-        </HeaderButton>
+        </PanelHeaderButton>
         <HidePanelButton view="files" />
       </div>
       {problem ? <WorkspaceProblemBanner problem={problem} /> : null}
@@ -1294,7 +1135,7 @@ export function FilesPanel(): React.JSX.Element {
           {tree.getItems().map(renderItem)}
         </div>
       )}
-      {deleting ? <DeleteDialog entries={deleting} onClose={() => setDeleting(null)} /> : null}
+      {deleting ? <TrashDialog entries={deleting} onClose={() => setDeleting(null)} /> : null}
       {creating ? <CreateDialog {...creating} onClose={() => setCreating(null)} /> : null}
     </>
   )

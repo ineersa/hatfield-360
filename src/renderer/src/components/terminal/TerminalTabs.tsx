@@ -1,8 +1,8 @@
-import { Columns2, Plus, Rows2, SquareTerminal, X } from 'lucide-react'
+import { Columns2, Plus, Rows2, SquareTerminal } from 'lucide-react'
 import { ScrollingTabList } from '@/components/shell/ScrollingTabList'
+import { StripTab } from '@/components/shell/StripTab'
 import { AgentProviderIcon } from '@/components/icons/AgentProviderIcon'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
-import { cn } from '@/lib/class-names'
 import { terminalShortcutLabel } from '@/lib/keymap-match'
 import { useKeymapStore } from '@/state/keymap-store'
 import { useTerminalStore } from '@/state/terminal-store'
@@ -56,61 +56,33 @@ export function TerminalTabs({ hidden }: { hidden: boolean }): React.JSX.Element
       {/* The active tab covers the strip's bottom line, so it reads as one piece with its panes. */}
       <div className="flex h-tab-bar shrink-0 items-stretch bg-frame shadow-[inset_0_-1px_0_var(--separator)]">
         <ScrollingTabList label="Terminals" selected={activeTabId}>
-          {tabs.map((tab) => {
-            const active = tab.id === activeTabId
-            return (
-              <div
-                key={tab.id}
-                className={cn(
-                  'type-tab group flex max-w-60 min-w-0 shrink-0 items-stretch border-r border-separator select-none',
-                  active
-                    ? 'bg-island text-foreground'
-                    : 'text-muted-foreground hover:bg-tab-hover hover:text-foreground'
-                )}
-              >
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <button
-                      type="button"
-                      role="tab"
-                      aria-label={tab.title}
-                      aria-selected={active}
-                      onClick={() => activateTab(tab.id)}
-                      className="flex min-w-0 flex-1 items-center gap-2 pr-2 pl-3.5 leading-none outline-none focus-visible:underline"
-                    >
-                      {tab.agent ? (
-                        <AgentProviderIcon provider={tab.agent.provider} className="size-4" />
-                      ) : (
-                        <SquareTerminal className="size-4 shrink-0" aria-hidden />
-                      )}
-                      <span className="truncate">{tab.label}</span>
-                    </button>
-                  </TooltipTrigger>
-                  <TooltipContent side="bottom">
-                    <div>{tab.cwd ?? tab.title}</div>
-                    <div className="text-tooltip-muted-foreground">
-                      Previous tab: {terminalShortcutLabel(keymap, 'previous-tab')}
-                      {' · '}
-                      Next tab: {terminalShortcutLabel(keymap, 'next-tab')}
-                    </div>
-                  </TooltipContent>
-                </Tooltip>
-                <button
-                  type="button"
-                  aria-label={`Close ${tab.title}`}
-                  onClick={() => closeTab(tab.id)}
-                  className={cn(
-                    'group/close flex shrink-0 items-center pr-2 text-muted-foreground hover:text-foreground focus-visible:opacity-100',
-                    active ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
-                  )}
-                >
-                  <span className="flex size-5 items-center justify-center rounded-button group-hover/close:bg-hover">
-                    <X className="size-3.5" aria-hidden />
-                  </span>
-                </button>
-              </div>
-            )
-          })}
+          {tabs.map((tab) => (
+            <StripTab
+              key={tab.id}
+              title={tab.title}
+              label={tab.label}
+              active={tab.id === activeTabId}
+              icon={
+                tab.agent ? (
+                  <AgentProviderIcon provider={tab.agent.provider} className="size-4" />
+                ) : (
+                  <SquareTerminal className="size-4 shrink-0" aria-hidden />
+                )
+              }
+              tip={
+                <>
+                  <div>{tab.cwd ?? tab.title}</div>
+                  <div className="text-tooltip-muted-foreground">
+                    Previous tab: {terminalShortcutLabel(keymap, 'previous-tab')}
+                    {' · '}
+                    Next tab: {terminalShortcutLabel(keymap, 'next-tab')}
+                  </div>
+                </>
+              }
+              onActivate={() => activateTab(tab.id)}
+              onClose={() => closeTab(tab.id)}
+            />
+          ))}
         </ScrollingTabList>
         <div className="flex flex-1 items-center gap-0.5 px-2">
           <StripCommand command="new-terminal" label="New Terminal" icon={Plus} />

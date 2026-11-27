@@ -11,8 +11,13 @@ const presentFolders = (folders: WorkspaceFolder[]): string[] =>
     .filter((folder) => folder.kind === 'project' && !folder.missing)
     .map((folder) => folder.path)
 
+let loaded: Promise<void> = Promise.resolve()
+
+/** Settles once the open workspace's worktrees have first been listed. */
+export const worktreesListed = (): Promise<void> => loaded
+
 export function registerWorktreeIpc(): void {
-  const loaded = workspaceStore
+  loaded = workspaceStore
     .view()
     .then((view) => worktreeStore.setFolders(presentFolders(view.folders)))
     .catch((error: unknown) => console.error('Listing worktrees failed:', error))

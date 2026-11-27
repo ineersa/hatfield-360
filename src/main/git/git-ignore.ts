@@ -37,3 +37,14 @@ export async function ignoredPaths(folder: string): Promise<string[]> {
     return []
   }
 }
+
+/**
+ * A .gitignore line matching only the file at `path` (repository-relative, `/`-separated): anchored
+ * by a leading `/`, which also keeps a `#` or `!` in the name from starting a comment or negation,
+ * with glob characters, backslashes and trailing spaces escaped.
+ */
+export function anchoredIgnorePattern(path: string): string {
+  if (/[\r\n]/.test(path)) throw new Error(`${path} can't be written to .gitignore.`)
+  const escaped = path.replace(/[\\*?[]/g, (char) => `\\${char}`)
+  return `/${escaped.replace(/ +$/, (spaces) => '\\ '.repeat(spaces.length))}`
+}

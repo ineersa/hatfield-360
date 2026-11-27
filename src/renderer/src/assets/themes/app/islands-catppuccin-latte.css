@@ -85,6 +85,13 @@
   --info: #8839ef;
   --info-background: #f7f8ff;
   --info-border: #bdd3ff;
+  /* Changed files: FILESTATUS_* of editor/catppuccin-latte.json, adjusted where needed to read at 4.5:1 on island and inactive selection. */
+  --vcs-modified: #0a50db; /* #1e66f5 darkened for 4.5:1 */
+  --vcs-added: #2b6c1d; /* #40a02b darkened for 4.5:1 */
+  --vcs-deleted: #575d6f; /* #acb0be darkened for 4.5:1 */
+  --vcs-renamed: #006868; /* #007c7c darkened for 4.5:1 */
+  --vcs-untracked: #a13d02; /* #fc7222 darkened for 4.5:1 */
+  --vcs-conflicted: #a23c01; /* #fe640b darkened for 4.5:1 */
   --scrollbar-thumb: #ccd0da;
   --scrollbar-thumb-hover: #bcc0cc;
   --island-radius: 10px;
