@@ -1,4 +1,5 @@
 import type { McpServer, NewSessionRequest } from '@agentclientprotocol/sdk/unstable'
+import { COMMIT_MESSAGE_SYSTEM_PROMPT } from '../git/commit-message-context'
 
 /** Claude Code's tools a chat may use; the preset's subagents, web, todo and skill tools are left out. */
 const CHAT_TOOLS = ['Read', 'Grep', 'Glob', 'Bash', 'Edit', 'Write'] as const
@@ -37,8 +38,11 @@ type SessionSetup = {
   /** The workspace map file's text, or empty when there is none. */
   instructions: string
   mcpServers: McpServer[]
-  /** The map turn runs read-only, without the chat's prompt or tools. */
-  purpose: 'chat' | 'map'
+  /**
+   * The map turn runs read-only, without the chat's prompt or tools. A commit message has no
+   * built-in tool and a short prompt of its own in place of Claude Code's, so its turn starts fast.
+   */
+  purpose: 'chat' | 'map' | 'commit-message'
 }
 
 /**
@@ -52,6 +56,7 @@ export function newSessionRequest({
   mcpServers,
   purpose
 }: SessionSetup): NewSessionRequest {
+  const tools = purpose === 'chat' ? [...CHAT_TOOLS] : purpose === 'map' ? [...MAP_TOOLS] : []
   const append =
     purpose === 'chat'
       ? [CHAT_PROMPT, instructions ? `# Workspace instructions\n\n${instructions}` : '']
@@ -63,11 +68,15 @@ export function newSessionRequest({
     additionalDirectories,
     mcpServers,
     _meta: {
-      ...(append ? { systemPrompt: { append } } : {}),
+      ...(purpose === 'commit-message'
+        ? { systemPrompt: COMMIT_MESSAGE_SYSTEM_PROMPT }
+        : append
+          ? { systemPrompt: { append } }
+          : {}),
       claudeCode: {
         options: {
           persistSession: false,
-          tools: purpose === 'chat' ? [...CHAT_TOOLS] : [...MAP_TOOLS],
+          tools,
           strictMcpConfig: true,
           settingSources: [],
           // Without this Claude Code keeps a memory folder under ~/.claude/projects.

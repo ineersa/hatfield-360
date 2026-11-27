@@ -9,6 +9,8 @@ import {
 import { isPlainObject } from '../../shared/plain-object'
 import { AGENT_SOUND_IDS } from '../../shared/agent-sound-catalog'
 import {
+  COMMIT_MESSAGE_INSTRUCTIONS_LIMIT,
+  COMMIT_MESSAGE_PROVIDERS,
   DEFAULT_SETTINGS,
   FONT_SIZE_RANGE,
   ICON_THEMES,
@@ -142,6 +144,13 @@ const CHECKS: { [K in SettingKey]: (value: unknown) => Checked<Settings[K]> } = 
   'agents.claude': agentProfile,
   'chat.model': agentOptionId,
   'chat.effort': agentOptionId,
+  'git.commitMessage.provider': oneOf(COMMIT_MESSAGE_PROVIDERS.map(({ value }) => value)),
+  'git.commitMessage.model': agentOptionId,
+  'git.commitMessage.effort': agentOptionId,
+  'git.commitMessage.instructions': (value) =>
+    typeof value === 'string' && value.length <= COMMIT_MESSAGE_INSTRUCTIONS_LIMIT
+      ? { value }
+      : { problem: `must be text of at most ${COMMIT_MESSAGE_INSTRUCTIONS_LIMIT} characters` },
   'memory.librarianUrl': librarianUrl,
   'memory.librarianTimeoutSeconds': (value) => {
     const checked = inRange(LIBRARIAN_TIMEOUT_RANGE)(value)

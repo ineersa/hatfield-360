@@ -13,6 +13,14 @@ export type Settings = {
   'chat.model': string
   /** The workspace chat's reasoning effort for a new chat: the last one chosen in the panel. */
   'chat.effort': string
+  /** The agent that writes commit messages; only Claude Code for now. */
+  'git.commitMessage.provider': CommitMessageProvider
+  /** The model the commit message agent runs on. */
+  'git.commitMessage.model': string
+  /** The commit message agent's reasoning effort. */
+  'git.commitMessage.effort': string
+  /** The user's own rules for commit messages, added to the agent's prompt. */
+  'git.commitMessage.instructions': string
   /** Librarian's full HTTP(S) MCP endpoint for memory search; empty turns memory search off. */
   'memory.librarianUrl': string
   /** How long one memory search or recall may take, in seconds. */
@@ -47,6 +55,31 @@ export type Settings = {
 
 export type SettingKey = keyof Settings
 
+/** An ACP agent that can write commit messages, each launched from its own profile in Settings. */
+export type CommitMessageProvider = 'claude'
+
+export const COMMIT_MESSAGE_PROVIDERS: readonly { value: CommitMessageProvider; name: string }[] = [
+  { value: 'claude', name: 'Claude Code' }
+]
+
+/** Claude Code's model aliases, which follow its newest models. */
+export const COMMIT_MESSAGE_MODELS: readonly { value: string; name: string }[] = [
+  { value: 'haiku', name: 'Haiku (fastest)' },
+  { value: 'sonnet', name: 'Sonnet' },
+  { value: 'opus', name: 'Opus' },
+  { value: 'default', name: 'Claude Code default' }
+]
+
+export const COMMIT_MESSAGE_EFFORTS: readonly { value: string; name: string }[] = [
+  { value: 'low', name: 'Low (fastest)' },
+  { value: 'medium', name: 'Medium' },
+  { value: 'high', name: 'High' },
+  { value: 'default', name: 'Model default' }
+]
+
+/** Room for a page of rules, not a document. */
+export const COMMIT_MESSAGE_INSTRUCTIONS_LIMIT = 4000
+
 export type IconTheme = 'catppuccin' | 'lucide'
 
 export const ICON_THEMES: readonly IconTheme[] = ['catppuccin', 'lucide']
@@ -73,6 +106,10 @@ export const DEFAULT_SETTINGS: Settings = {
   'agents.claude': { executable: 'claude', args: [] },
   'chat.model': 'haiku',
   'chat.effort': 'medium',
+  'git.commitMessage.provider': 'claude',
+  'git.commitMessage.model': 'haiku',
+  'git.commitMessage.effort': 'low',
+  'git.commitMessage.instructions': '',
   // Librarian's standard local endpoint; empty turns memory search off.
   'memory.librarianUrl': 'http://127.0.0.1:8093/_mcp',
   'memory.librarianTimeoutSeconds': 30,

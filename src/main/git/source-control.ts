@@ -31,7 +31,7 @@ const run = (root: string, args: string[], input?: string, signal?: AbortSignal)
 const query = (root: string, args: string[]): Promise<GitRun> =>
   runGitWithOutput(root, args, { parsed: true })
 
-async function runOrThrow(root: string, args: string[]): Promise<string> {
+export async function runOrThrow(root: string, args: string[]): Promise<string> {
   const result = await query(root, args)
   if (result.exitCode !== 0) throw new Error(result.output.trim() || `git ${args[0]} failed`)
   return result.stdout
@@ -190,7 +190,7 @@ export async function readWorkingTreeStatus(root: string): Promise<WorkingTreeSt
  * The request's paths relative to `root` with `/` separators, refusing any that isn't a string
  * naming something inside it.
  */
-function repositoryPaths(root: string, paths: unknown): string[] {
+export function repositoryPaths(root: string, paths: unknown): string[] {
   if (!Array.isArray(paths)) throw new Error('Invalid file list.')
   if (paths.length > MAX_PATHS)
     throw new Error(
@@ -223,11 +223,11 @@ async function changedFiles(root: string, paths: string[]): Promise<ChangedFile[
 const bothSides = (file: ChangedFile): string[] =>
   file.originalPath === null ? [file.path] : [file.path, file.originalPath]
 
-/** What the Commit panel's changes are relative to: HEAD, or the empty tree before the first commit. */
-export async function diffBase(root: string): Promise<string> {
-  const head = await query(root, ['rev-parse', '--verify', '-q', 'HEAD'])
+/** What changes are relative to: `revision` (HEAD for the Commit panel), or the empty tree when it does not exist. */
+export async function diffBase(root: string, revision = 'HEAD'): Promise<string> {
+  const head = await query(root, ['rev-parse', '--verify', '-q', revision])
   return head.exitCode === 0
-    ? 'HEAD'
+    ? revision
     : (await runOrThrow(root, ['hash-object', '-t', 'tree', devNull])).trim()
 }
 

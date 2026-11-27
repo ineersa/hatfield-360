@@ -30,7 +30,7 @@ import { handleTrusted } from './trusted-ipc'
 import { worktreesListed } from './worktree-ipc'
 
 /** The workspace working tree a request names, once the worktrees have been listed. */
-async function workingTree(root: unknown) {
+export async function workingTree(root: unknown) {
   await worktreesListed()
   return workingTreeOf(worktreeStore.view(), root)
 }
