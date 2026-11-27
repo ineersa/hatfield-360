@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { DEFAULT_SETTINGS, type Settings } from '../../shared/settings-api'
-import { parseSettings, withSetting } from './settings-document'
+import { checkSettingValue, parseSettings, withSetting } from './settings-document'
 
 const lastGood: Settings = {
   ...DEFAULT_SETTINGS,
@@ -8,6 +8,8 @@ const lastGood: Settings = {
   'editor.fontFamily': 'Fira Code',
   'workbench.iconTheme': 'lucide'
 }
+
+const refused = (profile: unknown) => () => checkSettingValue('agents.claude', profile)
 
 describe('parseSettings', () => {
   it('uses defaults for an empty file and for keys the file leaves out', () => {
@@ -87,9 +89,46 @@ describe('parseSettings', () => {
     const parsed = parseSettings(text, lastGood)
     expect(parsed.values['agents.hatfield']).toEqual({
       executable: 'hatfield-safe',
-      args: ['--label', ' local dev ']
+      args: ['--label', ' local dev '],
+      env: {}
     })
     expect(parsed.problems).toEqual([])
+  })
+
+  it('accepts program names, paths with spaces, arguments and environment variables', () => {
+    for (const profile of [
+      { executable: '/usr/local/bin/claude', args: [] },
+      { executable: '/Applications/Some App/claude', args: [] },
+      { executable: '~/bin/hatfield', args: [] },
+      { executable: 'php', args: ['~/bin/hatfield.phar'] },
+      { executable: 'caffeinate', args: ['-i', 'claude'], env: { FOO: 'bar', _X1: '' } }
+    ]) {
+      expect(checkSettingValue('agents.claude', profile)).toEqual({ env: {}, ...profile })
+    }
+  })
+
+  it('refuses a whole command line or an assignment in the executable, and reserved or bad variables', () => {
+    expect(refused({ executable: 'caffeinate -i claude', args: [] })).toThrow(
+      '"agents.claude" executable must be one program: put caffeinate here and ["-i","claude"] in Arguments.'
+    )
+    expect(refused({ executable: 'php ~/bin/hatfield.phar', args: [] })).toThrow(
+      'put php here and ["~/bin/hatfield.phar"] in Arguments'
+    )
+    expect(refused({ executable: 'FOO=bar claude', args: [] })).toThrow(
+      'must be a program, not a variable assignment: put FOO in Environment'
+    )
+    expect(refused({ executable: 'claude', args: [], env: { 'NOT-A-NAME': 'x' } })).toThrow(
+      '"NOT-A-NAME" is not an environment variable name'
+    )
+    expect(refused({ executable: 'claude', args: [], env: { H360_STATUS_TOKEN: 'x' } })).toThrow(
+      '"H360_STATUS_TOKEN" is set by Hatfield 360 itself'
+    )
+    expect(refused({ executable: 'claude', args: [], env: { FOO: 'two\nlines' } })).toThrow(
+      'env "FOO" must be text on one line'
+    )
+    expect(refused({ executable: 'claude', args: [], env: ['FOO=bar'] })).toThrow(
+      'an env object of strings'
+    )
   })
 
   it('keeps the last good settings when the file is not valid JSON or not an object', () => {
@@ -219,19 +258,40 @@ describe('withSetting', () => {
 
   it('removes a saved profile when independently entered values match the default', () => {
     const custom = '{ "agents.hatfield": { "executable": "hatfield-safe", "args": [] } }'
-    const updated = withSetting(custom, 'agents.hatfield', { executable: 'hatfield', args: [] })
+    const updated = withSetting(custom, 'agents.hatfield', {
+      executable: 'hatfield',
+      args: [],
+      env: {}
+    })
     expect(updated).not.toContain('agents.hatfield')
+  })
+
+  it('writes an environment only when the profile sets one', () => {
+    const plain = withSetting('{}', 'agents.claude', { executable: 'claude-x', args: [], env: {} })
+    expect(plain).not.toContain('"env"')
+    const withEnv = withSetting('{}', 'agents.claude', {
+      executable: 'claude',
+      args: [],
+      env: { FOO: 'bar' }
+    })
+    expect(parseSettings(withEnv, lastGood).values['agents.claude']).toEqual({
+      executable: 'claude',
+      args: [],
+      env: { FOO: 'bar' }
+    })
   })
 
   it('keeps literal arguments, in order, when saving the default executable', () => {
     const updated = withSetting('{}', 'agents.claude', {
       executable: 'claude',
-      args: ['--flag', ' literal ']
+      args: ['--flag', ' literal '],
+      env: {}
     })
     expect(updated).toContain('"agents.claude"')
     expect(parseSettings(updated, lastGood).values['agents.claude']).toEqual({
       executable: 'claude',
-      args: ['--flag', ' literal ']
+      args: ['--flag', ' literal '],
+      env: {}
     })
   })
 

@@ -102,8 +102,8 @@ const MONOSPACE_FONTS =
   "'JetBrains Mono Variable', 'JetBrains Mono', 'Cascadia Code', 'SF Mono', Menlo, Consolas, 'DejaVu Sans Mono', monospace"
 
 export const DEFAULT_SETTINGS: Settings = {
-  'agents.hatfield': { executable: 'hatfield', args: [] },
-  'agents.claude': { executable: 'claude', args: [] },
+  'agents.hatfield': { executable: 'hatfield', args: [], env: {} },
+  'agents.claude': { executable: 'claude', args: [], env: {} },
   'chat.model': 'haiku',
   'chat.effort': 'medium',
   'git.commitMessage.provider': 'claude',

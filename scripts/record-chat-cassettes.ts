@@ -215,7 +215,7 @@ async function chatSession(
   await chat.exited()
 }
 
-const claude = await resolveClaude({ executable: 'claude', args: [] }, root)
+const claude = await resolveClaude({ executable: 'claude' }, root)
 const only = process.argv.slice(2)
 const sessions: [string, Script | 'commit-message'][] = [
   ...Object.entries(SCRIPTS),

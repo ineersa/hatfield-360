@@ -7,7 +7,7 @@ import { resolveInsideRoots } from '../files/path-containment'
 import { settingsStore } from '../settings/settings-store'
 import { workspaceStore } from '../workspace/workspace-store'
 import { ChatAgentSession } from './chat-agent'
-import { agentScriptOverridden, chatAgentCommand, resolveClaude } from './chat-agent-launch'
+import { claudeAgentCommand } from './chat-agent-launch'
 import { WorkspaceMapFile } from './workspace-map-file'
 
 const isFile = (path: string): Promise<boolean> =>
@@ -36,10 +36,12 @@ class ChatAgentHost {
     const { values } = await settingsStore.view()
     const session = new ChatAgentSession(
       {
-        command: async () =>
-          chatAgentCommand(
-            agentScriptOverridden() ? 'claude' : await resolveClaude(values['agents.claude'], cwd),
-            app.getVersion()
+        command: () =>
+          claudeAgentCommand(
+            values['agents.claude'],
+            cwd,
+            app.getVersion(),
+            app.getPath('userData')
           ),
         cwd,
         additionalDirectories: folders.filter((folder) => folder !== cwd),

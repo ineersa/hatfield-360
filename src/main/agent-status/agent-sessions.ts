@@ -338,13 +338,16 @@ export function trackAgentSessions(
         id: terminalId,
         project,
         ...profile,
-        env: credential
-          ? {
-              H360_STATUS_ENDPOINT: credential.endpoint,
-              H360_STATUS_TOKEN: credential.token,
-              H360_STATUS_LAUNCH_ID: credential.launchId
-            }
-          : {},
+        env: {
+          ...profile.env,
+          ...(credential
+            ? {
+                H360_STATUS_ENDPOINT: credential.endpoint,
+                H360_STATUS_TOKEN: credential.token,
+                H360_STATUS_LAUNCH_ID: credential.launchId
+              }
+            : {})
+        },
         onClosing: () => policy.beginClosing(),
         onExit: () => {
           release()
