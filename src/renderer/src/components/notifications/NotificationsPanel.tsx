@@ -1,8 +1,5 @@
 import { useId, useRef } from 'react'
-import {
-  SIDE_PANEL_HANDLE_WIDTH,
-  SidePanelResizeHandle
-} from '@/components/shell/SidePanelResizeHandle'
+import { SIDE_PANEL_HANDLE_WIDTH, PanelResizeHandle } from '@/components/shell/PanelResizeHandle'
 import { type AppNotification, useNotificationStore } from '@/state/notification-store'
 import { SIDE_PANEL_MIN_WIDTH, useShellLayoutStore } from '@/state/shell-layout-store'
 import { TextContextMenu } from '@/components/text-menu/TextContextMenu'
@@ -58,13 +55,13 @@ export function NotificationsPanel(): React.JSX.Element {
     )
   return (
     <>
-      <SidePanelResizeHandle
+      <PanelResizeHandle
         label="Resize Notifications panel"
-        width={width}
-        renderedWidth={() => aside.current?.getBoundingClientRect().width ?? width}
-        minWidth={SIDE_PANEL_MIN_WIDTH}
-        maxWidth={maxWidth}
-        onWidthChange={(next) => setWidth(Math.min(next, maxWidth()))}
+        size={width}
+        renderedSize={() => aside.current?.getBoundingClientRect().width ?? width}
+        minSize={SIDE_PANEL_MIN_WIDTH}
+        maxSize={maxWidth}
+        onSizeChange={(next) => setWidth(Math.min(next, maxWidth()))}
         panelSide="right"
       />
       <aside

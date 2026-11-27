@@ -33,10 +33,7 @@ import { Reasoning, ReasoningContent, ReasoningTrigger } from '@/components/ai-e
 import { Shimmer } from '@/components/ai-elements/shimmer'
 import { Tool, ToolContent, ToolHeader, ToolInput, ToolOutput } from '@/components/ai-elements/tool'
 import type { ToolState } from '@/components/ai-elements/ui-parts'
-import {
-  SIDE_PANEL_HANDLE_WIDTH,
-  SidePanelResizeHandle
-} from '@/components/shell/SidePanelResizeHandle'
+import { SIDE_PANEL_HANDLE_WIDTH, PanelResizeHandle } from '@/components/shell/PanelResizeHandle'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/class-names'
@@ -271,13 +268,13 @@ export function ChatPanel(): React.JSX.Element {
     )
   return (
     <>
-      <SidePanelResizeHandle
+      <PanelResizeHandle
         label="Resize Chat panel"
-        width={width}
-        renderedWidth={() => aside.current?.getBoundingClientRect().width ?? width}
-        minWidth={SIDE_PANEL_MIN_WIDTH}
-        maxWidth={maxWidth}
-        onWidthChange={(next) => setWidth(Math.min(next, maxWidth()))}
+        size={width}
+        renderedSize={() => aside.current?.getBoundingClientRect().width ?? width}
+        minSize={SIDE_PANEL_MIN_WIDTH}
+        maxSize={maxWidth}
+        onSizeChange={(next) => setWidth(Math.min(next, maxWidth()))}
         panelSide="right"
       />
       <aside

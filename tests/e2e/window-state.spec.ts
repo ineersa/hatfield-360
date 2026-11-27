@@ -65,7 +65,8 @@ test('the window size, position and layout come back after a restart', async () 
           git: { width: 300, collapsed: false }
         },
         notificationsWidth: 380,
-        chatWidth: 440
+        chatWidth: 440,
+        commitMessageHeight: 80
       }
     })
 
