@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -14,6 +14,49 @@ import { type BranchDialog, useSourceControlStore } from '@/state/source-control
 
 const GIT_OUTPUT =
   'type-hint max-h-40 w-full overflow-auto rounded-component border border-border p-2 font-mono break-words whitespace-pre-wrap text-foreground select-text'
+
+function SwitchBranchDialog({
+  dialog
+}: {
+  dialog: Extract<BranchDialog, { kind: 'switch' }>
+}): React.JSX.Element {
+  const switchBranch = useSourceControlStore((state) => state.switchBranch)
+  const close = useSourceControlStore((state) => state.closeBranchDialog)
+  const busy = useSourceControlStore((state) => state.running !== null)
+  const { group, target, plan } = dialog
+  const confirm = useRef<HTMLButtonElement>(null)
+  return (
+    <AlertDialog open onOpenChange={(open) => !open && close()}>
+      <AlertDialogContent
+        onOpenAutoFocus={(event) => {
+          // Switching changes nothing git can't undo, so Enter confirms it.
+          event.preventDefault()
+          confirm.current?.focus()
+        }}
+      >
+        <AlertDialogTitle>{`Switch to ${target.name}?`}</AlertDialogTitle>
+        <AlertDialogDescription asChild>
+          <ul className="flex flex-col gap-1.5">
+            {plan.map((line) => (
+              <li key={line}>{line}</li>
+            ))}
+          </ul>
+        </AlertDialogDescription>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogAction
+            ref={confirm}
+            primary
+            disabled={busy}
+            onClick={() => void switchBranch(group, target)}
+          >
+            Switch
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  )
+}
 
 function NewBranchDialog({
   dialog
@@ -41,7 +84,13 @@ function NewBranchDialog({
     <AlertDialog open onOpenChange={(open) => !open && close()}>
       <AlertDialogContent>
         <AlertDialogTitle>New Branch</AlertDialogTitle>
-        <AlertDialogDescription className="truncate">{`In ${dialog.group.name}, from ${from}`}</AlertDialogDescription>
+        <AlertDialogDescription>
+          {`Creates the branch in ${dialog.group.name} at ${from}${
+            switchTo
+              ? ', then checks it out; your local changes go with it.'
+              : `. ${dialog.group.branch === null ? 'The detached HEAD' : dialog.group.branch} stays checked out.`
+          }${dialog.start.kind === 'remote' ? ` It doesn't track ${dialog.start.name}.` : ''}`}
+        </AlertDialogDescription>
         <div className="flex flex-col gap-1.5">
           <Input
             aria-label="Branch name"
@@ -172,10 +221,14 @@ function DeleteBranchDialog({
   )
 }
 
-/** The New Branch or Delete Branch dialog the branch popup or a repository's menu asked for. */
+/** The Switch, New Branch or Delete Branch dialog the branch popup or a repository's menu asked for. */
 export function BranchDialogs(): React.JSX.Element | null {
   const dialog = useSourceControlStore((state) => state.branchDialog)
   if (dialog === null) return null
+  if (dialog.kind === 'switch')
+    return (
+      <SwitchBranchDialog key={`${dialog.group.root}\0${dialog.target.name}`} dialog={dialog} />
+    )
   return dialog.kind === 'new' ? (
     <NewBranchDialog key={dialog.group.root} dialog={dialog} />
   ) : (

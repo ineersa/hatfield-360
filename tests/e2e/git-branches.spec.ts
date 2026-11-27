@@ -11,6 +11,9 @@ const option = (page: Page, name: string) => options(page).filter({ hasText: nam
 const search = (page: Page) => popup(page).getByRole('combobox', { name: 'Search branches' })
 const openBranches = (page: Page) =>
   changes(page).getByRole('button', { name: 'Branches of app' }).click()
+/** The Switch dialog asking to confirm a switch to `name`. */
+const confirmSwitch = (page: Page, name: string) =>
+  page.getByRole('alertdialog', { name: `Switch to ${name}?` })
 const current = (repo: string): string => gitOutput(repo, 'branch', '--show-current')
 const branches = (repo: string): string[] =>
   gitOutput(repo, 'for-each-ref', '--format=%(refname:short)', 'refs/heads').split('\n')
@@ -51,14 +54,32 @@ test('the branch popup lists, filters and switches branches, and creates and del
         await saveScreenshot(page, 'git-branches')
         await search(page).fill('feat')
         await expect(options(page)).toHaveText(['feature'])
+        // Nothing switches until the dialog saying what will happen is confirmed.
         await page.keyboard.press('Enter')
         await expect(popup(page)).toHaveCount(0)
+        const toFeature = confirmSwitch(page, 'feature')
+        await expect(toFeature).toContainText('Checks out feature in app, leaving main.')
+        await expect(toFeature).toContainText('There are no local changes.')
+        await toFeature.getByRole('button', { name: 'Cancel' }).click()
+        expect(current(repo)).toBe('main')
+        await openBranches(page)
+        await search(page).fill('feat')
+        await page.keyboard.press('Enter')
+        await expect(toFeature.getByRole('button', { name: 'Switch' })).toBeFocused()
+        await page.keyboard.press('Enter')
+        await expect(toFeature).toHaveCount(0)
         await expect(app).toHaveAccessibleDescription('branch feature')
         expect(current(repo)).toBe('feature')
 
         // A remote branch becomes a local branch tracking it.
         await openBranches(page)
         await option(page, 'origin/shared').click()
+        const toShared = confirmSwitch(page, 'origin/shared')
+        await expect(toShared).toContainText(
+          'Creates the local branch shared at origin/shared, tracking it, and checks it out in app, leaving feature.'
+        )
+        await saveScreenshot(page, 'git-branch-switch')
+        await toShared.getByRole('button', { name: 'Switch' }).click()
         await expect(app).toHaveAccessibleDescription('branch shared')
         expect(gitOutput(repo, 'rev-parse', '--abbrev-ref', '@{upstream}')).toBe('origin/shared')
 
@@ -66,7 +87,12 @@ test('the branch popup lists, filters and switches branches, and creates and del
         await openBranches(page)
         await option(page, 'New Branch…').click()
         const dialog = page.getByRole('alertdialog', { name: 'New Branch' })
-        await expect(dialog).toContainText('In app, from the current branch, shared')
+        await expect(dialog).toContainText(
+          'Creates the branch in app at the current branch, shared, then checks it out'
+        )
+        await dialog.getByRole('checkbox', { name: 'Switch to it' }).uncheck()
+        await expect(dialog).toContainText('shared stays checked out.')
+        await dialog.getByRole('checkbox', { name: 'Switch to it' }).check()
         await dialog.getByRole('textbox', { name: 'Branch name' }).fill('main')
         await dialog.getByRole('button', { name: 'Create' }).click()
         await expect(dialog.getByRole('alert')).toHaveText('A branch named main already exists.')
@@ -82,7 +108,7 @@ test('the branch popup lists, filters and switches branches, and creates and del
         await page.keyboard.press('ArrowRight')
         const actions = popup(page).getByRole('listbox', { name: 'Actions for merged-work' })
         await expect(actions.getByRole('option')).toHaveText([
-          'Switch to merged-work',
+          'Switch to merged-work…',
           'New Branch from merged-work…',
           'Delete merged-work…'
         ])
@@ -146,6 +172,10 @@ test("a switch git refuses shows git's output and changes nothing; the repositor
         await expect(popup(page)).toContainText('HEAD is detached at')
         await search(page).fill('other')
         await page.keyboard.press('Enter')
+        const toOther = confirmSwitch(page, 'other')
+        await expect(toOther).toContainText(/leaving the detached HEAD at \w+\./)
+        await expect(toOther).toContainText('Your 1 changed file goes with you')
+        await toOther.getByRole('button', { name: 'Switch' }).click()
         await expect(
           page.getByRole('alert').filter({ hasText: 'Switch to other failed in app' })
         ).toContainText('a.txt')
@@ -156,6 +186,7 @@ test("a switch git refuses shows git's output and changes nothing; the repositor
         await openBranches(page)
         await search(page).fill('main')
         await page.keyboard.press('Enter')
+        await confirmSwitch(page, 'main').getByRole('button', { name: 'Switch' }).click()
         await expect(app).toHaveAccessibleDescription(/^branch main/)
         expect(current(repo)).toBe('main')
       },

@@ -38,8 +38,18 @@ export type SourceControlAction =
   | 'create-branch'
   | 'delete-branch'
 
-/** The New Branch or Delete Branch dialog, and what it last heard from main. */
+/** A branch to switch to: a local one, or a remote one through its local tracking branch. */
+export type SwitchTarget = { kind: 'local' | 'remote'; name: string }
+
+/** The Switch, New Branch or Delete Branch dialog, and what it last heard from main. */
 export type BranchDialog =
+  | {
+      kind: 'switch'
+      group: GitGroup
+      target: SwitchTarget
+      /** What switching does, one sentence a line, worked out from the branch list. */
+      plan: string[]
+    }
   | {
       kind: 'new'
       group: GitGroup
@@ -129,14 +139,13 @@ type SourceControlState = {
   branchesOpen: string | null
   branchDialog: BranchDialog | null
   openBranches: (root: string | null) => void
+  /** Asks to confirm a switch, saying what it will do. */
+  openSwitchBranch: (group: GitGroup, target: SwitchTarget, plan: string[]) => void
   openNewBranch: (group: GitGroup, start: BranchStart) => void
   openDeleteBranch: (group: GitGroup, name: string) => void
   closeBranchDialog: () => void
   /** Switches the working tree to a branch; a remote one through its local tracking branch. */
-  switchBranch: (
-    group: GitGroup,
-    branch: { kind: 'local' | 'remote'; name: string }
-  ) => Promise<void>
+  switchBranch: (group: GitGroup, branch: SwitchTarget) => Promise<void>
   /** Creates the New Branch dialog's branch; the dialog closes once it exists, else shows why not. */
   createBranch: (name: string, switchTo: boolean) => Promise<void>
   /** Deletes the Delete Branch dialog's branch; refused as unmerged, the dialog asks about forcing it. */
@@ -513,13 +522,15 @@ export const useSourceControlStore = create<SourceControlState>((set, get, store
     branchesOpen: null,
     branchDialog: null,
     openBranches: (root) => set({ branchesOpen: root }),
+    openSwitchBranch: (group, target, plan) =>
+      set({ branchesOpen: null, branchDialog: { kind: 'switch', group, target, plan } }),
     openNewBranch: (group, start) =>
       set({ branchesOpen: null, branchDialog: { kind: 'new', group, start, problem: null } }),
     openDeleteBranch: (group, name) =>
       set({ branchesOpen: null, branchDialog: { kind: 'delete', group, name, refused: null } }),
     closeBranchDialog: () => set({ branchDialog: null }),
     switchBranch: async (group, branch) => {
-      set({ branchesOpen: null })
+      set({ branchesOpen: null, branchDialog: null })
       await actOn('switch-branch', `Switch to ${branch.name}`, group, () =>
         window.desktop.switchBranch(group.root, branch)
       )

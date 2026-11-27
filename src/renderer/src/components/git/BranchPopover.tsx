@@ -71,29 +71,68 @@ function branchRows(list: BranchList, query: string): Row[] {
 const folderName = (path: string): string =>
   path.slice(path.replace(/[\\/]+$/, '').search(/[^\\/]*$/))
 
+const tracking = (branch: LocalBranch): string | null => {
+  if (branch.upstream === null) return null
+  if (branch.upstreamGone) return `It tracked ${branch.upstream}, which is gone from the remote.`
+  const counts = [
+    branch.ahead ? `${branch.ahead} not pushed` : null,
+    branch.behind ? `${branch.behind} not pulled` : null
+  ].filter((count) => count !== null)
+  return `It tracks ${branch.upstream}${counts.length > 0 ? ` (${counts.join(', ')})` : ', up to date'}.`
+}
+
+/** What switching to `choice` does, for the Switch dialog to say before anything runs. */
+function switchPlan(group: GitGroup, list: BranchList, choice: BranchChoice): string[] {
+  const from =
+    list.current === null ? `the detached HEAD at ${list.head ?? 'no commit'}` : list.current
+  const changes = group.files.length
+  const carried =
+    changes === 0
+      ? 'There are no local changes.'
+      : `Your ${changes} changed ${changes === 1 ? 'file goes' : 'files go'} with you; git refuses the switch, changing nothing, if one conflicts with the branch.`
+  if (choice.kind === 'local') {
+    const { branch } = choice
+    return [
+      `Checks out ${branch.name} in ${group.name}, leaving ${from}.`,
+      ...[tracking(branch)].filter((line) => line !== null),
+      carried
+    ]
+  }
+  const { branch } = choice
+  const tracker = list.local.find((local) => local.upstream === branch.name)
+  if (tracker !== undefined)
+    return [
+      `Checks out ${tracker.name}, the local branch tracking ${branch.name}, in ${group.name}, leaving ${from}.`,
+      ...[tracking(tracker)].filter((line) => line !== null),
+      carried
+    ]
+  const taken = list.local.some((local) => local.name === branch.branch)
+  return [
+    taken
+      ? `A local branch named ${branch.branch} already exists without tracking ${branch.name}: git will refuse. Use New Branch from ${branch.name}… for another name.`
+      : `Creates the local branch ${branch.branch} at ${branch.name}, tracking it, and checks it out in ${group.name}, leaving ${from}.`,
+    carried
+  ]
+}
+
 /** What can be done with a branch, the first being what choosing it does. */
-function branchActions(group: GitGroup, choice: BranchChoice): Action[] {
+function branchActions(group: GitGroup, list: BranchList, choice: BranchChoice): Action[] {
   const store = useSourceControlStore.getState()
   const { name } = choice.branch
   const newFrom: Action = {
     label: `New Branch from ${name}…`,
     run: () => store.openNewBranch(group, { kind: choice.kind, name })
   }
-  if (choice.kind === 'remote')
-    return [
-      {
-        label: `Switch to ${name}`,
-        run: () => void store.switchBranch(group, { kind: 'remote', name })
-      },
-      newFrom
-    ]
+  const switchTo: Action = {
+    label: `Switch to ${name}…`,
+    run: () =>
+      store.openSwitchBranch(group, { kind: choice.kind, name }, switchPlan(group, list, choice))
+  }
+  if (choice.kind === 'remote') return [switchTo, newFrom]
   const { current, worktree } = choice.branch
   if (current || worktree !== null) return [newFrom]
   return [
-    {
-      label: `Switch to ${name}`,
-      run: () => void store.switchBranch(group, { kind: 'local', name })
-    },
+    switchTo,
     newFrom,
     { label: `Delete ${name}…`, run: () => store.openDeleteBranch(group, name) }
   ]
@@ -204,7 +243,7 @@ function BranchesContent({ group }: { group: GitGroup }): React.JSX.Element {
   const rows = list === null ? [] : branchRows(list, query)
   const options = rows.filter((row) => row.kind !== 'heading')
   const index = Math.min(active, options.length - 1)
-  const actions = chosen === null ? [] : branchActions(group, chosen)
+  const actions = chosen === null || list === null ? [] : branchActions(group, list, chosen)
 
   const showActions = (choice: BranchChoice): void => {
     setChosen(choice)
@@ -223,7 +262,8 @@ function BranchesContent({ group }: { group: GitGroup }): React.JSX.Element {
     if (row.kind === 'new') store.openNewBranch(group, { kind: 'head' })
     else if (row.kind === 'local' && (row.branch.current || row.branch.worktree !== null))
       showActions(row)
-    else if (row.kind === 'local' || row.kind === 'remote') branchActions(group, row)[0]?.run()
+    else if ((row.kind === 'local' || row.kind === 'remote') && list !== null)
+      branchActions(group, list, row)[0]?.run()
   }
 
   const onSearchKey = (event: KeyboardEvent<HTMLInputElement>): void => {
