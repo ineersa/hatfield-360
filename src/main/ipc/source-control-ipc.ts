@@ -2,7 +2,13 @@ import type { WebContents } from 'electron'
 import { isPlainObject } from '../../shared/plain-object'
 import { BRANCH_CHANNELS } from '../../shared/branch-api'
 import { type GitOutcome, SOURCE_CONTROL_CHANNELS } from '../../shared/source-control-api'
-import { createBranch, deleteBranch, listBranches, switchBranch } from '../git/branches'
+import {
+  createBranch,
+  deleteBranch,
+  listBranches,
+  previewSwitch,
+  switchBranch
+} from '../git/branches'
 import { sourceControlStatus, workingTreeOf } from '../git/source-control-groups'
 import {
   abortOperation,
@@ -126,6 +132,10 @@ export function registerSourceControlIpc(): void {
 
   handleTrusted(BRANCH_CHANNELS.list, async (_event, root) =>
     listBranches((await workingTree(root)).root)
+  )
+
+  handleTrusted(BRANCH_CHANNELS.preview, async (_event, root, branch) =>
+    previewSwitch((await workingTree(root)).root, branch)
   )
 
   handleTrusted(BRANCH_CHANNELS.switch, (event, root, branch) =>

@@ -158,6 +158,8 @@ test("a switch git refuses shows git's output and changes nothing; the repositor
   git(repo, 'switch', '-q', '-c', 'other')
   await writeFile(join(repo, 'a.txt'), 'other\n')
   git(repo, 'commit', '-q', '-am', 'Change a on other')
+  // origin/other's name is taken by a local branch that doesn't track it.
+  git(repo, 'push', '-q', 'origin', 'other')
   git(repo, 'switch', '-q', 'main')
   await writeFile(join(repo, 'a.txt'), 'mine\n')
   git(repo, 'switch', '-q', '--detach')
@@ -174,13 +176,32 @@ test("a switch git refuses shows git's output and changes nothing; the repositor
         await page.keyboard.press('Enter')
         const toOther = confirmSwitch(page, 'other')
         await expect(toOther).toContainText(/leaving the detached HEAD at \w+\./)
-        await expect(toOther).toContainText('Your 1 changed file goes with you')
+        // The dialog says git will refuse before the switch is tried.
+        await expect(toOther).toContainText(
+          'Git will refuse the switch: this file has local changes and differs on other.'
+        )
+        await expect(toOther.getByRole('list', { name: 'Files git would refuse over' })).toHaveText(
+          'a.txt'
+        )
         await toOther.getByRole('button', { name: 'Switch' }).click()
         await expect(
           page.getByRole('alert').filter({ hasText: 'Switch to other failed in app' })
         ).toContainText('a.txt')
         expect(gitOutput(repo, 'branch', '--show-current')).toBe('')
         await expect(app).toHaveAccessibleDescription(/^branch detached/)
+
+        // A remote branch whose name is taken says why it can't be checked out, offering a new branch.
+        await openBranches(page)
+        await search(page).fill('origin/other')
+        await page.keyboard.press('Enter')
+        await expect(popup(page)).toContainText(
+          "The local branch other doesn't track origin/other, so origin/other can't be checked out as other"
+        )
+        await expect(
+          popup(page).getByRole('listbox', { name: 'Actions for origin/other' }).getByRole('option')
+        ).toHaveText(['New Branch from origin/other…'])
+        await page.keyboard.press('Escape')
+        await expect(popup(page)).toHaveCount(0)
 
         // From a detached HEAD a branch can be switched to.
         await openBranches(page)

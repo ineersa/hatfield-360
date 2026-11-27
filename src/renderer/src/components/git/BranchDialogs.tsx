@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -10,10 +10,67 @@ import {
 } from '@/components/ui/alert-dialog'
 import { Input } from '@/components/ui/input'
 import { Spinner } from '@/components/ui/spinner'
+import { mainErrorMessage } from '@/lib/main-error-message'
 import { type BranchDialog, useSourceControlStore } from '@/state/source-control-store'
+import type { SwitchPreview } from '../../../../shared/branch-api'
 
 const GIT_OUTPUT =
   'type-hint max-h-40 w-full overflow-auto rounded-component border border-border p-2 font-mono break-words whitespace-pre-wrap text-foreground select-text'
+
+/** The switch's preview, read from main once the dialog opens. */
+function useSwitchPreview(
+  root: string,
+  target: Extract<BranchDialog, { kind: 'switch' }>['target']
+): SwitchPreview | string | null {
+  const [preview, setPreview] = useState<SwitchPreview | string | null>(null)
+  const { kind, name } = target
+  useEffect(() => {
+    let current = true
+    window.desktop
+      .previewSwitch(root, { kind, name })
+      .then((result) => current && setPreview(result))
+      .catch((error: unknown) => current && setPreview(mainErrorMessage(error)))
+    return () => {
+      current = false
+    }
+  }, [root, kind, name])
+  return preview
+}
+
+/** What happens to the local changes, from the preview: carried along, or why git will refuse. */
+function SwitchChanges({ preview }: { preview: SwitchPreview | string | null }): React.JSX.Element {
+  if (preview === null)
+    return (
+      <p className="flex items-center gap-2">
+        <Spinner className="size-4" aria-hidden />
+        Checking local changes…
+      </p>
+    )
+  if (typeof preview === 'string')
+    return <p className="text-error">{`Couldn't check local changes: ${preview}`}</p>
+  const { branch, changed, conflicting, more } = preview
+  if (changed === 0) return <p>There are no local changes.</p>
+  const files = `${changed} changed ${changed === 1 ? 'file' : 'files'}`
+  if (conflicting.length === 0)
+    return (
+      <p>{`Your ${files} ${changed === 1 ? 'goes' : 'go'} with you: ${branch} doesn't change ${changed === 1 ? 'it' : 'them'}.`}</p>
+    )
+  return (
+    <div role="alert" className="flex flex-col gap-1">
+      <p className="text-error">
+        {`Git will refuse the switch: ${conflicting.length + more === 1 ? 'this file has' : 'these files have'} local changes and ${conflicting.length + more === 1 ? 'differs' : 'differ'} on ${branch}. Commit or stash ${conflicting.length + more === 1 ? 'it' : 'them'} first.`}
+      </p>
+      <ul aria-label="Files git would refuse over" className="font-mono">
+        {conflicting.map((path) => (
+          <li key={path} className="truncate" title={path}>
+            {path}
+          </li>
+        ))}
+        {more > 0 ? <li>{`and ${more} more`}</li> : null}
+      </ul>
+    </div>
+  )
+}
 
 function SwitchBranchDialog({
   dialog
@@ -25,6 +82,7 @@ function SwitchBranchDialog({
   const busy = useSourceControlStore((state) => state.running !== null)
   const { group, target, plan } = dialog
   const confirm = useRef<HTMLButtonElement>(null)
+  const preview = useSwitchPreview(group.root, target)
   return (
     <AlertDialog open onOpenChange={(open) => !open && close()}>
       <AlertDialogContent
@@ -36,11 +94,12 @@ function SwitchBranchDialog({
       >
         <AlertDialogTitle>{`Switch to ${target.name}?`}</AlertDialogTitle>
         <AlertDialogDescription asChild>
-          <ul className="flex flex-col gap-1.5">
+          <div className="flex flex-col gap-1.5">
             {plan.map((line) => (
-              <li key={line}>{line}</li>
+              <p key={line}>{line}</p>
             ))}
-          </ul>
+            <SwitchChanges preview={preview} />
+          </div>
         </AlertDialogDescription>
         <AlertDialogFooter>
           <AlertDialogCancel>Cancel</AlertDialogCancel>
@@ -162,7 +221,7 @@ function DeleteBranchDialog({
         </AlertDialogTitle>
         {refused === null ? (
           <AlertDialogDescription>
-            {`The local branch is deleted in ${dialog.group.name}; a remote branch of the same name stays.`}
+            {`Deletes the local branch in ${dialog.group.name}. Remote branches aren't touched.`}
           </AlertDialogDescription>
         ) : (
           <>

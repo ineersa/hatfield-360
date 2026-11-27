@@ -94,6 +94,7 @@ const desktopApi: DesktopApi = {
     ipcRenderer.invoke(SOURCE_CONTROL_CHANNELS.abortOperation, root, operation),
   cancelSourceControlAction: () => ipcRenderer.invoke(SOURCE_CONTROL_CHANNELS.cancel),
   listBranches: (root) => ipcRenderer.invoke(BRANCH_CHANNELS.list, root),
+  previewSwitch: (root, branch) => ipcRenderer.invoke(BRANCH_CHANNELS.preview, root, branch),
   switchBranch: (root, branch) => ipcRenderer.invoke(BRANCH_CHANNELS.switch, root, branch),
   createBranch: (request) => ipcRenderer.invoke(BRANCH_CHANNELS.create, request),
   deleteBranch: (root, name, force) =>

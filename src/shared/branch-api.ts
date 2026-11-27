@@ -35,6 +35,9 @@ export type BranchList = {
   remote: RemoteBranch[]
 }
 
+/** A branch to switch to: a local one, or a remote one through its local tracking branch. */
+export type SwitchTarget = { kind: 'local' | 'remote'; name: string }
+
 /** Where a new branch starts: the current commit, or a listed branch. */
 export type BranchStart =
   | { kind: 'head' }
@@ -66,8 +69,23 @@ export type BranchDeletion =
       unmerged?: { commits: LostCommit[]; more: number }
     }
 
+/** What a switch would do to the working tree's local changes, read when the Switch dialog opens. */
+export type SwitchPreview = {
+  /** The branch checked out: a remote branch's local tracking branch when it has one. */
+  branch: string
+  /** Files with local changes, untracked ones included. */
+  changed: number
+  /**
+   * Changed files that also differ on the branch, so git refuses the switch (unless a change
+   * already matches the branch); the first few, the rest counted in `more`.
+   */
+  conflicting: string[]
+  more: number
+}
+
 export const BRANCH_CHANNELS = {
   list: 'branches:list',
+  preview: 'branches:preview-switch',
   switch: 'branches:switch',
   create: 'branches:create',
   delete: 'branches:delete'
@@ -76,15 +94,14 @@ export const BRANCH_CHANNELS = {
 export type BranchApi = {
   /** The working tree's local and remote branches, read now. */
   listBranches: (root: string) => Promise<BranchList>
+  /** The local changes a switch to the branch would carry, and those git would refuse it over. */
+  previewSwitch: (root: string, branch: SwitchTarget) => Promise<SwitchPreview>
   /**
    * `git switch` to a local branch; a remote branch (`kind: 'remote'`) is switched to through a
    * local branch tracking it, created when there is none. Git's refusal (local changes, a branch
    * checked out elsewhere) comes back as `{ ok: false }` with its output; nothing changes then.
    */
-  switchBranch: (
-    root: string,
-    branch: { kind: 'local' | 'remote'; name: string }
-  ) => Promise<GitOutcome>
+  switchBranch: (root: string, branch: SwitchTarget) => Promise<GitOutcome>
   /**
    * Creates a branch at `start`, switching to it when asked. An invalid name, or one a branch
    * already has, is refused (`{ ok: false }`) before git runs.

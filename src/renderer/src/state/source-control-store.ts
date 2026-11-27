@@ -15,7 +15,7 @@ import {
   pullPlan
 } from '@/components/git/commit-plan'
 import { mainErrorMessage } from '@/lib/main-error-message'
-import type { BranchStart, LostCommit } from '../../../shared/branch-api'
+import type { BranchStart, LostCommit, SwitchTarget } from '../../../shared/branch-api'
 import type {
   ChangedFile,
   GitOutcome,
@@ -37,9 +37,6 @@ export type SourceControlAction =
   | 'switch-branch'
   | 'create-branch'
   | 'delete-branch'
-
-/** A branch to switch to: a local one, or a remote one through its local tracking branch. */
-type SwitchTarget = { kind: 'local' | 'remote'; name: string }
 
 /** The Switch, New Branch or Delete Branch dialog, and what it last heard from main. */
 export type BranchDialog =

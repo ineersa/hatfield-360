@@ -85,17 +85,11 @@ const tracking = (branch: LocalBranch): string | null => {
 function switchPlan(group: GitGroup, list: BranchList, choice: BranchChoice): string[] {
   const from =
     list.current === null ? `the detached HEAD at ${list.head ?? 'no commit'}` : list.current
-  const changes = group.files.length
-  const carried =
-    changes === 0
-      ? 'There are no local changes.'
-      : `Your ${changes} changed ${changes === 1 ? 'file goes' : 'files go'} with you; git refuses the switch, changing nothing, if one conflicts with the branch.`
   if (choice.kind === 'local') {
     const { branch } = choice
     return [
       `Checks out ${branch.name} in ${group.name}, leaving ${from}.`,
-      ...[tracking(branch)].filter((line) => line !== null),
-      carried
+      ...[tracking(branch)].filter((line) => line !== null)
     ]
   }
   const { branch } = choice
@@ -103,16 +97,28 @@ function switchPlan(group: GitGroup, list: BranchList, choice: BranchChoice): st
   if (tracker !== undefined)
     return [
       `Checks out ${tracker.name}, the local branch tracking ${branch.name}, in ${group.name}, leaving ${from}.`,
-      ...[tracking(tracker)].filter((line) => line !== null),
-      carried
+      ...[tracking(tracker)].filter((line) => line !== null)
     ]
-  const taken = list.local.some((local) => local.name === branch.branch)
   return [
-    taken
-      ? `A local branch named ${branch.branch} already exists without tracking ${branch.name}: git will refuse. Use New Branch from ${branch.name}… for another name.`
-      : `Creates the local branch ${branch.branch} at ${branch.name}, tracking it, and checks it out in ${group.name}, leaving ${from}.`,
-    carried
+    `Creates the local branch ${branch.branch} at ${branch.name}, tracking it, and checks it out in ${group.name}, leaving ${from}.`
   ]
+}
+
+/**
+ * Why `choice` can't be switched to here, or null when it can: it is current, checked out in
+ * another worktree, or a remote branch whose name a local branch tracking something else has.
+ */
+function unswitchable(list: BranchList, choice: BranchChoice): string | null {
+  if (choice.kind === 'local') {
+    const { current, worktree } = choice.branch
+    if (current) return 'Already checked out.'
+    return worktree === null ? null : `Checked out in ${worktree}: switch there instead.`
+  }
+  const { name, branch } = choice.branch
+  if (list.local.some((local) => local.upstream === name)) return null
+  return list.local.some((local) => local.name === branch)
+    ? `The local branch ${branch} doesn't track ${name}, so ${name} can't be checked out as ${branch}: make a branch from it under another name.`
+    : null
 }
 
 /** What can be done with a branch, the first being what choosing it does. */
@@ -128,9 +134,8 @@ function branchActions(group: GitGroup, list: BranchList, choice: BranchChoice):
     run: () =>
       store.openSwitchBranch(group, { kind: choice.kind, name }, switchPlan(group, list, choice))
   }
+  if (unswitchable(list, choice) !== null) return [newFrom]
   if (choice.kind === 'remote') return [switchTo, newFrom]
-  const { current, worktree } = choice.branch
-  if (current || worktree !== null) return [newFrom]
   return [
     switchTo,
     newFrom,
@@ -186,7 +191,9 @@ function BranchRow({ choice }: { choice: BranchChoice }): React.JSX.Element {
     return (
       <>
         <Cloud className="size-4 shrink-0 text-muted-foreground" aria-hidden />
-        <span className="min-w-0 flex-1 truncate">{choice.branch.name}</span>
+        <span className="min-w-0 flex-1 truncate" title={choice.branch.name}>
+          {choice.branch.name}
+        </span>
       </>
     )
   const { name, current, ahead, behind, worktree, upstreamGone } = choice.branch
@@ -197,7 +204,10 @@ function BranchRow({ choice }: { choice: BranchChoice }): React.JSX.Element {
       ) : (
         <GitBranch className="size-4 shrink-0 text-muted-foreground" aria-hidden />
       )}
-      <span className={cn('min-w-0 flex-1 truncate', worktree !== null && 'text-muted-foreground')}>
+      <span
+        title={name}
+        className={cn('min-w-0 flex-1 truncate', worktree !== null && 'text-muted-foreground')}
+      >
         {name}
       </span>
       {worktree === null ? null : (
@@ -244,6 +254,7 @@ function BranchesContent({ group }: { group: GitGroup }): React.JSX.Element {
   const options = rows.filter((row) => row.kind !== 'heading')
   const index = Math.min(active, options.length - 1)
   const actions = chosen === null || list === null ? [] : branchActions(group, list, chosen)
+  const note = chosen === null || list === null ? null : unswitchable(list, chosen)
 
   const showActions = (choice: BranchChoice): void => {
     setChosen(choice)
@@ -260,7 +271,11 @@ function BranchesContent({ group }: { group: GitGroup }): React.JSX.Element {
   const pick = (row: Row): void => {
     const store = useSourceControlStore.getState()
     if (row.kind === 'new') store.openNewBranch(group, { kind: 'head' })
-    else if (row.kind === 'local' && (row.branch.current || row.branch.worktree !== null))
+    else if (
+      (row.kind === 'local' || row.kind === 'remote') &&
+      list !== null &&
+      unswitchable(list, row) !== null
+    )
       showActions(row)
     else if ((row.kind === 'local' || row.kind === 'remote') && list !== null)
       branchActions(group, list, row)[0]?.run()
@@ -414,9 +429,7 @@ function BranchesContent({ group }: { group: GitGroup }): React.JSX.Element {
             <span className="truncate">{chosen.branch.name}</span>
             <span className="sr-only">: back to the branches</span>
           </button>
-          {chosen.kind === 'local' && chosen.branch.worktree !== null ? (
-            <p className="type-hint px-2">{`Checked out in ${chosen.branch.worktree}: switch there instead.`}</p>
-          ) : null}
+          {note === null ? null : <p className="type-hint px-2">{note}</p>}
           <ul
             ref={actionList}
             role="listbox"

@@ -3,13 +3,16 @@ import type {
   BranchList,
   LocalBranch,
   LostCommit,
-  RemoteBranch
+  RemoteBranch,
+  SwitchPreview
 } from '../../shared/branch-api'
 import type { GitOutcome } from '../../shared/source-control-api'
 import { isPlainObject } from '../../shared/plain-object'
 import { type GitRun, runGitWithOutput } from './git-command'
 
 const MAX_NAME_LENGTH = 255
+/** Conflicting files named in the Switch dialog; the rest are counted. */
+const CONFLICTS_SHOWN = 10
 /** Lost commits named in a delete confirmation; the rest are counted. */
 const LOST_COMMITS_SHOWN = 20
 
@@ -140,6 +143,58 @@ const heldElsewhere = (branch: LocalBranch): GitOutcome => ({
   output: `${branch.name} is checked out in ${branch.worktree ?? 'another worktree'}: switch there instead, or check out another branch in it first.\n`
 })
 
+/** A switch request from the renderer, checked against the listed branches. */
+function switchRequest(list: BranchList, requested: unknown): LocalBranch | RemoteBranch {
+  if (!isPlainObject(requested) || (requested.kind !== 'local' && requested.kind !== 'remote'))
+    throw new Error('Invalid branch.')
+  const name = requestedName(requested.name)
+  if (requested.kind === 'local') return localBranch(list, name)
+  const target = remoteBranch(list, name)
+  return list.local.find((branch) => branch.upstream === target.name) ?? target
+}
+
+/** Paths in `git status --porcelain -z` output; a rename's original path is skipped. */
+function statusPaths(status: string): string[] {
+  const fields = status.split('\0')
+  const paths: string[] = []
+  for (let index = 0; index < fields.length; index++) {
+    const field = fields[index] ?? ''
+    if (field.length < 4) continue
+    paths.push(field.slice(3))
+    if (field[0] === 'R' || field[0] === 'C') index++
+  }
+  return paths
+}
+
+/**
+ * The local changes a switch to a listed branch carries, and those that differ on the branch:
+ * git refuses to switch over them.
+ */
+export async function previewSwitch(root: string, requested: unknown): Promise<SwitchPreview> {
+  const list = await listBranches(root)
+  const target = switchRequest(list, requested)
+  const ref = 'remote' in target ? `refs/remotes/${target.name}` : `refs/heads/${target.name}`
+  const status = await queryOrThrow(root, [
+    'status',
+    '--porcelain=v1',
+    '-z',
+    '--untracked-files=all'
+  ])
+  const changed = statusPaths(status)
+  const differing =
+    list.head === null || ('current' in target && target.current)
+      ? ''
+      : await queryOrThrow(root, ['diff', '--no-ext-diff', '--name-only', '-z', 'HEAD', ref, '--'])
+  const onBranch = new Set(differing.split('\0').filter(Boolean))
+  const conflicting = changed.filter((path) => onBranch.has(path))
+  return {
+    branch: target.name,
+    changed: changed.length,
+    conflicting: conflicting.slice(0, CONFLICTS_SHOWN),
+    more: Math.max(0, conflicting.length - CONFLICTS_SHOWN)
+  }
+}
+
 /**
  * Switches to a listed branch. A remote one goes through the local branch tracking it, or a new
  * one git creates with its name.
@@ -149,18 +204,10 @@ export async function switchBranch(
   requested: unknown,
   signal?: AbortSignal
 ): Promise<GitOutcome> {
-  if (!isPlainObject(requested) || (requested.kind !== 'local' && requested.kind !== 'remote'))
-    throw new Error('Invalid branch.')
-  const name = requestedName(requested.name)
-  const list = await listBranches(root)
-  if (requested.kind === 'remote') {
-    const target = remoteBranch(list, name)
-    const tracker = list.local.find((branch) => branch.upstream === target.name)
-    if (tracker === undefined)
-      return outcome(await run(root, ['switch', '--track', '--', target.name], signal))
-    return switchToLocal(root, tracker, signal)
-  }
-  return switchToLocal(root, localBranch(list, name), signal)
+  const target = switchRequest(await listBranches(root), requested)
+  if ('remote' in target)
+    return outcome(await run(root, ['switch', '--track', '--', target.name], signal))
+  return switchToLocal(root, target, signal)
 }
 
 async function switchToLocal(

@@ -3,7 +3,7 @@ import { mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from '
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { createBranch, deleteBranch, listBranches, switchBranch } from './branches'
+import { createBranch, deleteBranch, listBranches, previewSwitch, switchBranch } from './branches'
 
 const root = realpathSync(mkdtempSync(join(tmpdir(), 'hatfield-branches-')))
 const saved = { global: process.env.GIT_CONFIG_GLOBAL, system: process.env.GIT_CONFIG_NOSYSTEM }
@@ -198,6 +198,42 @@ describe('switchBranch', () => {
     await expect(switchBranch(repo, { kind: 'tag', name: 'main' })).rejects.toThrow(
       'Invalid branch.'
     )
+  })
+})
+
+describe('previewSwitch', () => {
+  it('counts local changes, untracked ones too, and names those that differ on the branch', async () => {
+    const { repo } = makeClone()
+    git(repo, 'branch', '--no-track', 'work', 'origin/feature')
+    writeFileSync(join(repo, 'a.txt'), 'mine\n')
+    writeFileSync(join(repo, 'b.txt'), 'untracked here, on feature\n')
+    writeFileSync(join(repo, 'new.txt'), 'only here\n')
+    expect(await previewSwitch(repo, { kind: 'local', name: 'work' })).toEqual({
+      branch: 'work',
+      changed: 3,
+      conflicting: ['b.txt'],
+      more: 0
+    })
+    const refused = await switchBranch(repo, { kind: 'local', name: 'work' })
+    expect(refused.ok).toBe(false)
+    expect(refused.output).toContain('b.txt')
+  })
+
+  it("compares a remote branch through its tracking branch, and carries changes it doesn't touch", async () => {
+    const { repo } = makeClone()
+    git(repo, 'branch', '--track', 'mine', 'origin/feature')
+    writeFileSync(join(repo, 'a.txt'), 'mine\n')
+    expect(await previewSwitch(repo, { kind: 'remote', name: 'origin/feature' })).toEqual({
+      branch: 'mine',
+      changed: 1,
+      conflicting: [],
+      more: 0
+    })
+    expect(await switchBranch(repo, { kind: 'remote', name: 'origin/feature' })).toMatchObject({
+      ok: true
+    })
+    expect(currentBranch(repo)).toBe('mine')
+    expect(readFileSync(join(repo, 'a.txt'), 'utf8')).toBe('mine\n')
   })
 })
 
