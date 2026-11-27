@@ -13,6 +13,7 @@ import {
   TriangleAlert
 } from 'lucide-react'
 import { Dialog } from 'radix-ui'
+import { TextContextMenu } from '@/components/text-menu/TextContextMenu'
 import { Fragment, useEffect, useRef, useState } from 'react'
 import { RootFolderIcon } from '@/components/icons/RootFolderIcon'
 import { AgentProviderIcon } from '@/components/icons/AgentProviderIcon'
@@ -664,31 +665,34 @@ export function MemorySearchDialog(): React.JSX.Element {
     <Dialog.Root open={project !== null} onOpenChange={(open) => (open ? null : close())}>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-50" />
-        <Dialog.Content
-          aria-describedby={undefined}
-          onOpenAutoFocus={(event) => {
-            // The search input focuses itself.
-            event.preventDefault()
-            navigated.current = false
-          }}
-          onCloseAutoFocus={(event) => {
-            event.preventDefault()
-            // After opening a session its terminal takes the keys, not what had focus before.
-            if (navigated.current) focusActiveTerminal()
-            else useMemorySearchStore.getState().returnFocus?.focus()
-          }}
-          className="fixed top-[8vh] left-1/2 z-50 flex max-h-[84vh] w-[min(60rem,calc(100vw-4rem))] -translate-x-1/2 flex-col overflow-hidden rounded-popup border border-dialog-border bg-dialog shadow-lg"
-        >
-          {project === null ? null : (
-            <MemorySearch
-              key={project}
-              project={project}
-              onNavigated={() => {
-                navigated.current = true
-              }}
-            />
-          )}
-        </Dialog.Content>
+        {/* Its own text menu: the app's is outside the dialog's focus trap. */}
+        <TextContextMenu>
+          <Dialog.Content
+            aria-describedby={undefined}
+            onOpenAutoFocus={(event) => {
+              // The search input focuses itself.
+              event.preventDefault()
+              navigated.current = false
+            }}
+            onCloseAutoFocus={(event) => {
+              event.preventDefault()
+              // After opening a session its terminal takes the keys, not what had focus before.
+              if (navigated.current) focusActiveTerminal()
+              else useMemorySearchStore.getState().returnFocus?.focus()
+            }}
+            className="fixed top-[8vh] left-1/2 z-50 flex max-h-[84vh] w-[min(60rem,calc(100vw-4rem))] -translate-x-1/2 flex-col overflow-hidden rounded-popup border border-dialog-border bg-dialog shadow-lg"
+          >
+            {project === null ? null : (
+              <MemorySearch
+                key={project}
+                project={project}
+                onNavigated={() => {
+                  navigated.current = true
+                }}
+              />
+            )}
+          </Dialog.Content>
+        </TextContextMenu>
       </Dialog.Portal>
     </Dialog.Root>
   )
