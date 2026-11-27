@@ -12,8 +12,10 @@ function Toast({ notification }: { notification: AppNotification }): React.JSX.E
   const titleId = useId()
   const [hovered, setHovered] = useState(false)
   const [focused, setFocused] = useState(false)
+  // Its menu takes the pointer and focus, yet the toast mustn't close under it.
+  const [menuOpen, setMenuOpen] = useState(false)
   const remaining = useRef(AUTO_CLOSE_MS)
-  const paused = hovered || focused
+  const paused = hovered || focused || menuOpen
   const { id } = notification
 
   useEffect(() => {
@@ -28,6 +30,7 @@ function Toast({ notification }: { notification: AppNotification }): React.JSX.E
 
   return (
     <TextContextMenu
+      onOpenChange={setMenuOpen}
       renderItems={(element, choose) =>
         notificationMenuItems({
           notification,

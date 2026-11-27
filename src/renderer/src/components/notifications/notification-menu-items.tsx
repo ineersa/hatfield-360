@@ -5,7 +5,7 @@ import { copyText } from '@/components/text-menu/TextContextMenu'
 import { ContextMenuItem, ContextMenuSeparator } from '@/components/ui/context-menu'
 import type { AppNotification } from '@/state/notification-store'
 
-/** A notification as text: its title, body and reply, as they read on screen. */
+/** A notification as text: its title, body and the reply's Markdown source, which pastes anywhere. */
 function notificationText({ title, body, markdown }: AppNotification): string {
   return [title, body, markdown].filter((part) => part !== undefined && part !== '').join('\n\n')
 }
@@ -33,7 +33,7 @@ export function notificationMenuItems({
           <ContextMenuSeparator />
         </>
       ) : null}
-      <ContextMenuItem onSelect={() => copyText(notificationText(notification))}>
+      <ContextMenuItem onSelect={() => void copyText(notificationText(notification))}>
         <Copy aria-hidden />
         Copy Notification
       </ContextMenuItem>

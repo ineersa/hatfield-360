@@ -280,6 +280,8 @@ export function SettingsPage(): React.JSX.Element {
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
+      // A menu or popup the key closed has handled it.
+      if (event.defaultPrevented) return
       // Escape inside a font picker closes only the picker.
       const inPicker =
         event.target instanceof Element && event.target.closest(`[${FONT_PICKER_ATTRIBUTE}]`)

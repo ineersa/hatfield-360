@@ -1,4 +1,4 @@
-import { expect, test, type ElectronApplication, type Page } from '@playwright/test'
+import { expect, test, type ElectronApplication, type Locator, type Page } from '@playwright/test'
 import { execFileSync } from 'node:child_process'
 import { mkdir, realpath, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
@@ -12,6 +12,24 @@ const menu = (page: Page) => page.locator('[data-slot=context-menu-content]')
 const menuItems = (page: Page) => menu(page).getByRole('menuitem')
 const clipboardText = (app: ElectronApplication) =>
   app.evaluate(({ clipboard }) => clipboard.readText())
+
+/**
+ * The Find in Files field, emptied, after the app's own Paste into it. That paste reads the
+ * clipboard after every copy the page asked for, so the field shows what the last copy put there.
+ */
+async function pastedBack(page: Page): Promise<Locator> {
+  // The shortcut shows the panel and focuses its field; the view's button would close an open panel.
+  await page.keyboard.press('ControlOrMeta+Shift+KeyF')
+  const field = page
+    .getByRole('complementary', { name: 'Find in Files panel' })
+    .getByRole('textbox', { name: 'Search text' })
+  await field.fill('')
+  await field.click({ button: 'right' })
+  await menu(page)
+    .getByRole('menuitem', { name: /^Paste/ })
+    .click()
+  return field
+}
 
 async function makeProject(): Promise<[string, () => Promise<void>]> {
   const [dir, cleanup] = await makeTempDir('context-menus')
@@ -77,8 +95,9 @@ test(
       await field.click({ button: 'right' })
       await expect(menuItems(page)).toHaveText([/^Cut/, /^Copy/, /^Paste/, /^Select All/])
       await menu(page).getByRole('menuitem', { name: /^Cut/ }).click()
+      // The text leaves the field only once it is on the clipboard.
       await expect(field).toHaveValue('needle ')
-      await expect.poll(() => clipboardText(electronApp)).toBe('draft')
+      expect(await clipboardText(electronApp)).toBe('draft')
       await expect(field).toBeFocused()
 
       // The keyboard opens the same menu at the focused field.
@@ -101,8 +120,9 @@ test(
         .click()
       await summary.click({ button: 'right' })
       await menu(page).getByRole('menuitem', { name: /^Copy/ }).click()
-      await expect.poll(() => clipboardText(electronApp)).toContain('1 match in 1 file')
-      expect(await clipboardText(electronApp)).not.toContain('Agents')
+      const pasted = await pastedBack(page)
+      await expect(pasted).toHaveValue(/1 match in 1 file/)
+      await expect(pasted).not.toHaveValue(/Agents/)
     })
   }
 )
@@ -123,9 +143,10 @@ test('notifications and settings rows have their own items', { tag: CLIPBOARD_TA
       ])
       await saveScreenshot(page, 'context-menu-toast')
       await menu(page).getByRole('menuitem', { name: 'Copy Notification' }).click()
-      await expect
-        .poll(() => clipboardText(electronApp))
-        .toMatch(/^Settings\n\n[^]*"app\.fontSize" must be a number\./)
+      // A one-line field joins the notification's lines.
+      await expect(await pastedBack(page)).toHaveValue(
+        /^Settings.*"app\.fontSize" must be a number\./
+      )
 
       await page.getByRole('button', { name: /^Notifications(?: \(\d+\))?$/ }).click()
       const list = page.getByRole('list', { name: 'Notifications', exact: true })
@@ -146,6 +167,15 @@ test('notifications and settings rows have their own items', { tag: CLIPBOARD_TA
       const settings = page.getByRole('main', { name: 'Settings' })
       const gpu = settings.getByRole('checkbox', { name: /Terminal GPU rendering/ })
       await expect(gpu).not.toBeChecked()
+      // Outside a setting's row there is nothing to reset.
+      await settings
+        .getByRole('heading', { name: 'Settings', exact: true })
+        .click({ button: 'right' })
+      await expect(menuItems(page)).toHaveText([/^Copy/, /^Select All/])
+      // Escape closes the menu, not Settings.
+      await page.keyboard.press('Escape')
+      await expect(menu(page)).toHaveCount(0)
+      await expect(settings).toBeVisible()
       await gpu.click({ button: 'right' })
       await expect(menuItems(page)).toHaveText(['Reset to Default', /^Copy/, /^Select All/])
       await menu(page).getByRole('menuitem', { name: 'Reset to Default' }).click()
@@ -184,7 +214,8 @@ test('editor tabs and rendered Markdown have their own items', { tag: CLIPBOARD_
     await menu(page)
       .getByRole('menuitem', { name: /^Copy Relative Path/ })
       .click()
-    await expect.poll(() => clipboardText(electronApp)).toBe(join('src', 'a.ts'))
+    await expect(await pastedBack(page)).toHaveValue(join('src', 'a.ts'))
+    await showView(page, 'Files')
 
     await tab(page, 'b.ts').click({ button: 'right' })
     await menu(page).getByRole('menuitem', { name: 'Close Tabs to the Right' }).click()
@@ -219,10 +250,12 @@ test('editor tabs and rendered Markdown have their own items', { tag: CLIPBOARD_
       /^Select All/
     ])
     await menu(page).getByRole('menuitem', { name: 'Copy Link Address' }).click()
-    await expect.poll(() => clipboardText(electronApp)).toBe('https://example.com/docs')
+    await expect(await pastedBack(page)).toHaveValue('https://example.com/docs')
+    await showView(page, 'Files')
     await preview.getByText('pnpm verify').click({ button: 'right' })
     await menu(page).getByRole('menuitem', { name: 'Copy Code' }).click()
-    await expect.poll(() => clipboardText(electronApp)).toBe('pnpm verify\n')
+    await expect(await pastedBack(page)).toHaveValue('pnpm verify')
+    await showView(page, 'Files')
 
     await tab(page, 'a.ts').click({ button: 'right' })
     await menu(page)
@@ -252,7 +285,7 @@ test('search results and terminal tabs have their own items', { tag: CLIPBOARD_T
     await menu(page)
       .getByRole('menuitem', { name: /^Copy Path/ })
       .click()
-    await expect.poll(() => clipboardText(electronApp)).toBe(join(app, 'src', 'a.ts'))
+    await expect(await pastedBack(page)).toHaveValue(join(app, 'src', 'a.ts'))
 
     // Terminal tabs close the same way.
     await showView(page, 'Agents')
@@ -264,6 +297,13 @@ test('search results and terminal tabs have their own items', { tag: CLIPBOARD_T
     const terminals = page.getByRole('tablist', { name: 'Terminals' }).getByRole('tab')
     await expect(terminals).toHaveCount(1)
     await newTerminal.click()
+    await expect(terminals).toHaveCount(2)
+
+    // Closing several ends their shells only once confirmed.
+    await terminals.first().click({ button: 'right' })
+    await menu(page).getByRole('menuitem', { name: 'Close All Tabs' }).click()
+    const confirm = page.getByRole('alertdialog', { name: 'Close 2 terminals?' })
+    await confirm.getByRole('button', { name: 'Cancel' }).click()
     await expect(terminals).toHaveCount(2)
     await terminals.first().click({ button: 'right' })
     await menu(page).getByRole('menuitem', { name: 'Close Other Tabs' }).click()

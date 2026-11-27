@@ -286,11 +286,11 @@ function ResultItem({
             {context ? 'Hide Context' : 'Show Context'}
           </ContextMenuItem>
           <ContextMenuSeparator />
-          <ContextMenuItem onSelect={() => copyText(hit.content)}>
+          <ContextMenuItem onSelect={() => void copyText(hit.content)}>
             <Copy aria-hidden />
             Copy Memory
           </ContextMenuItem>
-          <ContextMenuItem onSelect={() => copyText(hit.sessionId)}>
+          <ContextMenuItem onSelect={() => void copyText(hit.sessionId)}>
             <Copy aria-hidden />
             Copy Session ID
           </ContextMenuItem>

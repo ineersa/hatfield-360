@@ -11,11 +11,15 @@ export const SETTING_LABEL_ATTRIBUTE = 'data-setting-label'
 const isSettingKey = (key: string | null): key is SettingKey =>
   key !== null && Object.hasOwn(DEFAULT_SETTINGS, key)
 
-/** The settings of the row right-clicked: the nearest ancestor that holds any reset button. */
+/**
+ * The settings of the row right-clicked. A reset button sits directly in its row, so the row is the
+ * nearest ancestor with one as a child; outside any row (the page's header, a banner) there is none.
+ */
 function rowSettings(element: Element): { key: SettingKey; label: string }[] {
   for (let node: Element | null = element; node; node = node.parentElement) {
-    const marked = [...node.querySelectorAll(`[${SETTING_KEY_ATTRIBUTE}]`)]
-    if (node.hasAttribute(SETTING_KEY_ATTRIBUTE)) marked.unshift(node)
+    const marked = node.hasAttribute(SETTING_KEY_ATTRIBUTE)
+      ? [node]
+      : [...node.querySelectorAll(`:scope > [${SETTING_KEY_ATTRIBUTE}]`)]
     if (marked.length === 0) continue
     return marked.flatMap((each) => {
       const key = each.getAttribute(SETTING_KEY_ATTRIBUTE)

@@ -27,9 +27,18 @@ const failed = (error: unknown): void => {
   notify({ severity: 'error', title: "Couldn't use the clipboard", body: mainErrorMessage(error) })
 }
 
-/** Puts text on the clipboard, which is main's: the sandboxed page has no clipboard permission. */
-export function copyText(text: string): void {
-  window.desktop.writeTerminalClipboard(text).catch(failed)
+/**
+ * Puts text on the clipboard, which is main's: the sandboxed page has no clipboard permission.
+ * Resolves whether it worked, after saying why if it didn't.
+ */
+export function copyText(text: string): Promise<boolean> {
+  return window.desktop.writeTerminalClipboard(text).then(
+    () => true,
+    (error: unknown) => {
+      failed(error)
+      return false
+    }
+  )
 }
 
 /** Types `text` into the field over its selection, as typing would: undoable, and React sees it. */
@@ -57,8 +66,8 @@ function TextMenuItems({
           disabled={!copyable}
           onSelect={() =>
             choose(() => {
-              copyText(selection)
-              typeIntoField(writable, '')
+              // The text leaves the field only once it is on the clipboard.
+              void copyText(selection).then((copied) => copied && typeIntoField(writable, ''))
             })
           }
         >
@@ -67,7 +76,7 @@ function TextMenuItems({
           <ContextMenuShortcut>{keyLabel('X')}</ContextMenuShortcut>
         </ContextMenuItem>
       ) : null}
-      <ContextMenuItem disabled={!copyable} onSelect={() => copyText(selection)}>
+      <ContextMenuItem disabled={!copyable} onSelect={() => void copyText(selection)}>
         <Copy aria-hidden />
         Copy
         <ContextMenuShortcut>{keyLabel('C')}</ContextMenuShortcut>
@@ -103,9 +112,11 @@ function TextMenuItems({
  */
 export function TextContextMenu({
   children,
-  renderItems
+  renderItems,
+  onOpenChange
 }: {
   children: ReactNode
+  onOpenChange?: (open: boolean) => void
   /** The place's own items for the element the click landed on, or null for none. */
   renderItems?: (element: Element, choose: (action: () => void) => void) => ReactNode
 }): React.JSX.Element {
@@ -113,7 +124,7 @@ export function TextContextMenu({
   const afterMenu = useAfterMenu()
   const own = opened && renderItems ? renderItems(opened.element, afterMenu.choose) : null
   return (
-    <ContextMenu>
+    <ContextMenu {...(onOpenChange ? { onOpenChange } : {})}>
       <ContextMenuTrigger
         asChild
         onContextMenu={(event) => {

@@ -1,5 +1,15 @@
 import { Columns2, Plus, Rows2, SquareTerminal } from 'lucide-react'
+import { useState } from 'react'
 import { ScrollingTabList } from '@/components/shell/ScrollingTabList'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogTitle
+} from '@/components/ui/alert-dialog'
 import { StripTab } from '@/components/shell/StripTab'
 import { AgentProviderIcon } from '@/components/icons/AgentProviderIcon'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
@@ -51,6 +61,7 @@ export function TerminalTabs({ hidden }: { hidden: boolean }): React.JSX.Element
   const closeTab = useTerminalStore((state) => state.closeTab)
   const keymap = useKeymapStore((state) => state.shell)
   const tabIds = tabs.map((tab) => tab.id)
+  const [confirming, setConfirming] = useState<string[] | null>(null)
 
   return (
     <div className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-island" hidden={hidden}>
@@ -61,7 +72,12 @@ export function TerminalTabs({ hidden }: { hidden: boolean }): React.JSX.Element
             <StripTab
               key={tab.id}
               id={tab.id}
-              menu={{ tabs: tabIds, close: (ids) => ids.forEach((id) => closeTab(id)) }}
+              menu={{
+                tabs: tabIds,
+                // One tab closes as its close button does; several end their shells and agents only once confirmed.
+                close: (ids) =>
+                  ids.length > 1 ? setConfirming(ids) : ids.forEach((id) => closeTab(id))
+              }}
               title={tab.title}
               label={tab.label}
               active={tab.id === activeTabId}
@@ -104,6 +120,31 @@ export function TerminalTabs({ hidden }: { hidden: boolean }): React.JSX.Element
           />
         ))}
       </div>
+      <AlertDialog
+        open={confirming !== null}
+        onOpenChange={(open) => {
+          if (!open) setConfirming(null)
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogTitle>Close {confirming?.length ?? 0} terminals?</AlertDialogTitle>
+          <AlertDialogDescription>
+            Their shells, and any agents running in them, will stop.
+          </AlertDialogDescription>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              primary
+              autoFocus
+              onClick={() => {
+                for (const id of confirming ?? []) closeTab(id)
+              }}
+            >
+              Close
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }
