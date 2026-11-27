@@ -55,7 +55,6 @@ export type Settings = {
 
 export type SettingKey = keyof Settings
 
-/** Claude Code's model aliases, which follow its newest models. */
 /** An ACP agent that can write commit messages, each launched from its own profile in Settings. */
 export type CommitMessageProvider = 'claude'
 
@@ -63,6 +62,7 @@ export const COMMIT_MESSAGE_PROVIDERS: readonly { value: CommitMessageProvider; 
   { value: 'claude', name: 'Claude Code' }
 ]
 
+/** Claude Code's model aliases, which follow its newest models. */
 export const COMMIT_MESSAGE_MODELS: readonly { value: string; name: string }[] = [
   { value: 'haiku', name: 'Haiku (fastest)' },
   { value: 'sonnet', name: 'Sonnet' },

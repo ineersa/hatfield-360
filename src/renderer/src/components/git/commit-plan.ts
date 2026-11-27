@@ -157,8 +157,11 @@ export function generatePlan(
   groups: readonly SourceControlGroup[],
   checked: ReadonlySet<string>,
   selectedRoot: string | null,
-  amend: boolean
+  amend: boolean,
+  actionRunning: boolean
 ): { target: CommitWork | null; blocked: string | null } {
+  // A commit or another git action would change what the message describes under it.
+  if (actionRunning) return { target: null, blocked: 'Wait for the current action to finish' }
   const targets = amend
     ? [amendTarget(groups, checked, selectedRoot)]
     : checkedFilesByGroup(groups, checked, trackedFiles)

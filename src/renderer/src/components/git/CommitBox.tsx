@@ -5,7 +5,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { PRIMARY_BUTTON, SECONDARY_BUTTON } from '@/components/ui/action-button-classes'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { rendererPlatform } from '@/lib/shortcut-keys'
-import { useSourceControlStore } from '@/state/source-control-store'
+import { actionRunning, useSourceControlStore } from '@/state/source-control-store'
 import {
   amendTarget,
   commitLabel,
@@ -81,7 +81,7 @@ export function CommitBox(): React.JSX.Element {
   const cancelGenerate = useSourceControlStore((state) => state.cancelGenerate)
   const generated = useSourceControlStore((state) => state.generated)
   const restorePrevious = useSourceControlStore((state) => state.restorePrevious)
-  const generate = generatePlan(groups ?? [], checked, selectedRoot, amend)
+  const generate = generatePlan(groups ?? [], checked, selectedRoot, amend, actionRunning(running))
   const plan = commitPlan(groups ?? [], checked, selectedRoot, amend)
   const checkedCount = plan.work.reduce((sum, target) => sum + target.files.length, 0)
   const target = amendTarget(groups ?? [], checked, selectedRoot)

@@ -55,23 +55,30 @@ describe('generatePlan', () => {
   const groups = [repo('/app'), repo('/lib')]
 
   it('describes one repository’s checked files, or with Amend its last commit even with none checked', () => {
-    expect(generatePlan(groups, checkedIn('/lib'), '/app', false)).toMatchObject({
+    expect(generatePlan(groups, checkedIn('/lib'), '/app', false, false)).toMatchObject({
       target: { group: { root: '/lib' }, files: [{ path: 'a.ts' }] },
       blocked: null
     })
-    expect(generatePlan(groups, new Set(), '/lib', false)).toEqual({
+    expect(generatePlan(groups, new Set(), '/lib', false, false)).toEqual({
       target: null,
       blocked: 'Check the files the message is for'
     })
-    expect(generatePlan(groups, new Set(), '/lib', true)).toMatchObject({
+    expect(generatePlan(groups, new Set(), '/lib', true, false)).toMatchObject({
       target: { group: { root: '/lib' }, files: [] },
       blocked: null
     })
     for (const amend of [false, true])
-      expect(generatePlan(groups, checkedIn('/app', '/lib'), null, amend)).toEqual({
+      expect(generatePlan(groups, checkedIn('/app', '/lib'), null, amend, false)).toEqual({
         target: null,
         blocked: 'Generate works on one repository at a time: check files in only one'
       })
+  })
+
+  it('waits while a commit or another git action runs', () => {
+    expect(generatePlan(groups, checkedIn('/lib'), '/lib', false, true)).toEqual({
+      target: null,
+      blocked: 'Wait for the current action to finish'
+    })
   })
 })
 

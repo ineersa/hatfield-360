@@ -223,11 +223,11 @@ async function changedFiles(root: string, paths: string[]): Promise<ChangedFile[
 const bothSides = (file: ChangedFile): string[] =>
   file.originalPath === null ? [file.path] : [file.path, file.originalPath]
 
-/** What the Commit panel's changes are relative to: HEAD, or the empty tree before the first commit. */
-export async function diffBase(root: string): Promise<string> {
-  const head = await query(root, ['rev-parse', '--verify', '-q', 'HEAD'])
+/** What changes are relative to: `revision` (HEAD for the Commit panel), or the empty tree when it does not exist. */
+export async function diffBase(root: string, revision = 'HEAD'): Promise<string> {
+  const head = await query(root, ['rev-parse', '--verify', '-q', revision])
   return head.exitCode === 0
-    ? 'HEAD'
+    ? revision
     : (await runOrThrow(root, ['hash-object', '-t', 'tree', devNull])).trim()
 }
 

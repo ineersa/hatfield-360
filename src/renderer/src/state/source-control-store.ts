@@ -25,6 +25,10 @@ import type {
 } from '../../../shared/source-control-api'
 
 /** What the Commit panel is doing; its button spins and every other action waits. */
+/** Whether a git action other than the background refresh is running. */
+export const actionRunning = (running: SourceControlAction | null): boolean =>
+  running !== null && running !== 'refresh'
+
 export type SourceControlAction =
   | 'refresh'
   | 'commit'
@@ -405,9 +409,15 @@ export const useSourceControlStore = create<SourceControlState>((set, get, store
       set({ message: generated.previous, generated: null })
     },
     generateMessage: async () => {
-      const { groups, checked, selected, amend, generating, message } = get()
+      const { groups, checked, selected, amend, generating, message, running } = get()
       const previous = untouched(get()) ? null : message
-      const { target } = generatePlan(groups ?? [], checked, selected?.root ?? null, amend)
+      const { target } = generatePlan(
+        groups ?? [],
+        checked,
+        selected?.root ?? null,
+        amend,
+        actionRunning(running)
+      )
       if (target === null || generating) return
       set({ generating: true, failure: null })
       try {

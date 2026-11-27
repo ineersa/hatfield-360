@@ -1,5 +1,4 @@
 import { app } from 'electron'
-import { homedir } from 'node:os'
 import { COMMIT_MESSAGE_CHANNELS, type CommitMessageOutcome } from '../../shared/commit-message-api'
 import { isPlainObject } from '../../shared/plain-object'
 import type { CommitMessageProvider, Settings } from '../../shared/settings-api'
@@ -10,7 +9,6 @@ import {
   chatAgentCommand,
   resolveClaude
 } from '../chat/chat-agent-launch'
-import { fileRoots } from '../files/file-roots'
 import {
   commitMessageContext,
   commitMessagePrompt,
@@ -39,18 +37,23 @@ const LAUNCHES: Record<
   }
 }
 
-/** The chosen provider's agent command, started in the workspace's first folder. */
-async function agentCommand(values: Settings): Promise<{ command: ChatAgentCommand; cwd: string }> {
-  const cwd = (await fileRoots.current())[0]?.path ?? homedir()
+/** The chosen provider's agent command, started in the repository it writes for. */
+async function agentCommand(
+  values: Settings,
+  cwd: string
+): Promise<{ command: ChatAgentCommand; cwd: string }> {
   return { command: await LAUNCHES[values['git.commitMessage.provider']](values, cwd), cwd }
 }
 
 /** What went wrong, with how to fix a missing login. */
 function failure(error: unknown): CommitMessageOutcome {
   const text = message(error)
-  const hint = /\b(auth\w*|log ?in|credentials?|401)\b/i.test(text)
-    ? '\n\nLog in to Claude Code: run `claude` in a terminal and use /login, then generate again.'
-    : ''
+  const hint =
+    /\b(authenticat\w*|unauthori[sz]ed|not logged in|log ?in|\/login|credentials?|401)\b/i.test(
+      text
+    )
+      ? '\n\nLog in to Claude Code: run `claude` in a terminal and use /login, then generate again.'
+      : ''
   return { ok: false, output: `${text}${hint}` }
 }
 
@@ -60,17 +63,25 @@ async function generate(
 ): Promise<CommitMessageOutcome> {
   if (!isPlainObject(request) || typeof request.amend !== 'boolean')
     throw new Error('Invalid commit message request.')
-  const { root } = await workingTree(request.root)
-  const context = await commitMessageContext(root, { paths: request.paths, amend: request.amend })
-  if (context.files.length === 0 && context.amended === null)
-    return { ok: false, output: 'The checked files have no changes to describe.' }
-  const { values } = await settingsStore.view()
+  // Registered before anything is read, so a Stop that comes while git runs is not lost.
   const controller = new AbortController()
   running.get(sender.id)?.abort()
   running.set(sender.id, controller)
+  const cancelled: CommitMessageOutcome = { ok: false, output: '', cancelled: true }
   try {
+    const { root } = await workingTree(request.root)
+    const context = await commitMessageContext(root, {
+      paths: request.paths,
+      amend: request.amend
+    })
+    if (controller.signal.aborted) return cancelled
+    if (context.files.length === 0 && context.amended === null)
+      return { ok: false, output: 'The checked files have no changes to describe.' }
+    const { values } = await settingsStore.view()
+    const command = await agentCommand(values, root)
+    if (controller.signal.aborted) return cancelled
     const reply = await writeCommitMessage(
-      await agentCommand(values),
+      command,
       {
         prompt: commitMessagePrompt(context, values['git.commitMessage.instructions']),
         model: values['git.commitMessage.model'],
@@ -79,8 +90,7 @@ async function generate(
       },
       controller.signal
     )
-    if (reply.stopReason === 'cancelled' || controller.signal.aborted)
-      return { ok: false, output: '', cancelled: true }
+    if (reply.stopReason === 'cancelled' || controller.signal.aborted) return cancelled
     const text = replyMessage(reply.text)
     if (reply.stopReason !== 'end_turn')
       return { ok: false, output: `The agent stopped (${reply.stopReason}) before it finished.` }
@@ -88,7 +98,7 @@ async function generate(
       ? { ok: false, output: 'The agent answered without a message. Try again.' }
       : { ok: true, message: text }
   } catch (error) {
-    return controller.signal.aborted ? { ok: false, output: '', cancelled: true } : failure(error)
+    return controller.signal.aborted ? cancelled : failure(error)
   } finally {
     if (running.get(sender.id) === controller) running.delete(sender.id)
   }

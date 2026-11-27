@@ -117,6 +117,47 @@ describe('commitMessageContext', () => {
     expect(commitMessagePrompt(context, '')).toContain('The repository has no commits yet.')
   })
 
+  it('with Amend on a merge, gives what the merge brought in against its first parent', async () => {
+    const repo = makeRepo()
+    git(repo, 'switch', '-q', '-c', 'feature')
+    writeFileSync(join(repo, 'feature.txt'), 'f\n')
+    git(repo, 'add', 'feature.txt')
+    git(repo, 'commit', '-q', '-m', 'Add the feature')
+    git(repo, 'switch', '-q', 'main')
+    writeFileSync(join(repo, 'main.txt'), 'm\n')
+    git(repo, 'add', 'main.txt')
+    git(repo, 'commit', '-q', '-m', 'Add main work')
+    git(repo, 'merge', '-q', '--no-ff', '-m', 'Merge feature', 'feature')
+    const context = await commitMessageContext(repo, { paths: [], amend: true })
+    expect(context.amended).toEqual({
+      message: 'Merge feature',
+      files: [{ path: 'feature.txt', from: null, kind: 'added', added: 1, deleted: 0 }]
+    })
+    expect(await contextFileDiff(repo, context, 'feature.txt')).toContain('+f')
+  })
+
+  it('with Amend before the first commit, has no commit to replace', async () => {
+    const repo = join(root, `repo-${count++}`)
+    git(root, 'init', '-q', repo)
+    writeFileSync(join(repo, 'first.txt'), 'hello\n')
+    git(repo, 'add', 'first.txt')
+    const context = await commitMessageContext(repo, { paths: ['first.txt'], amend: true })
+    expect(context.amended).toBeNull()
+    expect(context.files).toEqual([
+      { path: 'first.txt', from: null, kind: 'added', added: 1, deleted: 0 }
+    ])
+  })
+
+  it('counts the lines of a file whose name holds a tab', async () => {
+    const repo = makeRepo()
+    writeFileSync(join(repo, 'a\tb.txt'), 'one\ntwo\n')
+    git(repo, 'add', 'a\tb.txt')
+    const context = await commitMessageContext(repo, { paths: ['a\tb.txt'], amend: false })
+    expect(context.files).toEqual([
+      { path: 'a\tb.txt', from: null, kind: 'added', added: 2, deleted: 0 }
+    ])
+  })
+
   it('refuses a path outside the repository', async () => {
     const repo = makeRepo()
     await expect(commitMessageContext(repo, { paths: ['../x'], amend: false })).rejects.toThrow(
@@ -155,6 +196,9 @@ describe('replyMessage', () => {
       'Fix the parser\n\nIt failed on tabs.'
     )
     expect(replyMessage('"Add tests"')).toBe('Add tests')
+    // Quotes that belong to the message stay.
+    expect(replyMessage('"Hello" -> "Welcome back"')).toBe('"Hello" -> "Welcome back"')
+    expect(replyMessage("'foo' and 'bar'")).toBe("'foo' and 'bar'")
     expect(replyMessage('  Add tests\n')).toBe('Add tests')
   })
 })

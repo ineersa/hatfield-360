@@ -6,12 +6,16 @@ import { fromMcpServer } from '@agentclientprotocol/sdk/experimental/mcp-server'
 import { McpServer } from '@modelcontextprotocol/server'
 import * as z from 'zod'
 import type { ChatConfigId } from '../../shared/chat-agent-api'
+import { isPlainObject } from '../../shared/plain-object'
 import { type AcpAgentProcess, startAcpAgent } from './acp-agent-process'
 import type { ChatAgentCommand } from './chat-agent-launch'
 import { newSessionRequest } from './chat-session-options'
 import { chatConfigOptions } from './chat-session-updates'
 
 const FILE_DIFF_TOOL = 'file_diff'
+const MCP_SERVER = 'hatfield'
+/** How Claude Code names the app's tool in a tool call. */
+const FILE_DIFF_CALL = `mcp__${MCP_SERVER}__${FILE_DIFF_TOOL}`
 
 const FILE_DIFF_DESCRIPTION =
   "The diff of one file of the commit, cut when long. Only for a file whose name and line counts don't say what changed."
@@ -41,6 +45,12 @@ const message = (error: unknown): string =>
       ? String(error.message)
       : String(error)
 
+/** The tool a call is for, as Claude Code names it in the call's `_meta`. */
+function toolName({ _meta: meta }: { _meta?: Record<string, unknown> | null }): unknown {
+  const claudeCode = meta?.claudeCode
+  return isPlainObject(claudeCode) ? claudeCode.toolName : undefined
+}
+
 /** Rejects once the process has exited, with what it printed. */
 function exitOf(process: AcpAgentProcess): Promise<never> {
   const exited = new Promise<never>((_resolve, reject) => {
@@ -60,7 +70,7 @@ function exitOf(process: AcpAgentProcess): Promise<never> {
 /** The app's one tool for the agent: a file's diff, served by `diff`. */
 function diffServer(diff: (path: string) => Promise<string>): ReturnType<typeof fromMcpServer> {
   return fromMcpServer(() => {
-    const server = new McpServer({ name: 'hatfield', version: '1.0.0' })
+    const server = new McpServer({ name: MCP_SERVER, version: '1.0.0' })
     server.registerTool(
       FILE_DIFF_TOOL,
       {
@@ -107,7 +117,7 @@ export async function writeCommitMessage(
       // Only the app's own diff tool exists in the session: it may run, nothing else.
       .onRequest('session/request_permission', ({ params }) => {
         if (params.sessionId !== sessionId) return CANCELLED
-        if (!JSON.stringify(params.toolCall).includes(FILE_DIFF_TOOL)) return CANCELLED
+        if (toolName(params.toolCall) !== FILE_DIFF_CALL) return CANCELLED
         const allow = params.options.find((option) => option.kind === 'allow_once')
         return allow ? { outcome: { outcome: 'selected', optionId: allow.optionId } } : CANCELLED
       })
@@ -136,7 +146,7 @@ export async function writeCommitMessage(
     )
     if (initialized === STOP) return STOPPED
     const { declaration } = provider.registerServer(agent, {
-      name: 'hatfield',
+      name: MCP_SERVER,
       handler: diffServer(turn.diff).handler
     })
     const session = await step(

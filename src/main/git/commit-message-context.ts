@@ -41,8 +41,10 @@ function summaries(nameStatus: string, numstat: string): ChangeSummary[] {
   const counts = new Map<string, { added: number | null; deleted: number | null }>()
   const stats = numstat.split('\0')
   for (let index = 0; index < stats.length; index++) {
-    const [added = '', deleted = '', path = ''] = (stats[index] ?? '').split('\t')
+    const [added = '', deleted = '', ...rest] = (stats[index] ?? '').split('\t')
     if (added === '') continue
+    // A path may hold tabs of its own: only the two counts come before it.
+    const path = rest.join('\t')
     // A rename's numstat names no path in its own field: the old and new paths follow it.
     const key = path === '' ? (stats[(index += 2)] ?? '') : path
     counts.set(key, {
@@ -70,24 +72,39 @@ function summaries(nameStatus: string, numstat: string): ChangeSummary[] {
   return files
 }
 
-/** The changes a `diff` or `diff-tree` range names, each file once with its line counts. */
-async function changesBetween(root: string, range: string[]): Promise<ChangeSummary[]> {
+/** HEAD against its first parent, so a merge shows what it brought in; the first commit against nothing. */
+const headRange = async (root: string): Promise<string[]> => [
+  await diffBase(root, 'HEAD^1'),
+  'HEAD'
+]
+
+/** HEAD's own changes. */
+async function headChanges(root: string): Promise<ChangeSummary[]> {
+  const range = await headRange(root)
   const [nameStatus, numstat] = await Promise.all([
-    runOrThrow(root, [...range, '--name-status', '-z', '-M']),
-    runOrThrow(root, [...range, '--numstat', '-z', '-M'])
+    runOrThrow(root, ['diff-tree', '-r', '--name-status', '-z', '-M', ...range]),
+    runOrThrow(root, ['diff-tree', '-r', '--numstat', '-z', '-M', ...range])
   ])
   return summaries(nameStatus, numstat)
 }
 
-/** HEAD's own changes, against its parent or, for the first commit, nothing. */
-const headChanges = (root: string): Promise<ChangeSummary[]> =>
-  changesBetween(root, ['diff-tree', '-r', '--root', '--no-commit-id', 'HEAD'])
+/** The commit Amend replaces, its message and changes; null before the first commit. */
+async function amendedCommit(
+  root: string
+): Promise<{ message: string; files: ChangeSummary[] } | null> {
+  const message = await lastCommitMessage(root)
+  return message === null ? null : { message, files: await headChanges(root) }
+}
 
 /** The checked paths' changes against `base`, read from the whole working tree's diff. */
 async function checkedChanges(root: string, paths: string[]): Promise<ChangeSummary[]> {
   const wanted = new Set(paths)
   const base = await diffBase(root)
-  const all = await changesBetween(root, ['diff', '--no-ext-diff', base])
+  const [nameStatus, numstat] = await Promise.all([
+    runOrThrow(root, ['diff', '--no-ext-diff', '--name-status', '-z', '-M', base]),
+    runOrThrow(root, ['diff', '--no-ext-diff', '--numstat', '-z', '-M', base])
+  ])
+  const all = summaries(nameStatus, numstat)
   return all.filter(
     (file) => wanted.has(file.path) || (file.from !== null && wanted.has(file.from))
   )
@@ -105,15 +122,12 @@ export async function commitMessageContext(
     runGitWithOutput(root, ['log', `-${SUBJECTS}`, '--no-show-signature', '--format=%s'], {
       parsed: true
     }),
-    request.amend
-      ? Promise.all([lastCommitMessage(root), headChanges(root)])
-      : Promise.resolve(null)
+    request.amend ? amendedCommit(root) : Promise.resolve(null)
   ])
   return {
     branch: branch.exitCode === 0 ? branch.stdout.trim() : null,
     files,
-    amended:
-      amended === null || amended[0] === null ? null : { message: amended[0], files: amended[1] },
+    amended,
     subjects: subjects.exitCode === 0 ? subjects.stdout.split('\n').filter(Boolean) : []
   }
 }
@@ -168,7 +182,9 @@ export function replyMessage(reply: string): string {
   let text = reply.trim()
   const fenced = /^```[\w-]*\n([\s\S]*?)\n```$/.exec(text)
   if (fenced?.[1] !== undefined) text = fenced[1].trim()
-  if (/^(["'`]).*\1$/s.test(text)) text = text.slice(1, -1).trim()
+  // Only quotes around the whole reply: one inside means they belong to the message.
+  const quoted = /^(["'`])([^"'`]*)\1$/s.exec(text)
+  if (quoted?.[2] !== undefined) text = quoted[2].trim()
   return text
     .split('\n')
     .map((line) => line.trimEnd())
@@ -201,14 +217,12 @@ export async function contextFileDiff(
     parts.push(
       await runOrThrow(root, [
         'diff-tree',
-        '-p',
         '-r',
+        '-p',
         '-M',
-        '--root',
-        '--no-commit-id',
         '--no-ext-diff',
         '--no-color',
-        'HEAD',
+        ...(await headRange(root)),
         '--',
         ...sides(amended)
       ])
