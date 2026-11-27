@@ -4,6 +4,8 @@ import { create } from 'zustand'
 type FileLanguageServer = {
   server: string
   state: 'starting' | 'ready' | 'restarting' | 'failed'
+  /** Work the server reports while running, such as indexing. */
+  progress?: string
 }
 
 type LanguageServerState = {
