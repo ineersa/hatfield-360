@@ -1,6 +1,6 @@
-// `pnpm package:local`: builds the app as an unpacked Linux directory and installs it for the current user.
+// `pnpm package:local`: builds the app unpacked and installs it for the current user (Linux and macOS).
 import { spawnSync } from 'node:child_process'
-import { chmod, cp, mkdir, rm, symlink, writeFile } from 'node:fs/promises'
+import { chmod, cp, mkdir, readdir, rm, symlink, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { delimiter, dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -18,14 +18,33 @@ function run(command, args) {
   if (result.status !== 0) process.exit(result.status ?? 1)
 }
 
-if (process.platform !== 'linux') {
-  console.error(
-    'pnpm package:local installs on Linux only. On macOS and Windows, run `pnpm package` and use the installer in release/.'
-  )
+if (process.platform !== 'linux' && process.platform !== 'darwin') {
+  console.error('pnpm package:local installs on Linux and macOS only.')
   process.exit(1)
 }
 
 const home = homedir()
+
+if (process.platform === 'darwin') {
+  const app = 'Hatfield 360.app'
+  run('pnpm', ['exec', 'electron-vite', 'build'])
+  run('pnpm', ['exec', 'electron-builder', '--mac', 'dir', '--publish', 'never'])
+  // release/mac-arm64 on Apple silicon, release/mac on Intel.
+  const built = (await readdir(join(repo, 'release'))).find((dir) => dir.startsWith('mac'))
+  if (built === undefined) throw new Error('electron-builder left no mac* folder in release/')
+  const applications = join(home, 'Applications')
+  const installed = join(applications, app)
+  await mkdir(applications, { recursive: true })
+  await rm(installed, { recursive: true, force: true })
+  // ditto keeps the bundle's framework symlinks, modes and attributes intact.
+  run('ditto', [join(repo, 'release', built, app), installed])
+  // Apple silicon won't start an unsigned app; an ad-hoc signature is enough for one built here.
+  run('codesign', ['--force', '--deep', '--sign', '-', installed])
+  say(`\nInstalled Hatfield 360 to ${installed}`)
+  say('Open it from Launchpad, Spotlight or ~/Applications.')
+  process.exit(0)
+}
+
 const dataHome = process.env.XDG_DATA_HOME || join(home, '.local', 'share')
 const installDir = join(home, '.local', 'opt', NAME)
 const binDir = join(home, '.local', 'bin')
