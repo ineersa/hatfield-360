@@ -14,6 +14,7 @@ const openBranches = (page: Page) =>
 /** The Switch dialog asking to confirm a switch to `name`. */
 const confirmSwitch = (page: Page, name: string) =>
   page.getByRole('alertdialog', { name: `Switch to ${name}?` })
+const message = (page: Page) => page.getByRole('textbox', { name: 'Commit message' })
 const current = (repo: string): string => gitOutput(repo, 'branch', '--show-current')
 const branches = (repo: string): string[] =>
   gitOutput(repo, 'for-each-ref', '--format=%(refname:short)', 'refs/heads').split('\n')
@@ -62,6 +63,9 @@ test('the branch popup lists, filters and switches branches, and creates and del
         await expect(toFeature).toContainText('There are no local changes.')
         await toFeature.getByRole('button', { name: 'Cancel' }).click()
         expect(current(repo)).toBe('main')
+        // Amend shows main's last commit; after the switch it would amend another, so it goes off.
+        await page.getByRole('checkbox', { name: 'Amend' }).check()
+        await expect(message(page)).toHaveValue('Add files')
         await openBranches(page)
         await search(page).fill('feat')
         await page.keyboard.press('Enter')
@@ -70,6 +74,8 @@ test('the branch popup lists, filters and switches branches, and creates and del
         await expect(toFeature).toHaveCount(0)
         await expect(app).toHaveAccessibleDescription('branch feature')
         expect(current(repo)).toBe('feature')
+        await expect(page.getByRole('checkbox', { name: 'Amend' })).not.toBeChecked()
+        await expect(message(page)).toHaveValue('')
 
         // A remote branch becomes a local branch tracking it.
         await openBranches(page)

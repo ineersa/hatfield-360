@@ -153,17 +153,17 @@ function switchRequest(list: BranchList, requested: unknown): LocalBranch | Remo
   return list.local.find((branch) => branch.upstream === target.name) ?? target
 }
 
-/** Paths in `git status --porcelain -z` output; a rename's original path is skipped. */
-function statusPaths(status: string): string[] {
+/** Entries of `git status --porcelain -z` output, each with its paths: a rename's or copy's both. */
+function statusEntries(status: string): string[][] {
   const fields = status.split('\0')
-  const paths: string[] = []
+  const entries: string[][] = []
   for (let index = 0; index < fields.length; index++) {
     const field = fields[index] ?? ''
     if (field.length < 4) continue
-    paths.push(field.slice(3))
-    if (field[0] === 'R' || field[0] === 'C') index++
+    const renamed = field[0] === 'R' || field[0] === 'C'
+    entries.push(renamed ? [field.slice(3), fields[++index] ?? ''] : [field.slice(3)])
   }
-  return paths
+  return entries
 }
 
 /**
@@ -180,13 +180,14 @@ export async function previewSwitch(root: string, requested: unknown): Promise<S
     '-z',
     '--untracked-files=all'
   ])
-  const changed = statusPaths(status)
+  const changed = statusEntries(status)
   const differing =
     list.head === null || ('current' in target && target.current)
       ? ''
       : await queryOrThrow(root, ['diff', '--no-ext-diff', '--name-only', '-z', 'HEAD', ref, '--'])
   const onBranch = new Set(differing.split('\0').filter(Boolean))
-  const conflicting = changed.filter((path) => onBranch.has(path))
+  // A staged rename's original path is a local change too: git refuses when the branch changes it.
+  const conflicting = changed.flat().filter((path) => onBranch.has(path))
   return {
     branch: target.name,
     changed: changed.length,
@@ -206,7 +207,13 @@ export async function switchBranch(
 ): Promise<GitOutcome> {
   const target = switchRequest(await listBranches(root), requested)
   if ('remote' in target)
-    return outcome(await run(root, ['switch', '--track', '--', target.name], signal))
+    return outcome(
+      await run(
+        root,
+        ['switch', '-c', target.branch, '--track', '--', `refs/remotes/${target.name}`],
+        signal
+      )
+    )
   return switchToLocal(root, target, signal)
 }
 
@@ -248,13 +255,23 @@ export async function createBranch(
 ): Promise<GitOutcome> {
   if (typeof request.switchTo !== 'boolean') throw new Error('Invalid branch request.')
   const name = requestedName(request.name)
-  const start = startRef(await listBranches(root), request.start)
+  const list = await listBranches(root)
+  const start = startRef(list, request.start)
   const problem = await nameProblem(root, name)
   if (problem !== null) return { ok: false, output: `${problem}\n` }
+  // Before the first commit there is nothing to start at: only the unborn branch can be renamed.
+  if (list.head === null && start === 'HEAD') {
+    if (!request.switchTo)
+      return { ok: false, output: 'There are no commits yet: a branch needs one to point at.\n' }
+    return outcome(await run(root, ['switch', '-c', name], signal))
+  }
+  // A branch started from another one doesn't track it, whatever branch.autoSetupMerge says.
   return outcome(
     await run(
       root,
-      request.switchTo ? ['switch', '-c', name, '--', start] : ['branch', '--', name, start],
+      request.switchTo
+        ? ['switch', '--no-track', '-c', name, '--', start]
+        : ['branch', '--no-track', '--', name, start],
       signal
     )
   )

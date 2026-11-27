@@ -353,6 +353,13 @@ export const useSourceControlStore = create<SourceControlState>((set, get, store
     })
 
   /** Runs one git command for one working tree, its failure titled "<what> failed in <name>". */
+  /** After a checkout in `root` Amend would amend another commit than the one it showed: it goes off. */
+  const checkedOut = (root: string): void => {
+    const state = get()
+    if (state.amend && (amendRoot(state)?.root === root || state.filled?.root === root))
+      void state.setAmend(false)
+  }
+
   const actOn = (
     action: SourceControlAction,
     what: string,
@@ -547,9 +554,11 @@ export const useSourceControlStore = create<SourceControlState>((set, get, store
     closeBranchDialog: () => set({ branchDialog: null }),
     switchBranch: async (group, branch) => {
       set({ branchesOpen: null, branchDialog: null })
-      await actOn('switch-branch', `Switch to ${branch.name}`, group, () =>
-        reloadingLog(group, window.desktop.switchBranch(group.root, branch))
-      )
+      await actOn('switch-branch', `Switch to ${branch.name}`, group, async () => {
+        const outcome = await reloadingLog(group, window.desktop.switchBranch(group.root, branch))
+        if (outcome.ok) checkedOut(group.root)
+        return outcome
+      })
     },
     createBranch: async (name, switchTo) => {
       const dialog = get().branchDialog
@@ -565,6 +574,7 @@ export const useSourceControlStore = create<SourceControlState>((set, get, store
             switchTo
           })
           if (outcome.ok) reloadLog(group.root)
+          if (outcome.ok && switchTo) checkedOut(group.root)
           if (get().branchDialog !== dialog) return
           set({
             branchDialog: outcome.ok

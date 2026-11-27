@@ -37,6 +37,8 @@ const commit = (repo: string, file: string, text: string, message: string): void
 }
 
 const currentBranch = (repo: string): string => git(repo, 'branch', '--show-current')
+const upstreamOf = (repo: string, branch: string): string =>
+  git(repo, 'for-each-ref', '--format=%(upstream:short)', `refs/heads/${branch}`)
 const branchNames = (repo: string): string[] =>
   git(repo, 'for-each-ref', '--format=%(refname:short)', 'refs/heads').split('\n')
 
@@ -163,6 +165,18 @@ describe('switchBranch', () => {
     expect(branchNames(repo)).toEqual(['feature', 'main'])
   })
 
+  it('checks out a remote branch even when a local branch has its full name', async () => {
+    const { repo } = makeClone()
+    git(repo, 'branch', 'origin/feature')
+    expect(await switchBranch(repo, { kind: 'remote', name: 'origin/feature' })).toMatchObject({
+      ok: true
+    })
+    expect(currentBranch(repo)).toBe('feature')
+    expect(git(repo, 'for-each-ref', '--format=%(upstream)', 'refs/heads/feature')).toBe(
+      'refs/remotes/origin/feature'
+    )
+  })
+
   it("returns git's refusal over local changes and changes nothing", async () => {
     const { repo } = makeClone()
     git(repo, 'switch', '-q', '--track', 'origin/feature')
@@ -235,6 +249,21 @@ describe('previewSwitch', () => {
     expect(currentBranch(repo)).toBe('mine')
     expect(readFileSync(join(repo, 'a.txt'), 'utf8')).toBe('mine\n')
   })
+  it("names a staged rename's original path when the branch changes it", async () => {
+    const { repo } = makeClone()
+    git(repo, 'branch', '--no-track', 'work', 'main')
+    git(repo, 'switch', '-q', 'work')
+    commit(repo, 'a.txt', 'changed on work\n', 'change a')
+    git(repo, 'switch', '-q', 'main')
+    git(repo, 'mv', 'a.txt', 'renamed.txt')
+    expect(await previewSwitch(repo, { kind: 'local', name: 'work' })).toEqual({
+      branch: 'work',
+      changed: 1,
+      conflicting: ['a.txt'],
+      more: 0
+    })
+    expect((await switchBranch(repo, { kind: 'local', name: 'work' })).ok).toBe(false)
+  })
 })
 
 describe('createBranch', () => {
@@ -259,6 +288,37 @@ describe('createBranch', () => {
     expect(result.ok).toBe(true)
     expect(currentBranch(repo)).toBe('main')
     expect(git(repo, 'rev-parse', 'from-feature')).toBe(git(repo, 'rev-parse', 'origin/feature'))
+    expect(upstreamOf(repo, 'from-feature')).toBe('')
+  })
+
+  it("switches to a branch made from a remote one that doesn't track it", async () => {
+    const { repo } = makeClone()
+    const result = await createBranch(repo, {
+      name: 'topic',
+      start: { kind: 'remote', name: 'origin/feature' },
+      switchTo: true
+    })
+    expect(result.ok).toBe(true)
+    expect(currentBranch(repo)).toBe('topic')
+    expect(upstreamOf(repo, 'topic')).toBe('')
+  })
+
+  it('renames the unborn branch before the first commit, and says why it needs one otherwise', async () => {
+    const repo = join(root, 'empty')
+    git(root, 'init', '-q', repo)
+    const kept = await createBranch(repo, {
+      name: 'other',
+      start: { kind: 'head' },
+      switchTo: false
+    })
+    expect(kept).toEqual({
+      ok: false,
+      output: 'There are no commits yet: a branch needs one to point at.\n'
+    })
+    expect(
+      await createBranch(repo, { name: 'topic', start: { kind: 'head' }, switchTo: true })
+    ).toMatchObject({ ok: true })
+    expect(currentBranch(repo)).toBe('topic')
   })
 
   it('refuses an invalid or taken name before git runs', async () => {
