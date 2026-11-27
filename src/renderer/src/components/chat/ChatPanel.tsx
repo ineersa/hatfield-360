@@ -250,7 +250,7 @@ function Composer(): React.JSX.Element {
   )
 }
 
-/** Claude in the workspace, on the right: opened with New Chat (Ctrl/Cmd+\), resized from its left edge. */
+/** Claude in the workspace, on the right: opened with New Chat (Ctrl/Cmd+Shift+L), resized from its left edge. */
 export function ChatPanel(): React.JSX.Element {
   const width = useShellLayoutStore((state) => state.chatWidth)
   const setWidth = useShellLayoutStore((state) => state.setChatWidth)

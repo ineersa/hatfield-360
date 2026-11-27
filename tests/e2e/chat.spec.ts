@@ -23,7 +23,7 @@ const picker = (chat: Locator, label: string) =>
 
 /** New Chat's key, from wherever the keys are. */
 async function newChatKey(page: Page): Promise<void> {
-  await page.keyboard.press('ControlOrMeta+Backslash')
+  await page.keyboard.press('ControlOrMeta+Shift+KeyL')
 }
 
 /** A copy of the project the cassettes were recorded in, as the workspace's only folder. */
@@ -47,7 +47,7 @@ const replaying = (cassette: string) => ({
   HATFIELD_CHAT_CASSETTE: join(fixtures, `${cassette}.jsonl`)
 })
 
-test('Ctrl/Cmd+\\ opens a new chat on Haiku whose answer links to the code it found', async () => {
+test('Ctrl/Cmd+Shift+L opens a new chat on Haiku whose answer links to the code it found', async () => {
   const [, userData, cleanup] = await recordedProject()
   try {
     await withApp(
@@ -86,8 +86,14 @@ test('Ctrl/Cmd+\\ opens a new chat on Haiku whose answer links to the code it fo
         await expect(picker(chat, 'Model')).toHaveText('Haiku 5.5')
         await expect(chat.getByRole('textbox', { name: 'Message' })).toBeFocused()
 
-        await chat.getByRole('button', { name: 'Close Chat' }).click()
+        // The Chat button under the notifications bell shows the panel is open, and closes it.
+        const chatButton = page
+          .getByRole('navigation', { name: 'Tool windows' })
+          .getByRole('button', { name: 'Chat' })
+        await expect(chatButton).toHaveAttribute('aria-pressed', 'true')
+        await chatButton.click()
         await expect(chat).toBeHidden()
+        await expect(chatButton).toHaveAttribute('aria-pressed', 'false')
       },
       { userDataDir: userData, env: replaying('answer') }
     )

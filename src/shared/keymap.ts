@@ -589,8 +589,13 @@ const APP_KEYMAP: Record<AppCommand, ShellAction> = {
     mac: 'Command+Alt+O',
     other: 'Ctrl+Alt+Shift+N'
   },
-  // Taken from a focused terminal too, where Ctrl+\ would otherwise send SIGQUIT.
-  'new-chat': { id: 'hatfield.chat.new', label: 'New Chat', mac: 'Command+\\', other: 'Ctrl+\\' },
+  // Taken from a focused terminal too; a shell gets Ctrl+L without Shift, and Hatfield's TUI keeps Ctrl+\.
+  'new-chat': {
+    id: 'hatfield.chat.new',
+    label: 'New Chat',
+    mac: 'Command+Shift+L',
+    other: 'Ctrl+Shift+L'
+  },
   // Like a command palette; it opens from a focused terminal too, which never receives the key.
   'search-memory': {
     id: 'hatfield.memory.search',

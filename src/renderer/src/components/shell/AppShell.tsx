@@ -8,7 +8,6 @@ import { SettingsPage } from '@/components/settings/SettingsPage'
 import { useAppFont } from '@/components/settings/use-app-font'
 import { useColorThemes } from '@/components/settings/use-color-themes'
 import { HunkTabs } from '@/components/git/HunkTabs'
-import { NotificationsBar } from '@/components/notifications/NotificationsBar'
 import { NotificationsPanel } from '@/components/notifications/NotificationsPanel'
 import { Toaster } from '@/components/notifications/Toaster'
 import { TerminalTabs } from '@/components/terminal/TerminalTabs'
@@ -35,6 +34,7 @@ import { LazyEditorTabs, loadEditorTabs } from './LazyEditorTabs'
 import { SHELL_VIEWS } from './shell-views'
 import { SIDE_PANEL_HANDLE_WIDTH, SidePanelResizeHandle } from './SidePanelResizeHandle'
 import { StatusBar } from './StatusBar'
+import { ToolWindowStripe } from './ToolWindowStripe'
 
 /** Sliver of main area that stays visible however wide the side panel gets, as in JetBrains IDEs. */
 const MAIN_AREA_MIN_WIDTH = 120
@@ -179,7 +179,7 @@ export function AppShell(): React.JSX.Element {
             </div>
             {chatOpen ? <ChatPanel /> : null}
             {notificationsOpen ? <NotificationsPanel /> : null}
-            <NotificationsBar />
+            <ToolWindowStripe />
           </div>
           <StatusBar />
           <Toaster />
