@@ -1,6 +1,7 @@
-import type { WebContents } from 'electron'
+import { app, type WebContents } from 'electron'
 import { type ChildProcess, spawn } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
+import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { StreamMessageReader, StreamMessageWriter } from 'vscode-jsonrpc/node'
 import {
@@ -12,13 +13,15 @@ import {
 import { isPlainObject } from '../../shared/plain-object'
 import { isPathInside } from '../files/path-containment'
 import { type ProjectChange, watchProject } from '../files/project-watch'
-import { exitFailure } from './language-server-exit'
+import { exitFailure, failureNotice } from './language-server-exit'
+import { openServerLog, type ServerLog } from './language-server-log'
 import { clientMessageVerdict, serverRequestAnswer } from './language-server-policy'
 import type {
   LanguageServerDefinition,
   ServerCommand,
   ServerConfiguration
 } from './language-server-registry'
+import { nodeServerArgs } from './node-server-bootstrap'
 
 /** A server gets this long to answer `shutdown`, and again to exit after `exit`, before it is killed. */
 const STOP_STEP_MS = 2000
@@ -35,6 +38,8 @@ type Session = {
   child: ChildProcess
   writer: StreamMessageWriter
   log: string[]
+  /** The server's log on disk: every start, all of its stderr and how it exited. */
+  logFile: ServerLog
   /** The page's `initialize` request; its response means the server is ready. */
   initializeId: unknown
   /** The page's messages still being checked, so they reach the server in order. */
@@ -72,6 +77,8 @@ const key = (owner: WebContents, server: string, root: string): string =>
   JSON.stringify([owner.id, server, root])
 
 class LanguageServerSessions {
+  constructor(private readonly logFolder: () => string) {}
+
   private readonly sessions = new Map<string, Session>()
   private readonly byKey = new Map<string, Session>()
   private readonly watchedOwners = new WeakSet<WebContents>()
@@ -109,8 +116,13 @@ class LanguageServerSessions {
     }
     // A script runs on the app's own executable, as plain Node.
     const [file, args] = command.node
-      ? [process.execPath, [command.file, ...command.args]]
+      ? [process.execPath, nodeServerArgs(command.file, command.args)]
       : [command.file, command.args]
+    const logFile = openServerLog(this.logFolder(), definition.name, root)
+    logFile.write(
+      `\n=== ${new Date().toISOString()} ${definition.name} started in ${root}\n` +
+        `${[command.file, ...command.args].join(' ')}\n`
+    )
     const child = spawn(file, args, {
       cwd: root,
       env: command.node ? { ...process.env, ELECTRON_RUN_AS_NODE: '1' } : process.env,
@@ -127,6 +139,7 @@ class LanguageServerSessions {
       child,
       writer,
       log: [],
+      logFile,
       initializeId: undefined,
       queue: Promise.resolve(),
       stopping: null,
@@ -142,10 +155,14 @@ class LanguageServerSessions {
 
     child.stderr.setEncoding('utf8')
     child.stderr.on('data', (chunk: string) => {
+      logFile.write(chunk)
       session.log.push(...chunk.split(/\r?\n/).filter(Boolean))
       session.log.splice(0, Math.max(0, session.log.length - LOG_LINES))
     })
-    child.once('error', (error) => session.log.push(error.message))
+    child.once('error', (error) => {
+      session.log.push(error.message)
+      logFile.write(`${error.message}\n`)
+    })
     // Writing to a server that just died fails; its exit is what gets reported.
     child.stdin.on('error', () => undefined)
     reader.listen((message) => this.fromServer(session, message))
@@ -304,8 +321,9 @@ class LanguageServerSessions {
       code,
       signal
     })
+    session.logFile.write(`=== ${new Date().toISOString()} ${failure ?? 'stopped as main asked'}\n`)
     if (failure === null) this.status(session, 'stopped')
-    else this.status(session, 'failed', [failure, ...session.log].join('\n'))
+    else this.status(session, 'failed', failureNotice(failure, session.log, session.logFile.path))
   }
 
   private status(session: Session, state: LanguageServerState, message?: string): void {
@@ -337,4 +355,6 @@ class LanguageServerSessions {
   }
 }
 
-export const languageServerSessions = new LanguageServerSessions()
+export const languageServerSessions = new LanguageServerSessions(() =>
+  join(app.getPath('logs'), 'language-servers')
+)
