@@ -428,7 +428,7 @@ function ProjectRow({
                 {folder.name}
               </span>
               {checkout ? (
-                <span className="type-hint flex max-w-24 shrink-0 items-center gap-1 text-muted-foreground">
+                <span className="type-hint flex min-w-0 items-center gap-1 text-muted-foreground">
                   <GitBranch className="size-3.5 shrink-0" aria-hidden />
                   <span className="truncate">{worktreeLabel(checkout)}</span>
                 </span>
