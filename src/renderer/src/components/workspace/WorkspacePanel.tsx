@@ -254,7 +254,7 @@ function RepositoryRow({
                 <FolderGit2 className="size-4 shrink-0 text-muted-foreground" aria-hidden />
                 <span className="truncate">{name}</span>
                 {branch ? (
-                  <span className="type-hint flex max-w-24 shrink-0 items-center gap-1 text-muted-foreground">
+                  <span className="type-hint flex min-w-0 items-center gap-1 text-muted-foreground">
                     <GitBranch className="size-3.5 shrink-0" aria-hidden />
                     <span className="truncate">{branch}</span>
                   </span>
