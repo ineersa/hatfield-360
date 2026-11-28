@@ -30,6 +30,7 @@ import {
 import { bindClipboardKeys } from '@/components/terminal/terminal-clipboard'
 import { openTerminalLink } from '@/components/terminal/terminal-link'
 import { cn } from '@/lib/class-names'
+import { countedNoun } from '@/lib/counted-noun'
 import { PaneManager } from '@/lib/pane-manager/pane-manager'
 import { type HunkTab, type TabGitHub, useHunkTabStore } from '@/state/hunk-tab-store'
 import type { HunkKind } from '../../../../shared/source-control-api'
@@ -138,8 +139,6 @@ function HunkTabBody({
   )
 }
 
-const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? '' : 's'}`
-
 /** What the pull request tab's hunk shows of GitHub. */
 function gitHubSummary(comments: TabGitHub['comments'] | undefined): {
   text: string
@@ -153,8 +152,8 @@ function gitHubSummary(comments: TabGitHub['comments'] | undefined): {
     comments.threads + comments.conversation === 0
       ? 'No open GitHub comments'
       : `GitHub: ${[
-          ...(comments.threads > 0 ? [plural(comments.threads, 'thread')] : []),
-          ...(comments.conversation > 0 ? [plural(comments.conversation, 'PR comment')] : [])
+          ...(comments.threads > 0 ? [countedNoun(comments.threads, 'thread')] : []),
+          ...(comments.conversation > 0 ? [countedNoun(comments.conversation, 'PR comment')] : [])
         ].join(', ')}`
   const hidden =
     comments.notShown > 0 ? ` · ${comments.notShown} not shown (outdated or off the diff)` : ''
@@ -200,7 +199,7 @@ function PullRequestBar({ tab }: { tab: HunkTab }): React.JSX.Element {
       <AlertDialog open={asking !== null} onOpenChange={(open) => !open && setAsking(null)}>
         <AlertDialogContent>
           <AlertDialogTitle>
-            Publish {plural(asking ?? 0, 'note')} to #{tab.target}?
+            Publish {countedNoun(asking ?? 0, 'note')} to #{tab.target}?
           </AlertDialogTitle>
           <AlertDialogDescription>
             They're posted on GitHub as you: new notes as one review, replies in their threads. Once
@@ -292,7 +291,7 @@ export function HunkTabs({
         <AlertDialogContent>
           <AlertDialogTitle>
             {(withNotes?.publish ?? null) !== null ? 'Publish or lose' : 'Close and lose'}{' '}
-            {plural(withNotes?.count ?? 0, 'note')}?
+            {countedNoun(withNotes?.count ?? 0, 'note')}?
           </AlertDialogTitle>
           <AlertDialogDescription>
             {(withNotes?.publish ?? null) !== null

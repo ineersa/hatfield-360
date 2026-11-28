@@ -22,6 +22,8 @@ export type Discussion = {
   threads: ReviewThread[]
   /** Comments on the pull request itself, and the text of submitted reviews, oldest first. */
   conversation: DiscussionComment[]
+  /** Threads, comments and reviews past the first 100 of each, which weren't read. */
+  missing: number
 }
 
 /** The GraphQL query for {@link parseDiscussion}; `owner`, `name` and `number` are its variables. */
@@ -29,12 +31,13 @@ export const DISCUSSION_QUERY = `query($owner: String!, $name: String!, $number:
   repository(owner: $owner, name: $name) {
     pullRequest(number: $number) {
       headRefOid
-      comments(first: 100) { nodes { databaseId author { login } body createdAt } }
-      reviews(first: 100) { nodes { databaseId author { login } body createdAt } }
+      comments(first: 100) { totalCount nodes { databaseId author { login } body createdAt } }
+      reviews(first: 100) { totalCount nodes { databaseId author { login } body createdAt } }
       reviewThreads(first: 100) {
+        totalCount
         nodes {
           isResolved path line diffSide subjectType
-          comments(first: 100) { nodes { databaseId author { login } body createdAt } }
+          comments(first: 100) { totalCount nodes { databaseId author { login } body createdAt } }
         }
       }
     }
@@ -45,6 +48,13 @@ const nodesOf = (value: unknown): unknown[] | null => {
   if (!isPlainObject(value) || !Array.isArray(value['nodes'])) return null
   const nodes: unknown[] = value['nodes']
   return nodes
+}
+
+/** How many of a connection's items weren't read: those past its first page. */
+const unread = (value: unknown): number => {
+  const total = isPlainObject(value) ? value['totalCount'] : null
+  const nodes = nodesOf(value)
+  return typeof total === 'number' && nodes !== null ? Math.max(0, total - nodes.length) : 0
 }
 
 /** A comment node; a deleted account's author is null, which GitHub shows as "ghost". */
@@ -65,7 +75,7 @@ function commentsOf(value: unknown): DiscussionComment[] | null {
 }
 
 /** A thread node, or null when it doesn't have the expected shape; resolved ones are `'resolved'`. */
-function threadOf(value: unknown): ReviewThread | 'resolved' | null {
+function threadOf(value: unknown): (ReviewThread & { unread: number }) | 'resolved' | null {
   if (!isPlainObject(value)) return null
   const { isResolved, path, line, diffSide, subjectType } = value
   const comments = commentsOf(value['comments'])
@@ -84,7 +94,8 @@ function threadOf(value: unknown): ReviewThread | 'resolved' | null {
     side: diffSide === 'LEFT' ? 'old' : 'new',
     line,
     onFile: subjectType === 'FILE',
-    comments
+    comments,
+    unread: unread(value['comments'])
   }
 }
 
@@ -111,9 +122,15 @@ export function parseDiscussion(json: string): Discussion | null {
   const threads = nodesOf(pullRequest['reviewThreads'])?.map(threadOf) ?? null
   if (comments === null || reviews === null || threads === null) return null
   if (threads.some((thread) => thread === null)) return null
+  const open = threads.filter((thread) => thread !== null && thread !== 'resolved')
   return {
     head: pullRequest['headRefOid'],
-    threads: threads.filter((thread) => thread !== null && thread !== 'resolved'),
+    threads: open.map(({ unread: _unread, ...thread }) => thread),
+    missing:
+      unread(pullRequest['comments']) +
+      unread(pullRequest['reviews']) +
+      unread(pullRequest['reviewThreads']) +
+      open.reduce((sum, thread) => sum + thread.unread, 0),
     conversation: [...comments, ...reviews]
       .filter(hasText)
       .toSorted((a, b) => a.createdAt.localeCompare(b.createdAt))

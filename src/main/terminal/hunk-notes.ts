@@ -46,15 +46,11 @@ export const listHunkNotes = (hunk: string, session: string, type: 'all' | 'user
   runHunk(hunk, ['session', 'comment', 'list', session, '--type', type, '--json'])
 
 /**
- * How many review notes of `type` the hunk running in a terminal holds (hunk keeps them only while
- * it runs): 0 when it has quit, or can't say.
+ * How many review notes the hunk running in a terminal holds (hunk keeps them only while it runs):
+ * 0 when it has quit, or can't say.
  */
-export async function hunkNoteCount(
-  hunk: string,
-  terminalPid: number,
-  type: 'all' | 'user'
-): Promise<number> {
+export async function hunkNoteCount(hunk: string, terminalPid: number): Promise<number> {
   const session = await hunkSessionIn(hunk, terminalPid)
-  const notes = session === null ? null : await listHunkNotes(hunk, session, type)
+  const notes = session === null ? null : await listHunkNotes(hunk, session, 'all')
   return (notes === null ? null : noteCount(notes)) ?? 0
 }

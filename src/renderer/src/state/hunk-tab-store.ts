@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { countedNoun } from '@/lib/counted-noun'
 import { mainErrorMessage } from '@/lib/main-error-message'
 import type {
   HunkKind,
@@ -109,7 +110,7 @@ export type TabGitHub = {
 const left = (unplaced: number) =>
   unplaced === 0
     ? ''
-    : ` ${unplaced} note${unplaced === 1 ? '' : 's'} aren’t on a line and stay in hunk.`
+    : ` ${countedNoun(unplaced, 'note')} ${unplaced === 1 ? 'is' : 'are'} empty or not on a line, and ${unplaced === 1 ? 'stays' : 'stay'} in hunk.`
 
 /** What the user is told once publishing ends. */
 function publishedNotice(number: string, result: PullRequestPublish): void {
@@ -117,7 +118,7 @@ function publishedNotice(number: string, result: PullRequestPublish): void {
     notify({
       severity: 'info',
       title: `Published to #${number}`,
-      body: `${result.posted} comment${result.posted === 1 ? '' : 's'} posted.${left(result.unplaced)}`
+      body: `${countedNoun(result.posted, 'comment')} posted.${left(result.unplaced)}`
     })
   else if (result.status === 'nothing')
     notify({

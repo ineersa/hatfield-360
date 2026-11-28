@@ -53,7 +53,9 @@ const running = new Map<
 export function hunkNotesIn(owner: WebContents, terminalId: string): Promise<number> {
   const terminal = running.get(terminalId)
   if (terminal?.owner !== owner) return Promise.resolve(0)
-  return hunkNoteCount(terminal.hunk, terminal.pid, terminal.pullRequest ? 'user' : 'all')
+  return terminal.pullRequest
+    ? terminal.pullRequest.unpublished()
+    : hunkNoteCount(terminal.hunk, terminal.pid)
 }
 
 const pullRequestIn = (owner: WebContents, terminalId: string): PullRequestNotes => {

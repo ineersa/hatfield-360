@@ -13,8 +13,9 @@ import {
 
 // Captured from `gh api graphql` with DISCUSSION_QUERY on a throwaway pull request (github.com,
 // 2026-11): a thread on a new line with a reply, one on a removed line, an outdated one, a
-// resolved one, one on the whole file, a conversation comment and three reviews without text.
-const DISCUSSION = String.raw`{"data":{"repository":{"pullRequest":{"headRefOid":"0caaa86af971a2473ff63f050668ac029b982cee","comments":{"nodes":[{"databaseId":7232985258,"author":{"login":"ineersa"},"body":"QA: a conversation comment on the PR","createdAt":"2026-11-28T03:19:48Z"}]},"reviews":{"nodes":[{"databaseId":6095393883,"author":{"login":"ineersa"},"body":"","createdAt":"2026-11-28T03:19:35Z"},{"databaseId":6095394896,"author":{"login":"ineersa"},"body":"","createdAt":"2026-11-28T03:19:46Z"},{"databaseId":6095395018,"author":{"login":"ineersa"},"body":"","createdAt":"2026-11-28T03:19:47Z"}]},"reviewThreads":{"nodes":[{"isResolved":false,"path":"docs/product/vision.md","line":5,"diffSide":"RIGHT","subjectType":"LINE","comments":{"nodes":[{"databaseId":4725222043,"author":{"login":"ineersa"},"body":"QA: why drop the Orca path?","createdAt":"2026-11-28T03:19:35Z"},{"databaseId":4725222764,"author":{"login":"ineersa"},"body":"QA reply: it's a local path, meaningless to others.","createdAt":"2026-11-28T03:19:46Z"}]}},{"isResolved":false,"path":"docs/product/vision.md","line":9,"diffSide":"LEFT","subjectType":"LINE","comments":{"nodes":[{"databaseId":4725222046,"author":{"login":"ineersa"},"body":"QA: on the removed line","createdAt":"2026-11-28T03:19:35Z"}]}},{"isResolved":false,"path":"docs/product/vision.md","line":null,"diffSide":"RIGHT","subjectType":"LINE","comments":{"nodes":[{"databaseId":4725222049,"author":{"login":"ineersa"},"body":"QA: this one goes outdated","createdAt":"2026-11-28T03:19:35Z"}]}},{"isResolved":true,"path":"docs/product/vision.md","line":9,"diffSide":"RIGHT","subjectType":"LINE","comments":{"nodes":[{"databaseId":4725222053,"author":{"login":"ineersa"},"body":"QA: this one gets resolved","createdAt":"2026-11-28T03:19:35Z"}]}},{"isResolved":false,"path":"docs/product/vision.md","line":1,"diffSide":"RIGHT","subjectType":"FILE","comments":{"nodes":[{"databaseId":4725222871,"author":{"login":"ineersa"},"body":"QA: a comment on the whole file","createdAt":"2026-11-28T03:19:47Z"}]}}]}}}}}`
+// resolved one, one on the whole file, a thread from a published note, two conversation comments
+// (one a published reply) and five reviews without text.
+const DISCUSSION = String.raw`{"data":{"repository":{"pullRequest":{"headRefOid":"0caaa86af971a2473ff63f050668ac029b982cee","comments":{"totalCount":2,"nodes":[{"databaseId":7232985258,"author":{"login":"ineersa"},"body":"QA: a conversation comment on the PR","createdAt":"2026-11-28T03:19:48Z"},{"databaseId":7233038357,"author":{"login":"ineersa"},"body":"> ineersa: QA: a conversation comment on the PR\n\nQA reply from hunk to the PR comment","createdAt":"2026-11-28T03:23:36Z"}]},"reviews":{"totalCount":5,"nodes":[{"databaseId":6095393883,"author":{"login":"ineersa"},"body":"","createdAt":"2026-11-28T03:19:35Z"},{"databaseId":6095394896,"author":{"login":"ineersa"},"body":"","createdAt":"2026-11-28T03:19:46Z"},{"databaseId":6095395018,"author":{"login":"ineersa"},"body":"","createdAt":"2026-11-28T03:19:47Z"},{"databaseId":6095406912,"author":{"login":"ineersa"},"body":"","createdAt":"2026-11-28T03:22:05Z"},{"databaseId":6095414506,"author":{"login":"ineersa"},"body":"","createdAt":"2026-11-28T03:23:35Z"}]},"reviewThreads":{"totalCount":6,"nodes":[{"isResolved":false,"path":"docs/product/vision.md","line":5,"diffSide":"RIGHT","subjectType":"LINE","comments":{"totalCount":3,"nodes":[{"databaseId":4725222043,"author":{"login":"ineersa"},"body":"QA: why drop the Orca path?","createdAt":"2026-11-28T03:19:35Z"},{"databaseId":4725222764,"author":{"login":"ineersa"},"body":"QA reply: it's a local path, meaningless to others.","createdAt":"2026-11-28T03:19:46Z"},{"databaseId":4725235923,"author":{"login":"ineersa"},"body":"QA reply from hunk to the thread","createdAt":"2026-11-28T03:23:35Z"}]}},{"isResolved":false,"path":"docs/product/vision.md","line":9,"diffSide":"LEFT","subjectType":"LINE","comments":{"totalCount":1,"nodes":[{"databaseId":4725222046,"author":{"login":"ineersa"},"body":"QA: on the removed line","createdAt":"2026-11-28T03:19:35Z"}]}},{"isResolved":false,"path":"docs/product/vision.md","line":null,"diffSide":"RIGHT","subjectType":"LINE","comments":{"totalCount":1,"nodes":[{"databaseId":4725222049,"author":{"login":"ineersa"},"body":"QA: this one goes outdated","createdAt":"2026-11-28T03:19:35Z"}]}},{"isResolved":true,"path":"docs/product/vision.md","line":9,"diffSide":"RIGHT","subjectType":"LINE","comments":{"totalCount":1,"nodes":[{"databaseId":4725222053,"author":{"login":"ineersa"},"body":"QA: this one gets resolved","createdAt":"2026-11-28T03:19:35Z"}]}},{"isResolved":false,"path":"docs/product/vision.md","line":1,"diffSide":"RIGHT","subjectType":"FILE","comments":{"totalCount":1,"nodes":[{"databaseId":4725222871,"author":{"login":"ineersa"},"body":"QA: a comment on the whole file","createdAt":"2026-11-28T03:19:47Z"}]}},{"isResolved":false,"path":"docs/product/vision.md","line":5,"diffSide":"RIGHT","subjectType":"LINE","comments":{"totalCount":1,"nodes":[{"databaseId":4725230968,"author":{"login":"ineersa"},"body":"QA from hunk: published by Hatfield","createdAt":"2026-11-28T03:22:05Z"}]}}]}}}}}`
 
 describe('parseDiscussion', () => {
   it('keeps unresolved threads and the said conversation', () => {
@@ -24,17 +25,23 @@ describe('parseDiscussion', () => {
       ['new', 5, false],
       ['old', 9, false],
       ['new', null, false],
-      ['new', 1, true]
+      ['new', 1, true],
+      ['new', 5, false]
     ])
     expect(discussion?.threads[0]?.comments.map((each) => each.id)).toEqual([
-      4725222043, 4725222764
+      4725222043, 4725222764, 4725235923
     ])
-    expect(discussion?.conversation.map((each) => each.body)).toEqual([
-      'QA: a conversation comment on the PR'
-    ])
+    expect(discussion?.conversation.map((each) => each.id)).toEqual([7232985258, 7233038357])
+    expect(discussion?.missing).toBe(0)
   })
 
   it("names a deleted account's comments as GitHub does, and refuses other shapes as a whole", () => {
+    // Past the first 100 threads: counted, as they weren't read.
+    expect(
+      parseDiscussion(
+        DISCUSSION.replace('"reviewThreads":{"totalCount":6', '"reviewThreads":{"totalCount":130')
+      )?.missing
+    ).toBe(124)
     const ghost = parseDiscussion(DISCUSSION.replace('{"login":"ineersa"}', 'null'))
     expect(ghost?.conversation[0]?.author).toBe('ghost')
     expect(parseDiscussion(DISCUSSION.replace('"LEFT"', '"MIDDLE"'))).toBe(null)
@@ -198,15 +205,15 @@ describe('publishPlan', () => {
     ]
   })
   const loaded = new Map<string, LoadedNote>([
-    ['mcp:gh:0', { kind: 'thread', commentId: 11 }],
-    ['mcp:gh2:0', { kind: 'thread', commentId: 11 }],
-    ['mcp:conv:0', { kind: 'conversation', author: 'bob', body: 'Mostly fine.' }]
+    ['mcp:gh:0', { kind: 'thread', commentId: 11, githubId: 11 }],
+    ['mcp:gh2:0', { kind: 'thread', commentId: 11, githubId: 12 }],
+    ['mcp:conv:0', { kind: 'conversation', author: 'bob', body: 'Mostly fine.', githubId: 7 }]
   ])
 
   it("posts only the user's notes: new threads as one review, replies where they belong", () => {
     const notes = parseNoteList(listed)
     expect(notes).not.toBe(null)
-    expect(publishPlan(notes ?? [], loaded)).toEqual({
+    expect(publishPlan(notes ?? [], loaded, new Set())).toEqual({
       review: [
         {
           post: {
@@ -234,12 +241,67 @@ describe('publishPlan', () => {
     const agentsOnly = parseNoteList(
       '{"comments":[{"noteId":"mcp:gh:0","source":"agent","filePath":"a.txt","hunkIndex":0,"newRange":[2,2],"body":"x"}]}'
     )
-    expect(publishPlan(agentsOnly ?? [], loaded)).toEqual({
+    expect(publishPlan(agentsOnly ?? [], loaded, new Set())).toEqual({
       review: [],
       replies: [],
       conversation: [],
       unplaced: 0
     })
     expect(parseNoteList('No live comments.')).toBe(null)
+  })
+
+  it('never posts a note twice, and counts the empty ones it leaves', () => {
+    // user:2 was posted, but hunk kept it: an agent replied under it. The user answered again.
+    const kept = parseNoteList(
+      JSON.stringify({
+        comments: [
+          {
+            noteId: 'user:2',
+            source: 'user',
+            filePath: 'a.txt',
+            hunkIndex: 0,
+            newRange: [2, 2],
+            body: 'why uppercase?'
+          },
+          {
+            noteId: 'mcp:agent:1',
+            parentId: 'user:2',
+            source: 'agent',
+            filePath: 'a.txt',
+            hunkIndex: 0,
+            newRange: [2, 2],
+            body: 'Style guide.'
+          },
+          {
+            noteId: 'user:6',
+            parentId: 'mcp:agent:1',
+            source: 'user',
+            filePath: 'a.txt',
+            hunkIndex: 0,
+            newRange: [2, 2],
+            body: 'Which one?'
+          },
+          {
+            noteId: 'user:7',
+            source: 'user',
+            filePath: 'a.txt',
+            hunkIndex: 0,
+            newRange: [3, 3],
+            body: '  '
+          }
+        ]
+      })
+    )
+    expect(publishPlan(kept ?? [], loaded, new Set(['user:2']))).toEqual({
+      review: [
+        {
+          post: { path: 'a.txt', line: 2, side: 'RIGHT', body: '> Style guide.\n\nWhich one?' },
+          noteIds: ['user:6']
+        }
+      ],
+      replies: [],
+      conversation: [],
+      unplaced: 1
+    })
   })
 })

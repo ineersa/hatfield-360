@@ -1,5 +1,6 @@
 import type { PullRequestComments, PullRequestPublish } from '../../shared/source-control-api'
 import { postToPullRequest, readDiscussion } from '../git/pull-request-comments'
+import type { Discussion, DiscussionComment } from '../git/pull-request-discussion'
 import { hunkSessionIn, listHunkNotes, runHunk } from './hunk-notes'
 import {
   type ApplyItem,
@@ -33,8 +34,10 @@ const delay = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve,
 export class PullRequestNotes {
   /** Notes Hatfield put in hunk, by hunk note id: what each stands for on GitHub. */
   private readonly loaded = new Map<string, LoadedNote>()
-  /** The head commit the loaded threads' lines refer to. */
+  /** The head commit the loaded threads' lines refer to: hunk's diff, downloaded at launch. */
   private head: string | null = null
+  /** The user's notes already posted, which hunk may keep when they have replies. */
+  private readonly published = new Set<string>()
   private session: string | null = null
   private stopped = false
   private queue: Promise<unknown> = Promise.resolve()
@@ -46,7 +49,7 @@ export class PullRequestNotes {
     private readonly number: string
   ) {}
 
-  /** hunk ended: nothing more is waited for. */
+  /** hunk ended: nothing more is waited for or run. */
   stop(): void {
     this.stopped = true
   }
@@ -80,7 +83,10 @@ export class PullRequestNotes {
     return runHunk(this.hunk, ['session', ...args], stdin)
   }
 
-  /** Adds notes to hunk: one batch, or one at a time when hunk refuses the batch (a line it can't place). */
+  /**
+   * Adds notes to hunk: one batch, or one at a time when hunk refuses it (a line it can't place).
+   * Notes of a batch hunk took only part of are taken back first, so none is added twice.
+   */
   private async apply(session: string, items: readonly ApplyItem[]): Promise<(string | null)[]> {
     if (items.length === 0) return []
     const run = (batch: readonly ApplyItem[]) =>
@@ -90,74 +96,146 @@ export class PullRequestNotes {
       ).then((output) => (output === null ? null : appliedIds(output)))
     const all = await run(items)
     if (all !== null && all.length === items.length) return all
+    for (const noteId of (all ?? []).toReversed()) await this.remove(session, noteId)
     const each: (string | null)[] = []
     for (const item of items) each.push((await run([item]))?.[0] ?? null)
     return each
   }
 
+  /** Takes a note out of hunk; false when hunk keeps it (it won't remove one that has replies). */
+  private async remove(session: string, noteId: string): Promise<boolean> {
+    return (await this.hunkSession(['comment', 'rm', session, noteId])) !== null
+  }
+
+  /** The pull request's discussion, unless it has commits the tab's hunk doesn't show. */
+  private async discussion(): Promise<Discussion | string> {
+    const discussion = await readDiscussion(this.root, this.number)
+    if (typeof discussion === 'string') return discussion
+    // hunk shows the diff it downloaded: lines of a later head would land on the wrong rows.
+    if (this.head !== null && discussion.head !== this.head)
+      return `#${this.number} has new commits since this tab opened. Close the tab and open it again to see them.`
+    return discussion
+  }
+
   private async loadNow(): Promise<PullRequestComments> {
+    if (this.stopped) return { status: 'failed', message: 'hunk has ended.' }
     const session = await this.sessionNow()
     if (session === null) return { status: 'failed', message: 'hunk has not started.' }
-    const discussion = await readDiscussion(this.root, this.number)
+    const discussion = await this.discussion()
     if (typeof discussion === 'string') return { status: 'failed', message: discussion }
-    // Newest first: hunk won't remove a note while it has replies, and replies were added last.
-    for (const noteId of [...this.loaded.keys()].toReversed())
-      await this.hunkSession(['comment', 'rm', session, noteId])
-    this.loaded.clear()
     this.head = discussion.head
+
+    // Newest first, as replies were added last. A note the user has replied to stays, and stands
+    // for its GitHub comment, so the reply is still published into its thread.
+    const kept = new Map<number, string>()
+    for (const [noteId, note] of [...this.loaded].toReversed()) {
+      if (await this.remove(session, noteId)) this.loaded.delete(noteId)
+      else kept.set(note.githubId, noteId)
+    }
     const files = await this.hunkSession(['get', session, '--json'])
     const first = files === null ? null : firstFile(files)
 
-    const threads = discussion.threads.flatMap((thread) => {
-      const root = threadRoot(thread)
-      return root === null ? [] : [{ thread, root }]
-    })
-    const conversation = first === null ? [] : discussion.conversation
-    const roots = await this.apply(session, [
-      ...threads.map(({ root }) => root),
-      ...conversation.map((comment) => conversationRoot(comment, first ?? ''))
-    ])
-    const replies: { item: ApplyItem; commentId: number }[] = []
-    let shownThreads = 0
-    threads.forEach(({ thread }, index) => {
-      const noteId = roots[index]
+    type Root = {
+      kind: 'threads' | 'conversation'
+      item: ApplyItem
+      loaded: (noteId: string) => void
+    }
+    const roots: Root[] = []
+    const replies: { comment: DiscussionComment; rootId: number; under: () => string | null }[] = []
+    let shown = { threads: 0, conversation: 0 }
+    let unplaced = discussion.missing
+    for (const thread of discussion.threads) {
       const [rootComment, ...rest] = thread.comments
-      if (noteId === undefined || noteId === null || rootComment === undefined) return
-      shownThreads += 1
-      this.loaded.set(noteId, { kind: 'thread', commentId: rootComment.id })
+      if (rootComment === undefined) continue
+      let rootNote = kept.get(rootComment.id) ?? null
+      const item = rootNote === null ? threadRoot(thread) : null
+      if (rootNote === null && item === null) {
+        unplaced += 1
+        continue
+      }
+      if (item !== null)
+        roots.push({
+          kind: 'threads',
+          item,
+          loaded: (noteId) => {
+            rootNote = noteId
+            this.loaded.set(noteId, {
+              kind: 'thread',
+              commentId: rootComment.id,
+              githubId: rootComment.id
+            })
+          }
+        })
+      shown = { ...shown, threads: shown.threads + 1 }
       for (const comment of rest)
-        replies.push({ item: replyTo(noteId, comment), commentId: rootComment.id })
+        if (!kept.has(comment.id))
+          replies.push({ comment, rootId: rootComment.id, under: () => rootNote })
+    }
+    for (const comment of discussion.conversation) {
+      if (kept.has(comment.id)) {
+        shown = { ...shown, conversation: shown.conversation + 1 }
+        continue
+      }
+      if (first === null) {
+        unplaced += 1
+        continue
+      }
+      roots.push({
+        kind: 'conversation',
+        item: conversationRoot(comment, first),
+        loaded: (noteId) =>
+          this.loaded.set(noteId, {
+            kind: 'conversation',
+            author: comment.author,
+            body: comment.body,
+            githubId: comment.id
+          })
+      })
+      shown = { ...shown, conversation: shown.conversation + 1 }
+    }
+
+    const rootIds = await this.apply(
+      session,
+      roots.map(({ item }) => item)
+    )
+    roots.forEach((root, index) => {
+      const noteId = rootIds[index]
+      if (noteId !== undefined && noteId !== null) root.loaded(noteId)
+      else {
+        unplaced += 1
+        shown = { ...shown, [root.kind]: shown[root.kind] - 1 }
+      }
     })
-    let shownConversation = 0
-    conversation.forEach((comment, index) => {
-      const noteId = roots[threads.length + index]
-      if (noteId === undefined || noteId === null) return
-      shownConversation += 1
-      this.loaded.set(noteId, { kind: 'conversation', author: comment.author, body: comment.body })
+    // A reply goes under its thread's note in hunk; a thread hunk couldn't place takes its replies.
+    const placed = replies.flatMap(({ comment, rootId, under }) => {
+      const noteId = under()
+      return noteId === null ? [] : [{ comment, rootId, item: replyTo(noteId, comment) }]
     })
-    // A reply is a reply, kept in hunk even when hunk can't show the thread's other replies.
     const replyIds = await this.apply(
       session,
-      replies.map(({ item }) => item)
+      placed.map(({ item }) => item)
     )
-    replies.forEach(({ commentId }, index) => {
+    placed.forEach(({ comment, rootId }, index) => {
       const noteId = replyIds[index]
       if (noteId !== undefined && noteId !== null)
-        this.loaded.set(noteId, { kind: 'thread', commentId })
+        this.loaded.set(noteId, { kind: 'thread', commentId: rootId, githubId: comment.id })
     })
-    return {
-      status: 'loaded',
-      threads: shownThreads,
-      conversation: shownConversation,
-      notShown:
-        discussion.threads.length -
-        shownThreads +
-        discussion.conversation.length -
-        shownConversation
-    }
+    return { status: 'loaded', ...shown, notShown: unplaced }
+  }
+
+  /** How many of the user's notes aren't on GitHub: what closing the tab would lose. */
+  async unpublished(): Promise<number> {
+    const session = this.stopped ? null : await hunkSessionIn(this.hunk, this.terminalPid)
+    const listed = session === null ? null : await listHunkNotes(this.hunk, session, 'user')
+    const notes = listed === null ? null : parseNoteList(listed)
+    return (
+      notes?.filter((note) => !this.published.has(note.noteId) && !this.loaded.has(note.noteId))
+        .length ?? 0
+    )
   }
 
   private async publishNow(): Promise<PullRequestPublish> {
+    if (this.stopped) return failed('hunk has ended.')
     const session = await this.sessionNow()
     if (session === null) return failed('hunk has not started.')
     if (this.head === null)
@@ -165,43 +243,52 @@ export class PullRequestNotes {
     const listed = await listHunkNotes(this.hunk, session, 'all')
     const notes = listed === null ? null : parseNoteList(listed)
     if (notes === null) return failed('hunk did not list its notes.')
-    const plan = publishPlan(notes, this.loaded)
+    const plan = publishPlan(notes, this.loaded, this.published)
     const posts = plan.review.length + plan.replies.length + plan.conversation.length
     if (posts === 0) return { status: 'nothing', unplaced: plan.unplaced }
+    const current = await this.discussion()
+    if (typeof current === 'string') return failed(current)
 
     const posted: string[] = []
     const failures: string[] = []
+    let count = 0
     const post = async (
-      noteIds: string[],
+      planned: { noteIds: string[] }[],
       path: (repository: string) => string,
       fields: object
     ) => {
       const failure = await postToPullRequest(this.root, path, fields)
-      if (failure === null) posted.push(...noteIds)
-      else failures.push(failure)
+      if (failure !== null) {
+        failures.push(failure)
+        return
+      }
+      count += planned.length
+      for (const each of planned) posted.push(...each.noteIds)
     }
     const pulls = (repository: string) => `${repository}/pulls/${this.number}`
     if (plan.review.length > 0)
-      await post(
-        plan.review.flatMap((each) => each.noteIds),
-        (repository) => `${pulls(repository)}/reviews`,
-        { commit_id: this.head, event: 'COMMENT', comments: plan.review.map((each) => each.post) }
-      )
+      await post(plan.review, (repository) => `${pulls(repository)}/reviews`, {
+        commit_id: this.head,
+        event: 'COMMENT',
+        comments: plan.review.map((each) => each.post)
+      })
     for (const reply of plan.replies)
       await post(
-        reply.noteIds,
+        [reply],
         (repository) => `${pulls(repository)}/comments/${reply.post.commentId}/replies`,
         { body: reply.post.body }
       )
     for (const comment of plan.conversation)
-      await post(comment.noteIds, (repository) => `${repository}/issues/${this.number}/comments`, {
+      await post([comment], (repository) => `${repository}/issues/${this.number}/comments`, {
         body: comment.post
       })
-    // Replies first: hunk won't remove a note while it has replies.
-    for (const noteId of posted.toReversed())
-      await this.hunkSession(['comment', 'rm', session, noteId])
+    // Never posted twice, even when hunk keeps the note (someone replied to it). Replies first:
+    // hunk won't remove a note while it has replies.
+    for (const noteId of posted.toReversed()) {
+      this.published.add(noteId)
+      await this.remove(session, noteId)
+    }
     const comments = await this.loadNow()
-    const count = posts - failures.length
     return failures.length === 0
       ? { status: 'published', posted: count, unplaced: plan.unplaced, comments }
       : { status: 'failed', message: failures.join(' '), posted: count, comments }

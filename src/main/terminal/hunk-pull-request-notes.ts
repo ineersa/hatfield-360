@@ -17,12 +17,12 @@ export type HunkNote = {
 /** One item of a `hunk session comment apply --stdin` batch. */
 export type ApplyItem = Readonly<Record<string, string | number>>
 
-/** What a note Hatfield loaded from GitHub stands for. */
+/** What a note Hatfield loaded from GitHub stands for; `githubId` is that comment's own id. */
 export type LoadedNote =
-  /** A review thread's comment; replies go to the thread's first comment. */
-  | { kind: 'thread'; commentId: number }
+  /** A review thread's comment; replies go to the thread's first comment, `commentId`. */
+  | { kind: 'thread'; commentId: number; githubId: number }
   /** A comment on the pull request itself. */
-  | { kind: 'conversation'; author: string; body: string }
+  | { kind: 'conversation'; author: string; body: string; githubId: number }
 
 /** A new review comment, as `POST /repos/{owner}/{repo}/pulls/{n}/reviews` takes it. */
 type NewReviewComment = {
@@ -44,7 +44,7 @@ export type PublishPlan = {
   replies: Planned<{ commentId: number; body: string }>[]
   /** Replies to comments on the pull request itself, which GitHub doesn't thread. */
   conversation: Planned<string>[]
-  /** Notes that can't be posted: not on a line. */
+  /** The user's notes that can't be posted: empty, or not on a line. */
   unplaced: number
 }
 
@@ -132,18 +132,22 @@ const quote = (body: string, author?: string): string => {
  * What publishing the user's notes posts. A note of the user's and their replies under it become
  * one comment. Under a GitHub thread, that's a reply in it; under a pull request comment, a new
  * comment quoting it; under an agent's note, or on its own, a new thread on its line. Notes loaded
- * from GitHub, and other agents' notes, aren't posted.
+ * from GitHub, notes `published` before (hunk keeps a note that has replies), and other agents'
+ * notes aren't posted.
  */
 export function publishPlan(
   notes: readonly HunkNote[],
-  loaded: ReadonlyMap<string, LoadedNote>
+  loaded: ReadonlyMap<string, LoadedNote>,
+  published: ReadonlySet<string>
 ): PublishPlan {
   const byId = new Map(notes.map((note) => [note.noteId, note]))
-  const users = notes.filter((note) => note.source === 'user')
+  const unposted = (note: HunkNote | undefined): note is HunkNote =>
+    note?.source === 'user' && !published.has(note.noteId) && !loaded.has(note.noteId)
+  const users = notes.filter(unposted)
   /** The user's note that starts the chain of the user's notes `note` is in. */
   const headOf = (note: HunkNote): HunkNote => {
     const parent = note.parentId === null ? undefined : byId.get(note.parentId)
-    return parent?.source === 'user' ? headOf(parent) : note
+    return unposted(parent) ? headOf(parent) : note
   }
   const chains = new Map<HunkNote, HunkNote[]>()
   for (const note of users) {
@@ -157,7 +161,10 @@ export function publishPlan(
       .map((note) => note.body.trim())
       .filter((text) => text !== '')
       .join('\n\n')
-    if (body === '') continue
+    if (body === '') {
+      plan.unplaced += chain.length
+      continue
+    }
     const answered = head.parentId === null ? undefined : loaded.get(head.parentId)
     if (answered?.kind === 'thread') {
       plan.replies.push({ post: { commentId: answered.commentId, body }, noteIds })
