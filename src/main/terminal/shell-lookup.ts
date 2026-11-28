@@ -45,6 +45,8 @@ function lastLineOf(file: string, args: string[], cwd: string): Promise<string |
   return new Promise((resolve) => {
     const child = spawn(file, args, {
       cwd,
+      // Its own session: an interactive shell would take over the terminal `pnpm dev` runs in and stop main.
+      detached: true,
       stdio: ['ignore', 'pipe', 'ignore'],
       env: terminalEnvironment(process.env, { platform: process.platform, appVersion: '' })
     })

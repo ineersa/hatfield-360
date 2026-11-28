@@ -1,7 +1,6 @@
 import { realpath, stat } from 'node:fs/promises'
-import { execFile } from 'node:child_process'
+import { spawn } from 'node:child_process'
 import { basename, isAbsolute, join } from 'node:path'
-import { promisify } from 'node:util'
 import type { AgentProfile } from '../../shared/agent-api'
 import type { ShellCommand } from '../terminal/default-shell'
 import { agentShellCommand } from '../terminal/agent-shell-command'
@@ -17,7 +16,61 @@ import type { WorkspaceView } from '../../shared/workspace-api'
 import type { ProjectWorktrees } from '../../shared/worktree-api'
 import { catalogScopes } from './catalog-scopes'
 
-const execute = promisify(execFile)
+/** A failed run, with the fields execFile would set, which the catalog notice reads. */
+class CatalogRunError extends Error {
+  constructor(
+    message: string,
+    readonly code: number | string | null,
+    readonly signal: NodeJS.Signals | null,
+    readonly killed: boolean,
+    readonly stderr: string
+  ) {
+    super(message)
+  }
+}
+
+const OUTPUT_LIMIT = 2 * 1024 * 1024
+
+/** The command's stdout; spawn, unlike execFile, can start it in a session of its own. */
+function execute(command: ShellCommand, env: NodeJS.ProcessEnv): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command.file, command.args, {
+      env,
+      // An interactive shell would take over the terminal `pnpm dev` runs in and stop main.
+      detached: true,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      windowsHide: true
+    })
+    let stdout = ''
+    let stderr = ''
+    let killed = false
+    let overflow = false
+    const kill = (): void => {
+      killed = true
+      child.kill('SIGTERM')
+    }
+    const timer = setTimeout(kill, CATALOG_TIMEOUT_MS)
+    child.stdout.setEncoding('utf8').on('data', (chunk: string) => {
+      stdout += chunk
+      if (stdout.length <= OUTPUT_LIMIT) return
+      overflow = true
+      kill()
+    })
+    child.stderr.setEncoding('utf8').on('data', (chunk: string) => {
+      stderr = (stderr + chunk).slice(-OUTPUT_LIMIT)
+    })
+    child.on('error', (error) => {
+      clearTimeout(timer)
+      reject(error)
+    })
+    child.on('close', (code, signal) => {
+      clearTimeout(timer)
+      if (code === 0 && !killed) resolve(stdout)
+      else if (overflow) reject(new Error('session:list printed more than 2 MB.'))
+      else reject(new CatalogRunError('session:list failed.', code, signal, killed, stderr))
+    })
+  })
+}
 
 export function isMissingHatfieldCatalog(error: unknown): boolean {
   return (
@@ -63,7 +116,6 @@ function stderrTail(stderr: unknown): string {
 function catalogFailure(error: unknown): string {
   if (error instanceof CatalogOutputError) return error.message
   if (!(error instanceof Error)) return String(error)
-  // execFile puts the exit status and output on the error itself.
   const fields = new Map<string, unknown>(Object.entries(error))
   const code = fields.get('code')
   const signal = fields.get('signal')
@@ -210,13 +262,7 @@ async function listScope(
   try {
     for (;;) {
       const command = hatfieldCatalogCommand(profile, cwd, since, offset, shell)
-      const { stdout } = await execute(command.file, command.args, {
-        encoding: 'utf8',
-        env: { ...process.env, ...profile.env },
-        maxBuffer: 2 * 1024 * 1024,
-        timeout: CATALOG_TIMEOUT_MS,
-        windowsHide: true
-      })
+      const stdout = await execute(command, { ...process.env, ...profile.env })
       const page = parseHatfieldCatalog(catalogJson(stdout), project, now)
       sessions.push(...page.sessions)
       if (page.nextOffset === null) break
