@@ -26,11 +26,15 @@ export async function hunkSessionView(hunk: string, terminalPid: number): Promis
 }
 
 /** The chat message asking about the selected hunk's questions, or why there's nothing to ask. */
-export async function askAboutHunk(hunk: string, terminalPid: number): Promise<HunkAsk> {
+export async function askAboutHunk(
+  hunk: string,
+  terminalPid: number,
+  root: string
+): Promise<HunkAsk> {
   const session = await hunkSessionIn(hunk, terminalPid)
   if (session === null) return { status: 'none', reason: 'hunk isn’t running' }
   const questions = await questionsHere(hunk, session)
   return typeof questions === 'string'
     ? { status: 'none', reason: questions }
-    : { status: 'ask', prompt: askPrompt(hunk, session, questions), count: questions.length }
+    : { status: 'ask', prompt: askPrompt(hunk, session, root, questions), count: questions.length }
 }

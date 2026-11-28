@@ -1,12 +1,14 @@
-import { dirname } from 'node:path'
+import { dirname, join } from 'node:path'
 import { isPlainObject } from '../../shared/plain-object'
 
 /** A question the user left in hunk: a note of theirs starting with `?`, not answered yet. */
 export type HunkQuestion = {
   noteId: string
   filePath: string
-  side: 'new' | 'old'
-  range: readonly [number, number]
+  /** Where in the hunk; null for a note hunk keeps on the hunk as a whole. */
+  side: 'new' | 'old' | null
+  range: readonly [number, number] | null
+  hunkIndex: number
   /** What is asked, without the `?`. */
   text: string
 }
@@ -53,8 +55,8 @@ export function selectedHunk(json: string): SelectedHunk | null {
 
 /**
  * The unanswered questions in one hunk of `hunk session comment list --json`, in the list's order:
- * the user's own notes (not replies) whose text starts with `?`, with no reply under them yet. Null
- * when it isn't that list.
+ * the user's own notes (not replies) whose text starts with `?`, with no answer under them yet (a
+ * reply of the user's own isn't one). Null when it isn't that list.
  */
 export function questionsIn(json: string, hunk: SelectedHunk): HunkQuestion[] | null {
   const value = parse(json)
@@ -63,7 +65,10 @@ export function questionsIn(json: string, hunk: SelectedHunk): HunkQuestion[] | 
   const notes = listed.filter(isPlainObject)
   if (notes.length !== listed.length) return null
   const answered = new Set(
-    notes.map((note) => note['parentId']).filter((id) => typeof id === 'string')
+    notes
+      .filter((note) => note['source'] !== 'user')
+      .map((note) => note['parentId'])
+      .filter((id) => typeof id === 'string')
   )
   const questions: HunkQuestion[] = []
   for (const note of notes) {
@@ -82,14 +87,13 @@ export function questionsIn(json: string, hunk: SelectedHunk): HunkQuestion[] | 
     if (!asked.startsWith('?')) continue
     const newRange = rangeOf(note['newRange'])
     const oldRange = rangeOf(note['oldRange'])
-    const range = newRange ?? oldRange
-    if (range === null) continue
     const text = asked.slice(1).trim()
     questions.push({
       noteId,
       filePath,
-      side: newRange ? 'new' : 'old',
-      range,
+      side: newRange ? 'new' : oldRange ? 'old' : null,
+      range: newRange ?? oldRange,
+      hunkIndex: hunk.hunkIndex,
       text: text === '' ? EXPLAIN : text
     })
   }
@@ -100,28 +104,34 @@ export function questionsIn(json: string, hunk: SelectedHunk): HunkQuestion[] | 
 const shellWord = (text: string): string =>
   /^[\w./@%+=:,-]+$/.test(text) ? text : `'${text.replaceAll("'", "'\\''")}'`
 
-const where = (question: HunkQuestion): string => {
+const where = (root: string, question: HunkQuestion): string => {
+  const file = join(root, question.filePath)
+  if (question.range === null)
+    return `${file}, the diff's hunk ${question.hunkIndex + 1} as a whole`
   const [start, end] = question.range
   const lines = start === end ? `line ${start}` : `lines ${start}-${end}`
-  return question.side === 'new'
-    ? `${question.filePath}, ${lines}`
-    : `${question.filePath}, ${lines} of the old version (removed or changed by the diff)`
+  return question.side === 'old'
+    ? `${file}, ${lines} of the old version (removed or changed by the diff)`
+    : `${file}, ${lines}`
 }
 
 /**
- * The chat's first message: the questions, where they are, and the one command that posts the
+ * The chat's first message: the questions, where they are in the repository at `root` (named in
+ * full, as the chat may run in another workspace folder), and the one command that posts the
  * answers back as replies under them in hunk. `hunk` is the executable Hatfield found, as the
  * chat's PATH may not have it, nor the Node an npm install of hunk runs on beside it.
  */
 export function askPrompt(
   hunk: string,
   session: string,
+  root: string,
   questions: readonly HunkQuestion[]
 ): string {
   const command = `PATH=${shellWord(dirname(hunk))}:"$PATH" ${shellWord(hunk)} session`
+  const id = shellWord(session)
   const items = questions.map(
     (question, index) =>
-      `${index + 1}. ${where(question)} (note ${question.noteId}):\n   ${question.text.replaceAll('\n', '\n   ')}`
+      `${index + 1}. ${where(root, question)} (note ${question.noteId}):\n   ${question.text.replaceAll('\n', '\n   ')}`
   )
   const replies = questions.map((question) => ({
     replyTo: question.noteId,
@@ -129,16 +139,16 @@ export function askPrompt(
     author: 'Hatfield chat'
   }))
   return [
-    `I'm reviewing a diff in hunk (session ${session}) and left questions on it. Answer each one. Read the code to answer; don't change any files.`,
+    `I'm reviewing a diff of the repository ${root} in hunk (session ${session}) and left questions on it. Answer each one. Read the code to answer; don't change any files.`,
     '',
     'Questions:',
     ...items,
     '',
-    `To see the diff around them: ${command} review ${session} --include-notes --json`,
+    `To see the diff around them: ${command} review ${id} --include-notes --json`,
     '',
     'Then post every answer in one call, as replies under the questions in hunk:',
     '',
-    `${command} comment apply ${session} --stdin <<'ANSWERS'`,
+    `${command} comment apply ${id} --stdin <<'ANSWERS'`,
     JSON.stringify({ comments: replies }, null, 2),
     'ANSWERS',
     '',

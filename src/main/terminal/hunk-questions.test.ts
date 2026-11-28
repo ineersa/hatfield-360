@@ -33,7 +33,9 @@ const LISTED = JSON.stringify({
     note({ noteId: 'user:6', parentId: 'mcp:x:0', body: '? a reply, not a question' }),
     note({ noteId: 'mcp:b:0', source: 'agent', body: '? an agent note' }),
     note({ noteId: 'user:7', body: '? in another hunk', hunkIndex: 1 }),
-    note({ noteId: 'user:8', body: '? in another file', filePath: 'b.txt' })
+    note({ noteId: 'user:8', body: '? in another file', filePath: 'b.txt' }),
+    note({ noteId: 'user:9', body: '? why a Map', newRange: undefined }),
+    note({ noteId: 'user:10', parentId: 'user:9', body: 'I mean, vs. an object' })
   ]
 })
 
@@ -45,6 +47,7 @@ describe('questionsIn', () => {
         filePath: 'a.txt',
         side: 'new',
         range: [2, 2],
+        hunkIndex: 0,
         text: 'why not a Map here'
       },
       {
@@ -52,7 +55,17 @@ describe('questionsIn', () => {
         filePath: 'a.txt',
         side: 'old',
         range: [3, 4],
+        hunkIndex: 0,
         text: 'Explain what this code does and why it is written this way.'
+      },
+      // On the hunk as a whole, and followed up by the user: still unanswered.
+      {
+        noteId: 'user:9',
+        filePath: 'a.txt',
+        side: null,
+        range: null,
+        hunkIndex: 0,
+        text: 'why a Map'
       }
     ])
     expect(questionsIn(LISTED, { filePath: 'a.txt', hunkIndex: 1 })?.map((q) => q.noteId)).toEqual([
@@ -75,13 +88,15 @@ describe('selectedHunk', () => {
 describe('askPrompt', () => {
   it('carries the session, each question with its place and note id, and the reply command', () => {
     const questions = questionsIn(LISTED, { filePath: 'a.txt', hunkIndex: 0 }) ?? []
-    const prompt = askPrompt('/home/me/my tools/hunk', 'sess-1', questions)
+    const prompt = askPrompt('/home/me/my tools/hunk', 'sess-1', '/work/repo', questions)
     expect(prompt).toContain('session sess-1')
-    expect(prompt).toContain('1. a.txt, line 2 (note user:1):\n   why not a Map here')
-    expect(prompt).toContain('2. a.txt, lines 3-4 of the old version')
+    expect(prompt).toContain('1. /work/repo/a.txt, line 2 (note user:1):\n   why not a Map here')
+    expect(prompt).toContain('2. /work/repo/a.txt, lines 3-4 of the old version')
     expect(prompt).toContain(
       `PATH='/home/me/my tools':"$PATH" '/home/me/my tools/hunk' session comment apply sess-1 --stdin <<'ANSWERS'`
     )
+    expect(prompt).toContain("3. /work/repo/a.txt, the diff's hunk 1 as a whole (note user:9)")
+    expect(prompt).toContain('the repository /work/repo')
     expect(prompt).toContain('"replyTo": "user:2"')
     expect(prompt).toContain("don't change any files")
   })

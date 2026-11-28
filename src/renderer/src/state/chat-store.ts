@@ -31,9 +31,13 @@ type ChatState = {
   newChat: () => void
   /**
    * Opens the panel with a new chat in `cwd` (null: the workspace's) and sends `text`, written by
-   * the app, once the agent is ready; ends the chat the panel had.
+   * the app, once the agent is ready. A chat the panel has with something in it ends only once the
+   * user agrees: `asking` holds the request until `settleAsk` answers it.
    */
   ask: (cwd: string | null, text: string) => void
+  asking: { cwd: string | null; text: string } | null
+  /** Starts the chat `asking` holds (true), or keeps the current one (false). */
+  settleAsk: (start: boolean) => void
   /** Sends the prompt; false when it can't go (nothing to expand a reference with, no chat). */
   send: (text: string) => boolean
   stop: () => void
@@ -66,11 +70,12 @@ const report =
 /** Counts chat starts, so only the latest one's chat is kept. */
 let starts = 0
 
-/** The message a chat started by `ask` sends once ready, by chat id. */
-const firstMessages = new Map<string, string>()
+/** The message the chat started by `ask` sends once ready; one at most, as one chat runs. */
+let firstMessage: { chatId: string; text: string } | null = null
 
 export const useChatStore = create<ChatState>((set, get) => ({
   open: false,
+  asking: null,
   chatId: null,
   status: 'none',
   items: [],
@@ -84,9 +89,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
       switch (event.kind) {
         case 'ready': {
           set({ items, status: 'ready', configOptions: event.configOptions })
-          const first = firstMessages.get(event.chatId)
-          firstMessages.delete(event.chatId)
+          const first = firstMessage?.chatId === event.chatId ? firstMessage.text : undefined
           if (first !== undefined) {
+            firstMessage = null
             set((current) => ({
               items: withUserMessage(current.items, first),
               status: 'busy',
@@ -117,14 +122,33 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
   close: () => {
     starts++
+    firstMessage = null
     const { chatId } = get()
-    set({ open: false, chatId: null, status: 'none', items: [], configOptions: [], error: null })
+    set({
+      open: false,
+      asking: null,
+      chatId: null,
+      status: 'none',
+      items: [],
+      configOptions: [],
+      error: null
+    })
     if (chatId !== null) window.desktop.endChat(chatId).catch(() => undefined)
   },
   newChat: () => startChat(null, null),
   ask: (cwd, text) => {
+    const { chatId, items, status } = get()
+    if (chatId !== null && (items.length > 0 || status === 'busy')) {
+      set({ open: true, asking: { cwd, text } })
+      return
+    }
     set({ open: true })
     startChat(cwd, text)
+  },
+  settleAsk: (start) => {
+    const { asking } = get()
+    set({ asking: null })
+    if (start && asking !== null) startChat(asking.cwd, asking.text)
   },
   send: (text) => {
     const { chatId, status } = get()
@@ -187,6 +211,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
 function startChat(cwd: string | null, first: string | null): void {
   const { chatId: previous } = useChatStore.getState()
   const start = ++starts
+  firstMessage = null
   useChatStore.setState({
     chatId: null,
     status: 'starting',
@@ -200,7 +225,7 @@ function startChat(cwd: string | null, first: string | null): void {
     .then(({ chatId }) => {
       // Closed, or a newer chat asked for, while this one started.
       if (start === starts && useChatStore.getState().open) {
-        if (first !== null) firstMessages.set(chatId, first)
+        if (first !== null) firstMessage = { chatId, text: first }
         useChatStore.setState({ chatId })
       } else window.desktop.endChat(chatId).catch(() => undefined)
     })
