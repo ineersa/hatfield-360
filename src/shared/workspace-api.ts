@@ -57,7 +57,8 @@ export const WORKSPACE_CHANNELS = {
 } as const
 
 export type WorkspaceApi = {
-  checkpointTerminals: (generation: number, layout: TerminalLayout) => Promise<void>
+  /** Saves the layout; resolves to the pins kept (those a saved pane holds), or null if not saved. */
+  checkpointTerminals: (generation: number, layout: TerminalLayout) => Promise<string[] | null>
   getWorkspace: () => Promise<WorkspaceView>
   /** Opens the native folder picker in main and adds the chosen folder. */
   addWorkspaceFolder: () => Promise<void>

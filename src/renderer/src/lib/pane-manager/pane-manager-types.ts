@@ -20,6 +20,8 @@ export type PaneManagerOptions = {
   onLinkClick: (event: MouseEvent, url: string) => void
   /** Tooltip of each pane's close button, e.g. with its shortcut. */
   closePaneTitle: string
+  /** The close button asks this instead of closing at once, e.g. to confirm a pinned session first. */
+  requestClosePane?: (paneId: number) => void
 }
 
 export type ManagedPane = {

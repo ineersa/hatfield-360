@@ -23,6 +23,8 @@ export function hydrateTerminals(workspace: WorkspaceView): void {
       generation: workspace.terminalGeneration
     })),
     paneByTab: {},
+    tabTerminals: {},
+    pinned: workspace.terminals?.pinned ?? [],
     activeTabId: workspace.terminals?.activeTabId ?? null
   })
 }
@@ -43,10 +45,19 @@ function checkpointTerminals(): void {
     const state = useTerminalStore.getState()
     const open = new Set(state.tabs.map((tab) => tab.id))
     for (const id of tabs.keys()) if (!open.has(id)) tabs.delete(id)
+    // Saved in the order tabs were opened; the strip puts pinned ones first when it draws them.
+    const sent = state.pinned
     void window.desktop
       .checkpointTerminals(owner, {
         tabs: state.tabs.flatMap(({ id }) => tabs.get(id) ?? []),
-        activeTabId: state.activeTabId
+        activeTabId: state.activeTabId,
+        ...(sent.length ? { pinned: sent } : {})
+      })
+      .then((kept) => {
+        // Main drops a pin once no saved pane holds its conversation, e.g. after the agent exited.
+        if (kept === null || owner !== generation) return
+        const { setPinned } = useTerminalStore.getState()
+        for (const key of sent) if (!kept.includes(key)) setPinned(key, false)
       })
       .catch((error: unknown) =>
         notify({
@@ -61,7 +72,12 @@ function checkpointTerminals(): void {
 export function connectTerminalWorkspace(): void {
   window.desktop.subscribeAgentSessions(checkpointTerminals)
   useTerminalStore.subscribe((state, previous) => {
-    if (state.tabs !== previous.tabs || state.activeTabId !== previous.activeTabId)
+    if (
+      state.tabs !== previous.tabs ||
+      state.activeTabId !== previous.activeTabId ||
+      state.pinned !== previous.pinned ||
+      state.tabTerminals !== previous.tabTerminals
+    )
       checkpointTerminals()
   })
 }

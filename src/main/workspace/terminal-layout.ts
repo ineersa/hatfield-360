@@ -97,11 +97,15 @@ export function parseTerminalLayout(
           : null
     })
   }
+  const pinned = Array.isArray(value.pinned)
+    ? [...new Set(value.pinned.filter((key): key is string => string(key, 8192)))].slice(0, 256)
+    : []
   return {
     tabs,
     activeTabId:
       isTerminalId(value.activeTabId) && ids.has(value.activeTabId)
         ? value.activeTabId
-        : (tabs[0]?.id ?? null)
+        : (tabs[0]?.id ?? null),
+    ...(pinned.length ? { pinned } : {})
   }
 }

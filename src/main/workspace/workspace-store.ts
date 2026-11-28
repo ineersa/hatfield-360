@@ -1,4 +1,5 @@
 import type { PaneLeaf, PaneLayout, TerminalLayout } from '../../shared/terminal-workspace-api'
+import { pinKey } from '../../shared/pinned-session'
 import { app } from 'electron'
 import { readdir, rename, stat } from 'node:fs/promises'
 import { basename, dirname, join, resolve } from 'node:path'
@@ -458,12 +459,12 @@ class WorkspaceStore {
     generation: number,
     layout: TerminalLayout,
     ended: Set<string>
-  ): Promise<void> {
-    if (this.terminalsFrozen) return Promise.resolve()
+  ): Promise<string[] | null> {
+    if (this.terminalsFrozen) return Promise.resolve(null)
     const run = this.queue.then(async () => {
       const { workspace } = await this.ready()
-      if (generation !== this.terminalGeneration) return
-      if (!workspace.terminals && layout.tabs.length === 0) return
+      if (generation !== this.terminalGeneration) return null
+      if (!workspace.terminals && layout.tabs.length === 0) return []
       if (workspace.problem) throw new Error(workspace.problem)
       const previous = new Map<string, PaneLeaf>()
       const remember = (node: PaneLayout): void => {
@@ -480,13 +481,29 @@ class WorkspaceStore {
           : ended.has(node.id)
             ? (previous.get(node.id) ?? node)
             : node
-      layout = {
-        ...layout,
-        tabs: layout.tabs.map((tab) => ({ ...tab, layout: retain(tab.layout) }))
+      const tabs = layout.tabs.map((tab) => ({ ...tab, layout: retain(tab.layout) }))
+      const held = new Set<string>()
+      const collect = (node: PaneLayout): void => {
+        if (node.kind === 'split') {
+          collect(node.first)
+          collect(node.second)
+        } else if (node.agent) {
+          const key = pinKey(node.agent)
+          if (key) held.add(key)
+        }
       }
-      if (JSON.stringify(workspace.terminals) === JSON.stringify(layout)) return
+      for (const tab of tabs) collect(tab.layout)
+      // A pin outlives its pane only as far as the saved layout: a closed conversation drops it.
+      const pinned = layout.pinned?.filter((key) => held.has(key)) ?? []
+      layout = {
+        tabs,
+        activeTabId: layout.activeTabId,
+        ...(pinned.length ? { pinned } : {})
+      }
+      if (JSON.stringify(workspace.terminals) === JSON.stringify(layout)) return pinned
       await writeWorkspaceFile(workspace.file, { ...workspace, terminals: layout })
       workspace.terminals = layout
+      return pinned
     })
     this.queue = run.catch(() => undefined)
     return run

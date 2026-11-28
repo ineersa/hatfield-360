@@ -14,7 +14,8 @@ export function StripTab({
   active,
   tip,
   onActivate,
-  onClose
+  onClose,
+  compact = false
 }: {
   id: string
   menu: TabMenu
@@ -25,7 +26,10 @@ export function StripTab({
   active: boolean
   tip: ReactNode
   onActivate: () => void
-  onClose: () => void
+  /** Without it the tab has no close button, as a pinned tab. */
+  onClose?: () => void
+  /** Only the icon shows; the label stays in the tooltip and the accessible name. */
+  compact?: boolean
 }): React.JSX.Element {
   return (
     <TabContextMenu id={id} menu={menu}>
@@ -45,27 +49,32 @@ export function StripTab({
               aria-label={title}
               aria-selected={active}
               onClick={onActivate}
-              className="flex min-w-0 flex-1 items-center gap-2 pr-2 pl-3.5 leading-none outline-none focus-visible:underline"
+              className={cn(
+                'flex min-w-0 flex-1 items-center gap-2 leading-none outline-none focus-visible:underline',
+                compact ? 'px-3 focus-visible:bg-hover' : 'pr-2 pl-3.5'
+              )}
             >
               {icon}
-              <span className="truncate">{label}</span>
+              {compact ? null : <span className="truncate">{label}</span>}
             </button>
           </TooltipTrigger>
           <TooltipContent side="bottom">{tip}</TooltipContent>
         </Tooltip>
-        <button
-          type="button"
-          aria-label={`Close ${title}`}
-          onClick={onClose}
-          className={cn(
-            'group/close flex shrink-0 items-center pr-2 text-muted-foreground hover:text-foreground focus-visible:opacity-100',
-            active ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
-          )}
-        >
-          <span className="flex size-5 items-center justify-center rounded-button group-hover/close:bg-hover">
-            <X className="size-3.5" aria-hidden />
-          </span>
-        </button>
+        {onClose ? (
+          <button
+            type="button"
+            aria-label={`Close ${title}`}
+            onClick={onClose}
+            className={cn(
+              'group/close flex shrink-0 items-center pr-2 text-muted-foreground hover:text-foreground focus-visible:opacity-100',
+              active ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+            )}
+          >
+            <span className="flex size-5 items-center justify-center rounded-button group-hover/close:bg-hover">
+              <X className="size-3.5" aria-hidden />
+            </span>
+          </button>
+        ) : null}
       </div>
     </TabContextMenu>
   )

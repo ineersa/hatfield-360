@@ -15,41 +15,26 @@ import {
   Check,
   Copy,
   MessageCircle,
+  Pin,
+  PinOff,
   Repeat,
   SquareTerminal,
   Users,
   X
 } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
-import {
-  AGENT_PROVIDERS,
-  type AgentSession,
-  type AgentSnapshot
-} from '../../../../shared/agent-api'
+import { useRef } from 'react'
+import { AGENT_PROVIDERS, type AgentSession } from '../../../../shared/agent-api'
+import { useAgentSessionStore } from '@/state/agent-session-store'
+import { isPinned } from '@/state/pinned-sessions'
+import { pinKey } from '../../../../shared/pinned-session'
 import { closeTerminal, selectTerminal } from '@/components/terminal/terminal-tab-controllers'
 import { useTerminalStore } from '@/state/terminal-store'
 import { mainErrorMessage } from '@/lib/main-error-message'
 
 export function useAgentSessions() {
-  const [snapshot, setSnapshot] = useState<AgentSnapshot>({ revision: -1, sessions: [] })
-  const [error, setError] = useState<string | null>(null)
-  useEffect(() => {
-    let mounted = true
-    const receive = (next: AgentSnapshot) => {
-      if (!mounted) return
-      setSnapshot((current) => (next.revision > current.revision ? next : current))
-      setError(null)
-    }
-    const stop = window.desktop.subscribeAgentSessions(receive)
-    void window.desktop.getAgentSessions().then(receive, (failure: unknown) => {
-      if (mounted) setError(mainErrorMessage(failure))
-    })
-    return () => {
-      mounted = false
-      stop()
-    }
-  }, [])
-  return { sessions: snapshot.sessions.toReversed(), error }
+  const sessions = useAgentSessionStore((state) => state.sessions)
+  const error = useAgentSessionStore((state) => state.error)
+  return { sessions, error }
 }
 
 function sessionDescription(session: AgentSession): string {
@@ -168,9 +153,19 @@ export function agentSessionIdentity(
   return { title, displayName, providerIdentity }
 }
 
-export function AgentSessionRows({ sessions }: { sessions: AgentSession[] }): React.JSX.Element {
+export function AgentSessionRows({
+  sessions,
+  projectName
+}: {
+  sessions: AgentSession[]
+  /** Names each row's project, for a list that mixes projects. */
+  projectName?: (session: AgentSession) => string
+}): React.JSX.Element {
   const selected = useTerminalStore(activeTerminalId)
+  const pinned = useTerminalStore((state) => state.pinned)
+  const setPinned = useTerminalStore((state) => state.setPinned)
   const focusAfterMenu = useRef<string | null>(null)
+  const afterMenu = useRef<(() => void) | null>(null)
   return (
     <>
       {sessions.map((session) => {
@@ -201,6 +196,9 @@ export function AgentSessionRows({ sessions }: { sessions: AgentSession[] }): Re
           .filter(Boolean)
           .join(' · ')
         const current = selected === session.terminalId
+        const key = session.process === 'running' ? pinKey(session) : null
+        const sessionPinned = isPinned(session, pinned)
+        const project = projectName?.(session)
         const go = () => {
           if (selectTerminal(session.terminalId)) return true
           notify({ severity: 'warning', title: 'Terminal is no longer available' })
@@ -274,6 +272,11 @@ export function AgentSessionRows({ sessions }: { sessions: AgentSession[] }): Re
                           </span>
                         ) : null}
                       </span>
+                      {project ? (
+                        <span className="type-hint max-w-24 shrink-0 truncate text-muted-foreground">
+                          {project}
+                        </span>
+                      ) : null}
                     </button>
                   </TooltipTrigger>
                 </ContextMenuTrigger>
@@ -281,6 +284,15 @@ export function AgentSessionRows({ sessions }: { sessions: AgentSession[] }): Re
               </Tooltip>
               <ContextMenuContent
                 onCloseAutoFocus={(event) => {
+                  const action = afterMenu.current
+                  if (action) {
+                    // Run once the menu has let go of focus: a confirmation keeps it, and a pinned
+                    // row moving to its section doesn't take the menu's trigger with it first.
+                    afterMenu.current = null
+                    event.preventDefault()
+                    action()
+                    return
+                  }
                   if (focusAfterMenu.current !== session.id) return
                   focusAfterMenu.current = null
                   event.preventDefault()
@@ -294,6 +306,17 @@ export function AgentSessionRows({ sessions }: { sessions: AgentSession[] }): Re
                 >
                   <SquareTerminal aria-hidden />
                   Go to terminal
+                </ContextMenuItem>
+                <ContextMenuItem
+                  disabled={key === null}
+                  onSelect={() => {
+                    afterMenu.current = () => {
+                      if (key) setPinned(key, !sessionPinned)
+                    }
+                  }}
+                >
+                  {sessionPinned ? <PinOff aria-hidden /> : <Pin aria-hidden />}
+                  {sessionPinned ? 'Unpin Session' : 'Pin Session'}
                 </ContextMenuItem>
                 {id ? (
                   <ContextMenuItem
@@ -313,8 +336,10 @@ export function AgentSessionRows({ sessions }: { sessions: AgentSession[] }): Re
                 ) : null}
                 <ContextMenuItem
                   onSelect={() => {
-                    if (!closeTerminal(session.terminalId))
-                      notify({ severity: 'warning', title: 'Terminal is no longer available' })
+                    afterMenu.current = () => {
+                      if (!closeTerminal(session.terminalId))
+                        notify({ severity: 'warning', title: 'Terminal is no longer available' })
+                    }
                   }}
                 >
                   <X aria-hidden />

@@ -85,14 +85,16 @@ function AlertDialogAction({
   )
 }
 
+/** The choice that keeps things as they are; the dialog opens with it focused. */
 function AlertDialogCancel({
   className,
+  primary = false,
   ...props
-}: React.ComponentProps<typeof AlertDialogPrimitive.Cancel>) {
+}: React.ComponentProps<typeof AlertDialogPrimitive.Cancel> & { primary?: boolean }) {
   return (
     <AlertDialogPrimitive.Cancel
       data-slot="alert-dialog-cancel"
-      className={cn(SECONDARY_BUTTON, className)}
+      className={cn(primary ? PRIMARY_BUTTON : SECONDARY_BUTTON, className)}
       {...props}
     />
   )

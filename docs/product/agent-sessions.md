@@ -22,7 +22,16 @@ wait or tool details, background counts, and checkout and working-directory path
 Use existing app theme roles and independently configured terminal themes.
 Sessions appear newest-record-first within each project and in the attention
 strip. Status, title, and conversation-selection updates do not
-reorder existing records. A bounded attention strip above the tree keeps open
+reorder existing records. The one exception is pinning
+([#101](https://github.com/ineersa/hatfield-360/issues/101)): Pin Session, on a
+session row's or a terminal tab's right-click menu, moves the session into a
+**Pinned** section above the projects (each row names its project) and its tab to
+the front of the strip as an icon with a status dot and no close button. A pin
+follows the conversation, not the pane, and is saved with the workspace while a
+saved pane holds the conversation. Closing a pinned session's pane or tab asks
+first (Keep Open is the default; Unpin and Close ends it), and Close Other Tabs,
+Close Tabs to the Right and Close All Tabs leave pinned tabs open. Quitting doesn't
+ask, since the workspace restores pinned sessions. A bounded attention strip above the tree keeps open
 requests visible even when browsing filters hide the session. It names the reason
 and opens the owning terminal, where the user answers or approves the request.
 When empty, the section stays visible with a compact "No requests" state.
