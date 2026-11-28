@@ -106,6 +106,32 @@ type HunkLaunchRequest = {
 /** A terminal running hunk in the root, or `missing` when no `hunk` is on the user's shell PATH. */
 export type HunkLaunch = { status: 'started'; terminal: TerminalSession } | { status: 'missing' }
 
+/** A pull request tab's GitHub discussion, as loaded into its hunk. */
+export type PullRequestComments =
+  | {
+      status: 'loaded'
+      /** Unresolved review threads shown on their lines. */
+      threads: number
+      /** Comments on the pull request itself, shown on the first hunk. */
+      conversation: number
+      /** Unresolved threads and comments hunk has no place for: outdated, or off the diff. */
+      notShown: number
+    }
+  | { status: 'failed'; message: string }
+
+export type PullRequestPublish =
+  | {
+      status: 'published'
+      /** Comments posted: a review's new threads count one each. */
+      posted: number
+      /** The user's notes that couldn't be posted: not on a line. */
+      unplaced: number
+      comments: PullRequestComments
+    }
+  | { status: 'nothing'; unplaced: number }
+  /** Some or all posts failed; `posted` went through and are out of hunk. */
+  | { status: 'failed'; message: string; posted: number; comments: PullRequestComments | null }
+
 export const SOURCE_CONTROL_CHANNELS = {
   status: 'source-control:status',
   commit: 'source-control:commit',
@@ -119,6 +145,8 @@ export const SOURCE_CONTROL_CHANNELS = {
   abortOperation: 'source-control:abort-operation',
   launchHunk: 'source-control:launch-hunk',
   hunkNoteCount: 'source-control:hunk-note-count',
+  loadPullRequestComments: 'source-control:load-pull-request-comments',
+  publishPullRequestNotes: 'source-control:publish-pull-request-notes',
   cancel: 'source-control:cancel'
 } as const
 
@@ -168,4 +196,11 @@ export type SourceControlApi = {
   launchHunk: (request: HunkLaunchRequest) => Promise<HunkLaunch>
   /** How many review notes the hunk in that terminal holds: hunk keeps them only while it runs. */
   hunkNoteCount: (terminalId: string) => Promise<number>
+  /**
+   * Loads a pull request tab's unresolved GitHub threads and comments into its hunk, in place of
+   * those loaded before; waits for hunk to start.
+   */
+  loadPullRequestComments: (terminalId: string) => Promise<PullRequestComments>
+  /** Posts a pull request tab's notes typed in hunk to GitHub, as the signed-in gh user. */
+  publishPullRequestNotes: (terminalId: string) => Promise<PullRequestPublish>
 }
