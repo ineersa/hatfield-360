@@ -1,5 +1,12 @@
-/** Folders a package manager fills (npm, Composer and Go `vendor`, a virtualenv): not the project's own code. */
-export const DEPENDENCY_FOLDER_NAMES = ['node_modules', 'vendor', 'venv', '.venv', 'site-packages']
+/** Folders a package manager fills (npm, Composer and Go `vendor`, a virtualenv, pnpm's store): not the project's own code. */
+export const DEPENDENCY_FOLDER_NAMES = [
+  'node_modules',
+  'vendor',
+  'venv',
+  '.venv',
+  'site-packages',
+  '.pnpm-store'
+]
 
 const DEPENDENCY_FOLDERS = new Set(DEPENDENCY_FOLDER_NAMES)
 

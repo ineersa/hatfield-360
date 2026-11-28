@@ -6,14 +6,24 @@ import { ignoredNames, ignoredPaths } from '../git/git-ignore'
 import { worktreeStore } from '../git/worktree-store'
 import { isPathInside } from './path-containment'
 
-/** The repositories directly inside `root` that the worktree store follows (a multi-repo project), as real paths. */
-async function repositoriesInside(root: string): Promise<string[]> {
+/**
+ * The working trees inside `root` that the worktree store follows (a multi-repo project's
+ * repositories and their linked worktrees), as real paths: each brings its own ignore rules.
+ */
+async function workingTreesInside(root: string): Promise<string[]> {
   const folders = worktreeStore
     .view()
-    .flatMap((project) => (project.repositories ?? []).map((repository) => repository.folder))
+    .flatMap((project) => project.repositories ?? [])
+    .flatMap((repository) =>
+      repository.status === 'git'
+        ? repository.worktrees.filter((tree) => !tree.prunable).map((tree) => tree.path)
+        : [repository.folder]
+    )
   const real = await Promise.all(folders.map((folder) => realpath(folder).catch(() => null)))
-  return real
-    .filter((folder): folder is string => folder !== null && dirname(folder) === root)
+  return [...new Set(real)]
+    .filter(
+      (folder): folder is string => folder !== null && folder !== root && isPathInside(folder, root)
+    )
     .toSorted((a, b) => a.localeCompare(b))
 }
 
@@ -47,16 +57,16 @@ class ProjectWatch {
   private timer: NodeJS.Timeout | null = null
   private closed = false
   private failed = false
-  /** The multi-repo project's repositories whose ignore rules apply here. */
-  private repositories: string[] = []
-  private readonly unfollowRepositories: () => void
+  /** The multi-repo project's working trees whose ignore rules apply here. */
+  private workingTrees: string[] = []
+  private readonly unfollowWorkingTrees: () => void
 
   constructor(
     readonly root: string,
     private readonly fail: (message: string) => void
   ) {
     this.ready = this.start()
-    this.unfollowRepositories = worktreeStore.onChange(() => void this.repositoriesChanged())
+    this.unfollowWorkingTrees = worktreeStore.onChange(() => void this.workingTreesChanged())
   }
 
   /** Whether changes to `path` are heard here: inside the folder and not ignored. */
@@ -67,15 +77,15 @@ class ProjectWatch {
   close(): void {
     this.closed = true
     this.started = false
-    this.unfollowRepositories()
+    this.unfollowWorkingTrees()
     if (this.timer) clearTimeout(this.timer)
     void this.watcher?.close()
     projectsChanged()
   }
 
   private async start(): Promise<boolean> {
-    this.repositories = await repositoriesInside(this.root)
-    this.ignored = new Set(await ignoredPaths(this.root, this.repositories))
+    this.workingTrees = await workingTreesInside(this.root)
+    this.ignored = new Set(await ignoredPaths(this.root, this.workingTrees))
     if (this.closed) return false
     const watcher = watch(this.root, {
       ignoreInitial: true,
@@ -131,16 +141,16 @@ class ProjectWatch {
     projectsChanged()
   }
 
-  /** A repository cloned into, or removed from, a multi-repo project brings its own ignore rules. */
-  private async repositoriesChanged(): Promise<void> {
-    const now = await repositoriesInside(this.root)
-    if (this.closed || JSON.stringify(now) === JSON.stringify(this.repositories)) return
-    this.repositories = now
+  /** A repository or worktree added to, or removed from, a multi-repo project brings its own ignore rules. */
+  private async workingTreesChanged(): Promise<void> {
+    const now = await workingTreesInside(this.root)
+    if (this.closed || JSON.stringify(now) === JSON.stringify(this.workingTrees)) return
+    this.workingTrees = now
     await this.refreshIgnored()
   }
 
   private async refreshIgnored(): Promise<void> {
-    const now = new Set(await ignoredPaths(this.root, this.repositories))
+    const now = new Set(await ignoredPaths(this.root, this.workingTrees))
     if (this.closed) return
     const before = this.ignored
     this.ignored = now
