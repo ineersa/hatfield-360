@@ -87,13 +87,20 @@ type CommitRequest = {
   amend: boolean
 }
 
-export type HunkKind = 'review' | 'log' | 'stash'
+/**
+ * `review`: uncommitted changes; `log`: history; `stash`: one stash; `branch`: the current branch's
+ * commits on top of a base; `pull-request`: a GitHub pull request.
+ */
+export type HunkKind = 'review' | 'log' | 'stash' | 'branch' | 'pull-request'
 
 type HunkLaunchRequest = {
   root: string
   kind: HunkKind
-  /** For `stash`: the stash's commit (`StashEntry.id`). */
-  stash?: string
+  /**
+   * What `stash`, `branch` and `pull-request` show: the stash's commit (`StashEntry.id`), the base
+   * branch, or the pull request's number.
+   */
+  target?: string
   cols: number
   rows: number
 }
@@ -113,6 +120,7 @@ export const SOURCE_CONTROL_CHANNELS = {
   ignoreUntracked: 'source-control:ignore-untracked',
   abortOperation: 'source-control:abort-operation',
   launchHunk: 'source-control:launch-hunk',
+  hunkNoteCount: 'source-control:hunk-note-count',
   cancel: 'source-control:cancel'
 } as const
 
@@ -160,4 +168,6 @@ export type SourceControlApi = {
    * driven by the terminal API.
    */
   launchHunk: (request: HunkLaunchRequest) => Promise<HunkLaunch>
+  /** How many review notes the hunk in that terminal holds: hunk keeps them only while it runs. */
+  hunkNoteCount: (terminalId: string) => Promise<number>
 }

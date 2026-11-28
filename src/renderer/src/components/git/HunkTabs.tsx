@@ -1,6 +1,22 @@
-import { Archive, GitCompareArrows, History, type LucideIcon } from 'lucide-react'
+import {
+  GitBranch,
+  GitPullRequest,
+  Archive,
+  GitCompareArrows,
+  History,
+  type LucideIcon
+} from 'lucide-react'
 import { useEffect, useRef } from 'react'
 import { ScrollingTabList } from '@/components/shell/ScrollingTabList'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogTitle
+} from '@/components/ui/alert-dialog'
 import { StripTab } from '@/components/shell/StripTab'
 import { startPaneProgram } from '@/components/terminal/pane-shell'
 import {
@@ -18,7 +34,9 @@ import type { HunkKind } from '../../../../shared/source-control-api'
 const TAB_ICONS: Record<HunkKind, LucideIcon> = {
   review: GitCompareArrows,
   log: History,
-  stash: Archive
+  stash: Archive,
+  branch: GitBranch,
+  'pull-request': GitPullRequest
 }
 
 /**
@@ -60,13 +78,14 @@ function HunkTabBody({
               const launch = await window.desktop.launchHunk({
                 kind: tab.kind,
                 root: tab.root,
-                ...(tab.stash === null ? {} : { stash: tab.stash }),
+                ...(tab.target === null ? {} : { target: tab.target }),
                 ...size
               })
               if (launch.status === 'missing') {
                 tabs.hunkMissing(tab.id)
                 return null
               }
+              tabs.attachTerminal(tab.id, launch.terminal.id)
               return { session: launch.terminal, size }
             },
             name: 'hunk',
@@ -127,7 +146,9 @@ export function HunkTabs({
   const pending = useHunkTabStore((state) => state.pending)
   const activeTabId = useHunkTabStore((state) => state.activeTabId)
   const activateTab = useHunkTabStore((state) => state.activateTab)
-  const closeTab = useHunkTabStore((state) => state.closeTab)
+  const requestClose = useHunkTabStore((state) => state.requestClose)
+  const withNotes = useHunkTabStore((state) => state.withNotes)
+  const settleNotes = useHunkTabStore((state) => state.settleNotes)
   const shownIds = tabs.filter((tab) => !pending.has(tab.id)).map((tab) => tab.id)
 
   return (
@@ -149,14 +170,14 @@ export function HunkTabs({
                 <StripTab
                   key={tab.id}
                   id={tab.id}
-                  menu={{ tabs: shownIds, close: (ids) => ids.forEach((id) => closeTab(id)) }}
+                  menu={{ tabs: shownIds, close: (ids) => void requestClose(ids) }}
                   title={tab.title}
                   label={tab.title}
                   active={tab.id === activeTabId}
                   icon={<Icon className="size-4 shrink-0" aria-hidden />}
                   tip={tab.root}
                   onActivate={() => activateTab(tab.id)}
-                  onClose={() => closeTab(tab.id)}
+                  onClose={() => void requestClose([tab.id])}
                 />
               )
             })}
@@ -173,6 +194,28 @@ export function HunkTabs({
           />
         ))}
       </div>
+      <AlertDialog
+        open={withNotes !== null}
+        onOpenChange={(open) => {
+          if (!open) settleNotes(false)
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogTitle>
+            {withNotes?.count === 1
+              ? 'Close and lose 1 note?'
+              : `Close and lose ${withNotes?.count ?? 0} notes?`}
+          </AlertDialogTitle>
+          <AlertDialogDescription>
+            hunk keeps review notes only while it runs. Have an agent answer them, or copy what you
+            need, before closing.
+          </AlertDialogDescription>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Keep Open</AlertDialogCancel>
+            <AlertDialogAction onClick={() => settleNotes(true)}>Close Anyway</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

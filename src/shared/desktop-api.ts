@@ -2,6 +2,7 @@ import type { AgentApi } from './agent-api'
 import type { BranchApi } from './branch-api'
 import type { ChatAgentApi } from './chat-agent-api'
 import type { CommitMessageApi } from './commit-message-api'
+import type { DiagnosticsApi } from './diagnostics-api'
 import type { EditorApi } from './editor-api'
 import type { FilesSessionApi } from './files-session-api'
 import type { FileTreeApi } from './file-tree-api'
@@ -13,6 +14,7 @@ import type { SearchEverywhereApi } from './search-everywhere-api'
 import type { SettingsApi } from './settings-api'
 import type { ShellLayoutApi } from './shell-layout-api'
 import type { SourceControlApi } from './source-control-api'
+import type { ReviewApi } from './review-api'
 import type { StashApi } from './stash-api'
 import type { TerminalApi } from './terminal-api'
 import type { WebLinkApi } from './web-link-api'
@@ -44,12 +46,14 @@ export type DesktopApi = WorkspaceApi &
   SourceControlApi &
   BranchApi &
   StashApi &
+  ReviewApi &
   CommitMessageApi &
   FileTreeApi &
   SearchApi &
   SearchEverywhereApi &
   EditorApi &
   FilesSessionApi &
-  LanguageServerApi & {
+  LanguageServerApi &
+  DiagnosticsApi & {
     getAppInfo: () => Promise<AppInfo>
   }

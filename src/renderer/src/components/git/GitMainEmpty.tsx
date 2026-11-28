@@ -23,6 +23,27 @@ const ENTRIES = [
     )
   },
   {
+    term: 'Branch',
+    detail: (
+      <>
+        Review Branch, in a repository's right-click menu, opens{' '}
+        <code className="font-mono text-foreground">hunk diff main...HEAD</code>: the branch's
+        commits since it left its base.
+      </>
+    )
+  },
+  {
+    term: 'Pull request',
+    detail: (
+      <>
+        Review Pull Request… lists a GitHub repository's open pull requests through{' '}
+        <code className="font-mono text-foreground">gh</code> and opens one with{' '}
+        <code className="font-mono text-foreground">hunk gh pr</code>. The current branch's shows as
+        #number on its row.
+      </>
+    )
+  },
+  {
     term: 'Ask an agent',
     detail: (
       <>

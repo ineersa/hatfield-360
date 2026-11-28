@@ -33,6 +33,8 @@ import { RollbackDialog } from './RollbackDialog'
 import { AbortOperationDialog } from './AbortOperationDialog'
 import { BranchDialogs } from './BranchDialogs'
 import { StashDialogs } from './StashDialogs'
+import { ReviewDialogs } from './ReviewDialogs'
+import { useRepositoryReviews } from './use-repository-reviews'
 
 const ICON = 'size-4.5'
 
@@ -81,6 +83,8 @@ export function GitPanel(): React.JSX.Element {
     window.addEventListener('focus', onFocus)
     return () => window.removeEventListener('focus', onFocus)
   }, [refresh])
+
+  useRepositoryReviews(groups)
 
   const rows = useMemo(
     () => changeTreeRows(groups ?? [], collapsed, unversionedOpen),
@@ -188,6 +192,7 @@ export function GitPanel(): React.JSX.Element {
       ) : null}
       <BranchDialogs />
       <StashDialogs />
+      <ReviewDialogs />
       {trashing ? (
         <TrashDialog
           entries={trashing.files.map((file) => ({

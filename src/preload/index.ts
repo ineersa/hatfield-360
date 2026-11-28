@@ -12,7 +12,9 @@ import { SETTINGS_CHANNELS, type SettingsView } from '../shared/settings-api'
 import { SHELL_LAYOUT_CHANNELS } from '../shared/shell-layout-api'
 import { BRANCH_CHANNELS } from '../shared/branch-api'
 import { STASH_CHANNELS } from '../shared/stash-api'
+import { REVIEW_CHANNELS } from '../shared/review-api'
 import { COMMIT_MESSAGE_CHANNELS } from '../shared/commit-message-api'
+import { DIAGNOSTICS_CHANNELS } from '../shared/diagnostics-api'
 import { SOURCE_CONTROL_CHANNELS } from '../shared/source-control-api'
 import { MEMORY_SEARCH_CHANNELS } from '../shared/memory-search-api'
 import { LANGUAGE_SERVER_CHANNELS, type LanguageServerStatus } from '../shared/language-server-api'
@@ -22,6 +24,7 @@ import { WEB_LINK_CHANNELS } from '../shared/web-link-api'
 import { type ProjectWorktrees, WORKTREE_CHANNELS } from '../shared/worktree-api'
 
 const desktopApi: DesktopApi = {
+  reportSlowTask: (report) => ipcRenderer.invoke(DIAGNOSTICS_CHANNELS.reportSlowTask, report),
   startChat: (cwd) => ipcRenderer.invoke(CHAT_AGENT_CHANNELS.start, cwd),
   sendChatPrompt: (chatId, text) => ipcRenderer.invoke(CHAT_AGENT_CHANNELS.prompt, chatId, text),
   answerChatPermission: (chatId, requestId, optionId) =>
@@ -94,6 +97,8 @@ const desktopApi: DesktopApi = {
   ignoreUntrackedFile: (root, path) =>
     ipcRenderer.invoke(SOURCE_CONTROL_CHANNELS.ignoreUntracked, root, path),
   launchHunk: (request) => ipcRenderer.invoke(SOURCE_CONTROL_CHANNELS.launchHunk, request),
+  hunkNoteCount: (terminalId) =>
+    ipcRenderer.invoke(SOURCE_CONTROL_CHANNELS.hunkNoteCount, terminalId),
   abortGitOperation: (root, operation) =>
     ipcRenderer.invoke(SOURCE_CONTROL_CHANNELS.abortOperation, root, operation),
   cancelSourceControlAction: () => ipcRenderer.invoke(SOURCE_CONTROL_CHANNELS.cancel),
@@ -103,6 +108,8 @@ const desktopApi: DesktopApi = {
   stashChanges: (request) => ipcRenderer.invoke(STASH_CHANNELS.push, request),
   unstash: (root, id, pop) => ipcRenderer.invoke(STASH_CHANNELS.apply, root, id, pop),
   dropStash: (root, id) => ipcRenderer.invoke(STASH_CHANNELS.drop, root, id),
+  repositoryReview: (root) => ipcRenderer.invoke(REVIEW_CHANNELS.repository, root),
+  listPullRequests: (root) => ipcRenderer.invoke(REVIEW_CHANNELS.pullRequests, root),
   listBranches: (root) => ipcRenderer.invoke(BRANCH_CHANNELS.list, root),
   previewSwitch: (root, branch) => ipcRenderer.invoke(BRANCH_CHANNELS.preview, root, branch),
   switchBranch: (root, branch) => ipcRenderer.invoke(BRANCH_CHANNELS.switch, root, branch),
