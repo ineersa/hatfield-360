@@ -54,9 +54,13 @@ import {
 import { useWorkspaceStore } from '@/state/workspace-store'
 import { useWorktreeStore } from '@/state/worktree-store'
 import type { WorkspaceFolder } from '../../../../shared/workspace-api'
-import type { ProjectWorktrees, Worktree } from '../../../../shared/worktree-api'
+import type {
+  ProjectWorktrees,
+  RepositoryWorktrees,
+  Worktree
+} from '../../../../shared/worktree-api'
 import {
-  type LinkedWorktree,
+  innerRepositoryOf,
   linkedWorktrees,
   projectRepositories
 } from '../../../../shared/project-repositories'
@@ -71,14 +75,10 @@ function WorktreeRow({
   worktree,
   project
 }: {
-  worktree: LinkedWorktree
+  worktree: Worktree
   project: string
 }): React.JSX.Element {
-  // A worktree of a repository inside a multi-repo folder names the repository first.
-  const label =
-    worktree.repository === project
-      ? worktreeLabel(worktree)
-      : `${lastName(worktree.repository)}: ${worktreeLabel(worktree)}`
+  const label = worktreeLabel(worktree)
   const pathTip = usePointerTooltip()
   const pruneMissing = useWorktreeStore((state) => state.pruneMissing)
   return (
@@ -123,20 +123,45 @@ function WorktreeRow({
   )
 }
 
-/** Rows a project can fold away: its linked worktrees, or why git can't list a repository. */
+/** Rows a project can fold away: its repositories' rows, their linked worktrees, or why git can't list one. */
 function hasChildRows(project: ProjectWorktrees | undefined): boolean {
   return (
     projectRepositories(project).some((repository) => repository.status === 'error') ||
-    linkedWorktrees(project).length > 0
+    linkedWorktrees(project).length > 0 ||
+    (project?.repositories?.length ?? 0) > 0
+  )
+}
+
+/** The linked worktrees of one repository. */
+const ownLinkedWorktrees = (repository: RepositoryWorktrees | undefined): Worktree[] =>
+  repository?.status === 'git' ? repository.worktrees.filter((tree) => !tree.project) : []
+
+const checkoutBranch = (repository: RepositoryWorktrees | undefined): string | null =>
+  repository?.status === 'git'
+    ? (repository.worktrees.find((tree) => tree.project)?.branch ?? null)
+    : null
+
+function GitFailure({ name, message }: { name: string; message: string }): React.JSX.Element {
+  return (
+    <li>
+      <p role="alert" className="type-hint flex gap-2 px-1 py-1">
+        <CircleAlert className="mt-0.5 size-3.5 shrink-0 text-error" aria-hidden />
+        <span className="min-w-0 break-words">
+          {name}: {message}
+        </span>
+      </p>
+    </li>
   )
 }
 
 function LinkedWorktrees({
-  folder,
+  name,
+  project,
   worktrees
 }: {
-  folder: WorkspaceFolder
-  worktrees: LinkedWorktree[]
+  name: string
+  project: string
+  worktrees: Worktree[]
 }): React.JSX.Element {
   const [expanded, setExpanded] = useState(false)
   const listId = useId()
@@ -152,12 +177,126 @@ function LinkedWorktrees({
         <ChevronRight className={cn('size-4 shrink-0', expanded && 'rotate-90')} aria-hidden />
         Worktrees ({worktrees.length})
       </button>
-      <ul id={listId} aria-label={`${folder.name} worktrees`} hidden={!expanded}>
+      <ul id={listId} aria-label={`${name} worktrees`} hidden={!expanded}>
         {expanded &&
           worktrees.map((worktree) => (
-            <WorktreeRow key={worktree.path} worktree={worktree} project={folder.path} />
+            <WorktreeRow key={worktree.path} worktree={worktree} project={project} />
           ))}
       </ul>
+    </li>
+  )
+}
+
+/** A repository inside a multi-repo project, with its own sessions, recent sessions and worktrees. */
+function RepositoryRow({
+  project,
+  repository,
+  visible,
+  recent,
+  generation,
+  live,
+  now
+}: {
+  project: string
+  repository: RepositoryWorktrees
+  visible: AgentSession[]
+  recent: RecentConversation[]
+  generation: number
+  live: AgentSession[]
+  now: number
+}): React.JSX.Element {
+  const name = lastName(repository.folder)
+  const pathTip = usePointerTooltip()
+  const stored = useWorktreeStore((state) => state.repositoryOpen[repository.folder])
+  const setOpen = useWorktreeStore((state) => state.setRepositoryOpen)
+  const listId = useId()
+  const worktrees = ownLinkedWorktrees(repository)
+  const branch = checkoutBranch(repository)
+  const foldable =
+    visible.length > 0 ||
+    recent.some((entry) => entry.lastModified > now - RECENT_CONVERSATION_MS) ||
+    worktrees.length > 0 ||
+    repository.status === 'error'
+  const open = foldable && (stored ?? visible.length > 0)
+  const toggle = (): void => {
+    if (foldable) setOpen(repository.folder, !open)
+  }
+  return (
+    <li>
+      <ContextMenu>
+        <Tooltip delayDuration={PATH_TOOLTIP_DELAY_MS} onOpenChange={pathTip.onOpenChange}>
+          <ContextMenuTrigger asChild>
+            <TooltipTrigger asChild onPointerMove={pathTip.track}>
+              <div
+                role="button"
+                tabIndex={0}
+                aria-label={`${name} repository`}
+                aria-expanded={foldable ? open : undefined}
+                aria-controls={foldable ? listId : undefined}
+                className="type-tree-row flex h-tree-row cursor-default items-center gap-1.5 rounded-component pr-2.5 pl-1 outline-none select-none hover:bg-row-hover focus-visible:bg-selection-inactive data-[state=open]:bg-selection-inactive"
+                onClick={toggle}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault()
+                    toggle()
+                  } else if (event.key === 'ArrowLeft' && open) toggle()
+                  else if (event.key === 'ArrowRight' && !open) toggle()
+                }}
+              >
+                {foldable ? (
+                  <ChevronRight
+                    className={cn('size-4 shrink-0 text-muted-foreground', open && 'rotate-90')}
+                    aria-hidden
+                  />
+                ) : (
+                  <span className="size-4 shrink-0" aria-hidden />
+                )}
+                <FolderGit2 className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+                <span className="truncate">{name}</span>
+                {branch ? (
+                  <span className="type-hint flex max-w-24 shrink-0 items-center gap-1 text-muted-foreground">
+                    <GitBranch className="size-3.5 shrink-0" aria-hidden />
+                    <span className="truncate">{branch}</span>
+                  </span>
+                ) : null}
+                {visible.length > 0 && !open ? (
+                  <span className="type-hint ml-auto shrink-0 text-muted-foreground tabular-nums">
+                    {visible.length}
+                  </span>
+                ) : null}
+              </div>
+            </TooltipTrigger>
+          </ContextMenuTrigger>
+          <TooltipContent {...pathTip.placement}>{repository.folder}</TooltipContent>
+        </Tooltip>
+        <OpenTerminalMenuContent cwd={repository.folder} project={project} disabled={false} />
+      </ContextMenu>
+      {open ? (
+        <ul id={listId} aria-label={`${name} contents`} className="pl-6">
+          {visible.length > 0 && (
+            <li className="pb-1">
+              <ul aria-label={`${name} sessions`} className="flex flex-col gap-px pl-1.5">
+                <AgentSessionRows sessions={visible} />
+              </ul>
+            </li>
+          )}
+          <RecentSessions
+            project={project}
+            name={name}
+            projectBranch={branch}
+            generation={generation}
+            sessions={recent}
+            live={live}
+            now={now}
+          />
+          {repository.status === 'error' ? (
+            <GitFailure name="Git" message={repository.message} />
+          ) : null}
+          {worktrees.length > 0 && (
+            <LinkedWorktrees name={name} project={project} worktrees={worktrees} />
+          )}
+        </ul>
+      ) : null}
     </li>
   )
 }
@@ -180,44 +319,48 @@ function ProjectContents({
   const project = useWorktreeStore((state) => state.projects[folder.path])
   const collapsed = useWorktreeStore((state) => state.collapsed[folder.path] === true)
   if (collapsed) return null
-  const linked = linkedWorktrees(project)
-  const failed = projectRepositories(project).flatMap((repository) =>
-    repository.status === 'error' ? [repository] : []
-  )
+  const own = projectRepositories(project).find((repository) => repository.folder === folder.path)
+  const inner = project?.repositories ?? []
+  // Sessions in a repository inside a multi-repo project are listed under that repository.
+  const placeOf = (cwd: string | null): string | null =>
+    cwd === null ? null : innerRepositoryOf(project, cwd)
+  const linked = ownLinkedWorktrees(own)
   return (
     <>
-      {visible.length > 0 && (
+      {visible.some((session) => placeOf(session.cwd) === null) && (
         <li className="pb-1">
           <ul aria-label={`${folder.name} sessions`} className="flex flex-col gap-px pl-5.5">
-            <AgentSessionRows sessions={visible} />
+            <AgentSessionRows
+              sessions={visible.filter((session) => placeOf(session.cwd) === null)}
+            />
           </ul>
         </li>
       )}
       <RecentSessions
         project={folder.path}
         name={folder.name}
-        projectBranch={
-          project?.status === 'git'
-            ? (project.worktrees.find((tree) => tree.project)?.branch ?? null)
-            : null
-        }
+        projectBranch={checkoutBranch(own)}
         generation={generation}
-        sessions={recent}
+        sessions={recent.filter((entry) => placeOf(entry.cwd) === null)}
         live={live}
         now={now}
       />
-      {failed.map((repository) => (
-        <li key={repository.folder}>
-          <p role="alert" className="type-hint flex gap-2 px-1 py-1">
-            <CircleAlert className="mt-0.5 size-3.5 shrink-0 text-error" aria-hidden />
-            <span className="min-w-0 break-words">
-              {repository.folder === folder.path ? 'Git' : `Git (${lastName(repository.folder)})`}:{' '}
-              {repository.message}
-            </span>
-          </p>
-        </li>
+      {own?.status === 'error' ? <GitFailure name="Git" message={own.message} /> : null}
+      {linked.length > 0 && (
+        <LinkedWorktrees name={folder.name} project={folder.path} worktrees={linked} />
+      )}
+      {inner.map((repository) => (
+        <RepositoryRow
+          key={repository.folder}
+          project={folder.path}
+          repository={repository}
+          visible={visible.filter((session) => placeOf(session.cwd) === repository.folder)}
+          recent={recent.filter((entry) => placeOf(entry.cwd) === repository.folder)}
+          generation={generation}
+          live={live}
+          now={now}
+        />
       ))}
-      {linked.length > 0 && <LinkedWorktrees folder={folder} worktrees={linked} />}
     </>
   )
 }

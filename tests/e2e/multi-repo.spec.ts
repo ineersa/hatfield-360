@@ -83,14 +83,14 @@ test('a folder marked as multi-repo gives each repository inside it the Git pane
         await projectRow(page).click({ button: 'right' })
         await page.getByRole('menuitem', { name: 'Mark as Multi-Repo Folder' }).click()
 
-        // Each repository, and api's linked worktree, is a group of its own; the note is gone.
+        // Each repository is a group of its own, api's linked worktree one level under it; the note is gone.
         await showGit(page)
-        await expect(row(page, 'apps/api')).toBeVisible()
+        await expect(row(page, 'apps/api')).toHaveAttribute('aria-level', '1')
         // Main saves the mark before it publishes the change.
         expect(await savedFolders(fixture.workspace)).toEqual([
           { path: fixture.apps, kind: 'project', multiRepo: true }
         ])
-        await expect(row(page, 'api-feature')).toBeVisible()
+        await expect(row(page, 'api-feature')).toHaveAttribute('aria-level', '2')
         await expect(row(page, 'apps/web')).toBeVisible()
         await expect(notGit(page)).toHaveCount(0)
         await expect(row(page, 'apps/web')).toHaveAccessibleDescription('branch main')
@@ -104,18 +104,27 @@ test('a folder marked as multi-repo gives each repository inside it the Git pane
         expect(gitOutput(fixture.web, 'log', '-1', '--format=%s')).toBe('Change w')
         expect(gitOutput(fixture.api, 'log', '-1', '--format=%s')).toBe('Ignore dist')
 
-        // The repository's linked worktree is listed under the project, named with its repository.
+        // Each repository is a row under the project, its linked worktree under it.
         await showView(page, 'Agents')
+        await page.getByRole('button', { name: 'api repository', exact: true }).click()
+        await expect(
+          page.getByRole('button', { name: 'web repository', exact: true })
+        ).toBeVisible()
         await page.getByRole('button', { name: 'Worktrees (1)', exact: true }).click()
         await expect(
-          page.getByRole('list', { name: 'apps worktrees' }).getByRole('listitem')
-        ).toHaveText(['api: feature'])
+          page.getByRole('list', { name: 'api worktrees' }).getByRole('listitem')
+        ).toHaveText(['feature'])
         await saveScreenshot(page, 'multi-repo-agents-panel')
 
         // Files inside a repository are dimmed by that repository's ignore rules.
         await showView(page, 'Files')
         await fileItem(page, 'apps').click()
         await fileItem(page, 'api').click()
+        // The repository's linked worktree hangs under the repository's folder.
+        await expect(fileItem(page, 'feature worktree api-feature')).toHaveAttribute(
+          'aria-level',
+          '3'
+        )
         await expect(fileItem(page, 'dist')).toHaveAttribute('data-ignored', 'true')
         await expect(fileItem(page, '.gitignore')).not.toHaveAttribute('data-ignored')
 

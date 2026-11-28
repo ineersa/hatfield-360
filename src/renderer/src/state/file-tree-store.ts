@@ -13,7 +13,18 @@ import type {
 import type { WorkspaceFolderKind } from '../../../shared/workspace-api'
 
 /** A top-level folder of the tree, with the linked worktrees shown under it (projects only). */
-export type FileTreeRoot = { path: string; kind: WorkspaceFolderKind; worktrees: string[] }
+export type FileTreeRoot = {
+  path: string
+  kind: WorkspaceFolderKind
+  worktrees: string[]
+  /** The linked worktrees of each repository inside a multi-repo folder, under that repository's folder. */
+  nested: Record<string, string[]>
+}
+
+const allWorktrees = (root: FileTreeRoot): string[] => [
+  ...root.worktrees,
+  ...Object.values(root.nested).flat()
+]
 
 type FileTreeState = {
   /** The shown tree's roots, in order; empty while the Files panel is closed, so nothing is watched. */
@@ -62,6 +73,7 @@ type FileTreeState = {
  */
 function openFolders(state: FileTreeState, from: string[]): string[] {
   const worktrees = new Map(state.roots.map((root) => [root.path, root.worktrees]))
+  const nested = new Map(state.roots.flatMap((root) => Object.entries(root.nested)))
   const open = new Set<string>()
   const visit = (path: string, linked: string[]): void => {
     if (!state.expanded[path] || open.has(path)) return
@@ -69,7 +81,8 @@ function openFolders(state: FileTreeState, from: string[]): string[] {
     for (const worktree of linked) visit(worktree, [])
     const listing = state.listings[path]
     if (listing?.status !== 'ok') return
-    for (const entry of listing.entries) if (entry.kind === 'directory') visit(entry.path, [])
+    for (const entry of listing.entries)
+      if (entry.kind === 'directory') visit(entry.path, nested.get(entry.path) ?? [])
   }
   for (const path of from) visit(path, worktrees.get(path) ?? [])
   return [...open]
@@ -160,8 +173,9 @@ export const useFileTreeStore = create<FileTreeState>((set, get) => {
       // loses its ignore status, so their open folders are listed fresh.
       const added = roots.flatMap((root) => {
         const shown = before.get(root.path)
-        if (shown?.kind !== root.kind) return [root.path, ...root.worktrees]
-        return root.worktrees.filter((worktree) => !shown.worktrees.includes(worktree))
+        if (shown?.kind !== root.kind) return [root.path, ...allWorktrees(root)]
+        const listed = allWorktrees(shown)
+        return allWorktrees(root).filter((worktree) => !listed.includes(worktree))
       })
       set({ roots })
       const stale = openFolders(get(), added)

@@ -1,6 +1,6 @@
 import type { DirectoryEntry, DirectoryListing } from '../../../../shared/file-tree-api'
 import type { WorkspaceFolder } from '../../../../shared/workspace-api'
-import { linkedWorktrees } from '../../../../shared/project-repositories'
+import { projectRepositories } from '../../../../shared/project-repositories'
 import type { ProjectWorktrees, Worktree } from '../../../../shared/worktree-api'
 import { separatorOf } from '../editor/editor-tab-labels'
 
@@ -14,6 +14,8 @@ export type TreeRoot = {
   branch: string | null
   folder: WorkspaceFolder
   worktrees: TreeWorktree[]
+  /** The linked worktrees of each repository inside a multi-repo folder, listed under that repository's folder. */
+  nested: Record<string, TreeWorktree[]>
 }
 
 /** Where a row sits: its parent row's key, and its place among its siblings. */
@@ -43,19 +45,24 @@ export function treeRoots(
     const project = folder.kind === 'project' && !folder.missing ? projects[folder.path] : undefined
     const checkout =
       project?.status === 'git' ? project.worktrees.find((worktree) => worktree.project) : undefined
+    const linked: Record<string, TreeWorktree[]> = {}
+    for (const repository of projectRepositories(project))
+      if (repository.status === 'git')
+        linked[repository.folder] = repository.worktrees
+          .filter((worktree) => !worktree.project && !worktree.prunable)
+          .map((worktree) => ({
+            path: worktree.path,
+            name: worktree.name,
+            branch: branchOf(worktree)
+          }))
+    const { [folder.path]: own = [], ...nested } = linked
     return {
       path: folder.path,
       name: folder.name,
       branch: checkout ? branchOf(checkout) : null,
       folder,
-      // Also the linked worktrees of the repositories inside a multi-repo folder.
-      worktrees: linkedWorktrees(project)
-        .filter((worktree) => !worktree.prunable)
-        .map((worktree) => ({
-          path: worktree.path,
-          name: worktree.name,
-          branch: branchOf(worktree)
-        }))
+      worktrees: own,
+      nested
     }
   })
 }
@@ -120,9 +127,11 @@ export function treeRows(
       const ignored = parentIgnored || entry.ignored
       const key = entryKey(parent, entry.name)
       rows.push({ type: 'entry', key, entry, ignored, folder, ...place() })
-      if (entry.kind === 'directory') addChildren(entry.path, key, depth + 1, ignored, [])
+      if (entry.kind === 'directory')
+        addChildren(entry.path, key, depth + 1, ignored, nestedWorktrees.get(entry.path) ?? [])
     }
   }
+  const nestedWorktrees = new Map(roots.flatMap((root) => Object.entries(root.nested)))
   roots.forEach((root, index) => {
     rows.push({
       type: 'root',
@@ -175,7 +184,11 @@ function namesBelow(folder: string, path: string): string[] | null {
  * no folder of the tree holds it.
  */
 export function locateInTree(
-  roots: readonly { path: string; worktrees: readonly string[] }[],
+  roots: readonly {
+    path: string
+    worktrees: readonly string[]
+    nested: Readonly<Record<string, readonly string[]>>
+  }[],
   path: string
 ): { folders: string[]; key: string } | null {
   type Place = { folder: string; key: string; expand: string[]; names: string[] }
@@ -191,6 +204,17 @@ export function locateInTree(
         if (!names) return []
         const key = worktreeKey(root.path, worktree)
         return [{ folder: worktree, key, expand: [root.path, worktree], names }]
+      }),
+      // A repository's folder sits directly in a multi-repo root, so its row is that root's entry.
+      ...Object.entries(root.nested).flatMap(([repository, worktrees]) => {
+        const [name] = namesBelow(root.path, repository) ?? []
+        if (name === undefined) return []
+        return worktrees.flatMap((worktree): Place[] => {
+          const names = namesBelow(worktree, path)
+          if (!names) return []
+          const key = worktreeKey(entryKey(root.path, name), worktree)
+          return [{ folder: worktree, key, expand: [root.path, repository, worktree], names }]
+        })
       })
     ]
   })

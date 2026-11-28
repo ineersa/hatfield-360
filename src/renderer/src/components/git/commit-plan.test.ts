@@ -29,6 +29,7 @@ const repo = (
   root,
   name: root.slice(1),
   worktree: false,
+  parent: null,
   status: 'git',
   branch: 'main',
   upstream,

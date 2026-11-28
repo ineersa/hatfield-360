@@ -780,7 +780,13 @@ export function FilesPanel(): React.JSX.Element {
         .map((root) => ({
           path: root.path,
           kind: root.folder.kind,
-          worktrees: root.worktrees.map((tree) => tree.path)
+          worktrees: root.worktrees.map((tree) => tree.path),
+          nested: Object.fromEntries(
+            Object.entries(root.nested).map(([folder, trees]) => [
+              folder,
+              trees.map((tree) => tree.path)
+            ])
+          )
         })),
     [roots]
   )

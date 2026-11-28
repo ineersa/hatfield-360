@@ -41,6 +41,8 @@ type SourceControlGroupBase = {
   name: string
   /** A linked worktree (`git worktree add`) or another working tree of the project's repository, not the project folder. */
   worktree: boolean
+  /** The root of the group of the repository's own working tree, which a linked worktree is listed under; null for that one. */
+  parent: string | null
 }
 
 /** One repository or worktree of the open workspace and its uncommitted changes. */

@@ -54,11 +54,18 @@ it("names a symlinked project's files by its workspace folder and linked worktre
         root: group.root,
         name: group.name,
         worktree: group.worktree,
+        parent: group.parent,
         files: group.status === 'git' ? group.files.map((file) => file.absolutePath) : []
       }))
     ).toEqual([
-      { root: link, name: 'app-link', worktree: false, files: [join(link, 'a.ts')] },
-      { root: feature, name: 'app-feature', worktree: true, files: [join(feature, 'a.ts')] }
+      { root: link, name: 'app-link', worktree: false, parent: null, files: [join(link, 'a.ts')] },
+      {
+        root: feature,
+        name: 'app-feature',
+        worktree: true,
+        parent: link,
+        files: [join(feature, 'a.ts')]
+      }
     ])
     const place = workingTreeOf(store.view(), link)
     expect(
@@ -98,11 +105,13 @@ it('gives each repository inside a multi-repo folder its own groups, and lists o
       { path: join(apps, 'lib'), multiRepo: false }
     ])
     const groups = await sourceControlStatus(store.view())
-    expect(groups.map(({ project, root: tree, name }) => ({ project, root: tree, name }))).toEqual([
-      { project: apps, root: join(apps, 'api'), name: 'apps/api' },
-      { project: apps, root: feature, name: 'api-feature' },
-      { project: apps, root: join(apps, 'web'), name: 'apps/web' },
-      { project: join(apps, 'lib'), root: join(apps, 'lib'), name: 'lib' }
+    expect(
+      groups.map(({ project, root: tree, name, parent }) => ({ project, root: tree, name, parent }))
+    ).toEqual([
+      { project: apps, root: join(apps, 'api'), name: 'apps/api', parent: null },
+      { project: apps, root: feature, name: 'api-feature', parent: join(apps, 'api') },
+      { project: apps, root: join(apps, 'web'), name: 'apps/web', parent: null },
+      { project: join(apps, 'lib'), root: join(apps, 'lib'), name: 'lib', parent: null }
     ])
 
     // A git action on a repository inside the folder runs in that repository only.

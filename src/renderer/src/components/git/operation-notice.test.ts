@@ -8,6 +8,7 @@ const repo = (operation: GitOperationState | null, branch: string | null = 'main
   root: '/app',
   name: 'app',
   worktree: false,
+  parent: null,
   status: 'git',
   branch,
   upstream: null,

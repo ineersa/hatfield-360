@@ -479,6 +479,8 @@ export function ChangesTree({
       return navigable.find((each) => each.key === row.group.root)
     if (row.type === 'file')
       return navigable.find((each) => each.type === 'unversioned' && each.group === row.group)
+    if (row.type === 'group' && row.indent > 0)
+      return navigable.find((each) => each.key === row.group.parent)
     return undefined
   }
 
@@ -560,14 +562,14 @@ export function ChangesTree({
         <div
           key={row.key}
           role="treeitem"
-          aria-level={2}
+          aria-level={2 + row.indent}
           aria-disabled
           aria-selected={false}
           className={cn(
             'type-hint flex h-tree-row shrink-0 items-center gap-1.5 select-none',
             row.type === 'error' && 'text-foreground'
           )}
-          style={{ paddingLeft: treeIndent(1, 6) }}
+          style={{ paddingLeft: treeIndent(1 + row.indent, 6) }}
         >
           {row.type === 'error' ? (
             <>
@@ -608,7 +610,7 @@ export function ChangesTree({
             groupTip(row.group),
             <div
               {...common}
-              aria-level={1}
+              aria-level={1 + row.indent}
               aria-expanded={row.expanded}
               aria-label={row.group.name}
               aria-description={
@@ -622,7 +624,7 @@ export function ChangesTree({
                       .join(', ')
                   : undefined
               }
-              style={{ paddingLeft: treeIndent(0) }}
+              style={{ paddingLeft: treeIndent(row.indent) }}
               onClick={() => {
                 choose(row)
                 toggleFold(row.group.root)
@@ -648,8 +650,9 @@ export function ChangesTree({
           {...common}
           key={row.key}
           role="treeitem"
-          aria-level={2}
+          aria-level={2 + row.indent}
           aria-label={notice.title}
+          style={{ marginLeft: treeIndent(row.indent, 0) }}
           aria-description={[notice.detail, notice.status].filter(Boolean).join(' ')}
           className={cn(
             'my-1 shrink-0 cursor-default gap-x-2 border-warning-border bg-warning-background px-2.5 py-2 outline-none select-none focus-visible:ring-1 focus-visible:ring-ring',
@@ -704,11 +707,11 @@ export function ChangesTree({
         null,
         <div
           {...common}
-          aria-level={2}
+          aria-level={2 + row.indent}
           aria-expanded={row.expanded}
           aria-label="Unversioned Files"
           aria-description={fileCount(files.length)}
-          style={{ paddingLeft: treeIndent(1) }}
+          style={{ paddingLeft: treeIndent(1 + row.indent) }}
           onClick={() => {
             choose(row)
             toggleUnversionedFold(group.root)
@@ -745,10 +748,10 @@ export function ChangesTree({
       file.originalPath === null ? file.path : `${file.path}, renamed from ${file.originalPath}`,
       <div
         {...common}
-        aria-level={depth + 1}
+        aria-level={depth + 1 + row.indent}
         aria-label={nameOf(file.path)}
         aria-description={fileDescription(file)}
-        style={{ paddingLeft: treeIndent(depth) }}
+        style={{ paddingLeft: treeIndent(depth + row.indent) }}
         onClick={() => choose(row)}
         onDoubleClick={() => openFile(file)}
       >

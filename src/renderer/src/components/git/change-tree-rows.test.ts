@@ -25,6 +25,7 @@ const repo = (root: string, paths: string[], untracked: string[] = []): GitGroup
   root,
   name: root.slice(1),
   worktree: false,
+  parent: null,
   status: 'git',
   branch: 'main',
   upstream: null,
@@ -46,6 +47,7 @@ const notes: SourceControlGroup = {
   root: '/notes',
   name: 'notes',
   worktree: false,
+  parent: null,
   status: 'not-git'
 }
 const broken: SourceControlGroup = {
@@ -53,6 +55,7 @@ const broken: SourceControlGroup = {
   root: '/broken',
   name: 'broken',
   worktree: false,
+  parent: null,
   status: 'error',
   message: 'fatal: bad HEAD'
 }
@@ -75,6 +78,26 @@ describe('changeTreeRows', () => {
     expect(rows[4]).toMatchObject({ expanded: false })
     expect(rows[6]).toMatchObject({ message: 'fatal: bad HEAD' })
     expect(changeTreeRows([notes], new Set(), new Set())[1]).toMatchObject({ note: 'not-git' })
+  })
+
+  it('lists a linked worktree one level in after its repository, and folds it away with it', () => {
+    const feature = { ...repo('/lib-feature', ['d.ts']), worktree: true, parent: '/lib' }
+    const rows = changeTreeRows([feature, app, lib], new Set(['/app']), new Set())
+    expect(rows.map((row) => [row.type, row.key, row.indent])).toEqual([
+      ['group', '/app', 0],
+      ['group', '/lib', 0],
+      ['file', '/lib\0c.ts', 0],
+      ['group', '/lib-feature', 1],
+      ['file', '/lib-feature\0d.ts', 1]
+    ])
+    expect(shape(changeTreeRows([feature, lib], new Set(['/lib']), new Set()))).toEqual([
+      ['group', '/lib']
+    ])
+    // Without its repository's group (another project lists it), the worktree is a group of its own.
+    expect(shape(changeTreeRows([feature], new Set(), new Set()))).toEqual([
+      ['group', '/lib-feature'],
+      ['file', '/lib-feature\0d.ts']
+    ])
   })
 
   it('puts untracked files under a folded Unversioned Files row after the tracked changes', () => {

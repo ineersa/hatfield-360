@@ -1,11 +1,12 @@
 import { realpath, stat } from 'node:fs/promises'
 import { execFile } from 'node:child_process'
-import { basename, isAbsolute } from 'node:path'
+import { basename, isAbsolute, join } from 'node:path'
 import { promisify } from 'node:util'
 import type { AgentProfile } from '../../shared/agent-api'
 import type { ShellCommand } from '../terminal/default-shell'
 import { agentShellCommand } from '../terminal/agent-shell-command'
 import { isPlainObject } from '../../shared/plain-object'
+import { mapWithConcurrency } from '../../shared/limited-concurrency'
 import {
   conversationKey,
   RECENT_CONVERSATION_MS,
@@ -160,6 +161,83 @@ export function hatfieldCatalogCommand(
   )
 }
 
+/** A folder's sessions as last listed, with the store's state then: unchanged, it needn't be asked again. */
+const listed = new Map<string, { stamp: string; sessions: RecentConversation[] }>()
+
+/** How many folders are asked at once: each answer starts a shell and the agent. */
+const CATALOG_CONCURRENCY = 4
+
+/** The state of a folder's Hatfield store (`.hatfield/state.sqlite` and its write-ahead log); null without one. */
+async function storeStamp(folder: string): Promise<string | null> {
+  const database = join(folder, '.hatfield', 'state.sqlite')
+  const files = await Promise.all(
+    [database, `${database}-wal`].map((file) =>
+      stat(file).then(
+        ({ mtimeMs, size }) => [mtimeMs, size],
+        () => null
+      )
+    )
+  )
+  return files[0] === null ? null : JSON.stringify(files)
+}
+
+type ScopeResult = { sessions: RecentConversation[]; error?: string; alias?: string }
+
+async function listScope(
+  cwd: string,
+  project: string,
+  profile: AgentProfile,
+  since: string,
+  now: number,
+  shell: ShellCommand | undefined
+): Promise<ScopeResult> {
+  let canonical: string
+  try {
+    canonical = await realpath(cwd)
+    if (!(await stat(canonical)).isDirectory()) throw new Error('Not a directory.')
+  } catch {
+    return { sessions: [], error: `Hatfield: the ${basename(cwd)} catalog folder is unavailable.` }
+  }
+  const alias = cwd === canonical ? {} : { alias: canonical }
+  // Without a store Hatfield has no sessions here, and asking it would create one.
+  const stamp = await storeStamp(canonical)
+  if (stamp === null) return { sessions: [], ...alias }
+  const key = JSON.stringify([cwd, project, profile])
+  const cached = listed.get(key)
+  if (cached?.stamp === stamp) return { sessions: cached.sessions, ...alias }
+  const sessions: RecentConversation[] = []
+  let offset = 0
+  try {
+    for (;;) {
+      const command = hatfieldCatalogCommand(profile, cwd, since, offset, shell)
+      const { stdout } = await execute(command.file, command.args, {
+        encoding: 'utf8',
+        env: { ...process.env, ...profile.env },
+        maxBuffer: 2 * 1024 * 1024,
+        timeout: CATALOG_TIMEOUT_MS,
+        windowsHide: true
+      })
+      const page = parseHatfieldCatalog(catalogJson(stdout), project, now)
+      sessions.push(...page.sessions)
+      if (page.nextOffset === null) break
+      if (page.nextOffset <= offset || page.nextOffset > 20_000)
+        throw new Error('Invalid or excessive session:list pagination.')
+      offset = page.nextOffset
+    }
+  } catch (error) {
+    if (isMissingHatfieldCatalog(error)) return { sessions: [], ...alias }
+    if (error instanceof Error && 'code' in error && error.code === 'ENOENT')
+      return { sessions: [], error: 'Hatfield: the configured command could not be started.' }
+    return {
+      sessions: [],
+      error: `Hatfield: could not read the ${basename(cwd)} catalog (${catalogFailure(error)}).`,
+      ...alias
+    }
+  }
+  listed.set(key, { stamp, sessions })
+  return { sessions, ...alias }
+}
+
 export async function listHatfieldCatalog(
   folders: WorkspaceView['folders'],
   projects: ProjectWorktrees[],
@@ -167,51 +245,24 @@ export async function listHatfieldCatalog(
   now = Date.now(),
   shell?: ShellCommand
 ): Promise<RecentCatalog> {
+  const since = new Date(now - RECENT_CONVERSATION_MS).toISOString()
+  const scopes = [...catalogScopes(folders, projects)]
+  const results = await mapWithConcurrency(scopes, CATALOG_CONCURRENCY, ([cwd, project]) =>
+    listScope(cwd, project, profile, since, now, shell)
+  )
   const entries = new Map<string, RecentConversation>()
   const errors = new Set<string>()
   const scopeAliases = new Map<string, string>()
-  const since = new Date(now - RECENT_CONVERSATION_MS).toISOString()
-  for (const [cwd, project] of catalogScopes(folders, projects)) {
-    try {
-      const canonical = await realpath(cwd)
-      if (!(await stat(canonical)).isDirectory()) throw new Error('Not a directory.')
-      if (cwd !== canonical) scopeAliases.set(cwd, canonical)
-    } catch {
-      errors.add(`Hatfield: the ${basename(cwd)} catalog folder is unavailable.`)
-      continue
+  scopes.forEach(([cwd], index) => {
+    const result = results[index]
+    if (!result) return
+    if (result.alias !== undefined) scopeAliases.set(cwd, result.alias)
+    if (result.error !== undefined) errors.add(result.error)
+    for (const entry of result.sessions) {
+      const key = conversationKey(entry)
+      if (key && (entries.get(key)?.lastModified ?? 0) <= entry.lastModified)
+        entries.set(key, entry)
     }
-    let offset = 0
-    try {
-      for (;;) {
-        const command = hatfieldCatalogCommand(profile, cwd, since, offset, shell)
-        const { stdout } = await execute(command.file, command.args, {
-          encoding: 'utf8',
-          env: { ...process.env, ...profile.env },
-          maxBuffer: 2 * 1024 * 1024,
-          timeout: CATALOG_TIMEOUT_MS,
-          windowsHide: true
-        })
-        const page = parseHatfieldCatalog(catalogJson(stdout), project, now)
-        for (const entry of page.sessions) {
-          const key = conversationKey(entry)
-          if (key && (entries.get(key)?.lastModified ?? 0) <= entry.lastModified)
-            entries.set(key, entry)
-        }
-        if (page.nextOffset === null) break
-        if (page.nextOffset <= offset || page.nextOffset > 20_000)
-          throw new Error('Invalid or excessive session:list pagination.')
-        offset = page.nextOffset
-      }
-    } catch (error) {
-      if (isMissingHatfieldCatalog(error)) continue
-      if (error instanceof Error && 'code' in error && error.code === 'ENOENT') {
-        errors.add('Hatfield: the configured command could not be started.')
-        break
-      }
-      errors.add(
-        `Hatfield: could not read the ${basename(cwd)} catalog (${catalogFailure(error)}).`
-      )
-    }
-  }
+  })
   return { sessions: [...entries.values()], errors: [...errors], scopeAliases }
 }

@@ -15,7 +15,10 @@ export function useNamedFolders(): NamedFolder[] {
     () =>
       treeRoots(folders ?? [], projects).flatMap((root) => [
         { path: root.path, name: root.name },
-        ...root.worktrees.map((tree) => ({ path: tree.path, name: tree.name }))
+        ...[...root.worktrees, ...Object.values(root.nested).flat()].map((tree) => ({
+          path: tree.path,
+          name: tree.name
+        }))
       ]),
     [folders, projects]
   )

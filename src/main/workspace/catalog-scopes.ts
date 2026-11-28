@@ -11,11 +11,10 @@ export function catalogScopes(
     if (folder.missing || folder.kind !== 'project') continue
     scopes.set(folder.path, folder.path)
     const project = projects.find((entry) => entry.folder === folder.path)
-    // Agents start in the project folder or a linked worktree, never in a multi-repo folder's repositories.
+    // Every working tree of the project's repositories, also those inside a multi-repo folder.
     for (const repository of projectRepositories(project)) {
       if (repository.status !== 'git') continue
       for (const tree of repository.worktrees) {
-        if (tree.project && repository.folder !== folder.path) continue
         if (!tree.prunable && !scopes.has(tree.path)) scopes.set(tree.path, folder.path)
       }
     }
