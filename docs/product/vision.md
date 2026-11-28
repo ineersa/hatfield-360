@@ -2,11 +2,12 @@
 
 Hatfield 360 is a desktop workspace for running coding agents in terminals, with just enough editor and git to stop switching to an IDE. Think "a better tmux that knows about projects, worktrees and agents, and tells me when an agent needs me", plus a file editor and a JetBrains-style git view.
 
-Orca (`~/projects/orca`) covers most of this ground and is the main code reference, but Hatfield 360 deliberately does less and uses a different layout.
+Orca covers most of this ground (QA scratch change, not for merge).
 
 ## Layout
 
-Two columns, JetBrains-style, not Orca's three columns (no right-hand file/project panel).
+Two columns, JetBrains-style (QA scratch change).
+QA scratch line that a later commit changes.
 
 ```
 ┌──┬──────────────────┬───────────────────────────────────────────┐
