@@ -1,6 +1,6 @@
-import { mkdtemp, realpath, rm, symlink } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { mkdtemp, realpath, rm, symlink, writeFile } from 'node:fs/promises'
+import { homedir, tmpdir } from 'node:os'
+import { basename, join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import {
   hatfieldCatalogCommand,
@@ -9,6 +9,7 @@ import {
   parseHatfieldCatalog
 } from './hatfield-catalog'
 import { conversationKey, matchingConversationKeys } from '../../shared/recent-conversation'
+import type { AgentProfile } from '../../shared/agent-api'
 
 const now = Date.parse('2026-11-26T00:00:00Z')
 
@@ -107,7 +108,7 @@ describe('Hatfield catalog response', () => {
 it('appends listing arguments to the configured PHP phar prefix inside the agent shell', () => {
   expect(
     hatfieldCatalogCommand(
-      { executable: 'php', args: ['/Applications/Hatfield Tools/hatfield.phar'] },
+      { executable: 'php', args: ['/Applications/Hatfield Tools/hatfield.phar'], env: {} },
       '/projects/app',
       '2026-11-12T00:00:00.000Z',
       200,
@@ -166,7 +167,7 @@ it('reports each missing catalog directory separately without starting the confi
         missing: false
       })),
       [],
-      { executable: 'php', args: ['/unused/hatfield.phar'] },
+      { executable: 'php', args: ['/unused/hatfield.phar'], env: {} },
       now
     )
     expect(result.errors).toEqual([
@@ -176,4 +177,78 @@ it('reports each missing catalog directory separately without starting the confi
   } finally {
     await rm(root, { recursive: true, force: true })
   }
+})
+
+async function withProject(
+  run: (project: string, folders: Parameters<typeof listHatfieldCatalog>[0]) => Promise<void>
+) {
+  const project = await realpath(await mkdtemp(join(tmpdir(), 'hatfield-command-')))
+  try {
+    await run(project, [{ name: 'app', path: project, kind: 'project', missing: false }])
+  } finally {
+    await rm(project, { recursive: true, force: true })
+  }
+}
+
+// Bash without startup files, so the developer's own shell and its startup output don't matter.
+const read = (folders: Parameters<typeof listHatfieldCatalog>[0], profile: AgentProfile) =>
+  listHatfieldCatalog(folders, [], profile, undefined, { file: '/bin/bash', args: ['--norc'] })
+
+describe('listHatfieldCatalog with a real command', () => {
+  it('runs the profile with its environment and a home-relative argument', async () => {
+    await withProject(async (project, folders) => {
+      const script = join(project, 'session-list.mjs')
+      await writeFile(
+        script,
+        `const cwd = process.argv[process.argv.indexOf('--cwd') + 1];
+console.log(JSON.stringify({ version: 1, scope: { cwd }, nextOffset: null, sessions: [{
+  sessionId: '1', cwd, updatedAt: new Date().toISOString(),
+  displayTitle: process.env.PROFILE_SENTINEL + ' ' + process.argv[2]
+}] }))\n`
+      )
+      const result = await read(folders, {
+        executable: process.execPath,
+        args: [script, '~/tilde'],
+        env: { PROFILE_SENTINEL: 'from-profile' }
+      })
+      expect(result.errors).toEqual([])
+      expect(result.sessions.map(({ title }) => title)).toEqual([
+        `from-profile ${join(homedir(), 'tilde')}`
+      ])
+    })
+  })
+
+  it('names why the command failed instead of a bare could-not-read', async () => {
+    await withProject(async (project, folders) => {
+      const missing = await read(folders, {
+        executable: join(project, 'missing-hatfield'),
+        args: [],
+        env: {}
+      })
+      expect(missing.errors).toHaveLength(1)
+      expect(missing.errors[0]).toMatch(
+        /^Hatfield: could not read the hatfield-command-\w+ catalog \(the configured command could not be started, exit 127: .*missing-hatfield.*\)\.$/
+      )
+      const noisy = join(project, 'noisy.mjs')
+      await writeFile(noisy, "console.log('Welcome back!')\n")
+      const notJson = await read(folders, {
+        executable: process.execPath,
+        args: [noisy],
+        env: {}
+      })
+      expect(notJson.errors).toEqual([
+        `Hatfield: could not read the ${basename(project)} catalog (its output is not session:list JSON; does a shell startup file print?).`
+      ])
+      const failing = join(project, 'failing.mjs')
+      await writeFile(failing, "console.error('database is locked'); process.exit(3)\n")
+      const failed = await read(folders, {
+        executable: process.execPath,
+        args: [failing],
+        env: {}
+      })
+      expect(failed.errors).toEqual([
+        `Hatfield: could not read the ${basename(project)} catalog (exit 3: database is locked).`
+      ])
+    })
+  })
 })

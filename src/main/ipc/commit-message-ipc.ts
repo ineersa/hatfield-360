@@ -3,12 +3,7 @@ import { COMMIT_MESSAGE_CHANNELS, type CommitMessageOutcome } from '../../shared
 import { isPlainObject } from '../../shared/plain-object'
 import type { CommitMessageProvider, Settings } from '../../shared/settings-api'
 import { writeCommitMessage } from '../chat/commit-message-agent'
-import {
-  agentScriptOverridden,
-  type ChatAgentCommand,
-  chatAgentCommand,
-  resolveClaude
-} from '../chat/chat-agent-launch'
+import { type ChatAgentCommand, claudeAgentCommand } from '../chat/chat-agent-launch'
 import {
   commitMessageContext,
   commitMessagePrompt,
@@ -29,12 +24,8 @@ const LAUNCHES: Record<
   CommitMessageProvider,
   (values: Settings, cwd: string) => Promise<ChatAgentCommand>
 > = {
-  claude: async (values, cwd) => {
-    const claude = agentScriptOverridden()
-      ? 'claude'
-      : await resolveClaude(values['agents.claude'], cwd)
-    return chatAgentCommand(claude, app.getVersion())
-  }
+  claude: (values, cwd) =>
+    claudeAgentCommand(values['agents.claude'], cwd, app.getVersion(), app.getPath('userData'))
 }
 
 /** The chosen provider's agent command, started in the repository it writes for. */

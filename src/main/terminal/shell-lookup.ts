@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process'
-import { homedir } from 'node:os'
-import { basename, isAbsolute, join } from 'node:path'
+import { basename, isAbsolute } from 'node:path'
+import { expandHome } from './agent-shell-command'
 import { defaultShell } from './default-shell'
 import { terminalEnvironment } from './terminal-environment'
 
@@ -32,7 +32,7 @@ export function lookedUpPath(line: string | null): string | null {
   const alias = line?.match(/^(?:alias\s+)?[^\s=/]+=(?<value>.+)$/)?.groups?.['value']
   const command = alias === undefined ? line : alias.replace(/^(['"])(.*)\1$/, '$2').split(/\s+/)[0]
   if (!command) return null
-  const path = command.startsWith('~/') ? join(homedir(), command.slice(2)) : command
+  const path = expandHome(command)
   return isAbsolute(path) ? path : null
 }
 

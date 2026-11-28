@@ -552,7 +552,7 @@ test('two agents move through working, needs input, background work and outcomes
   }
 })
 
-test('an explicit launch inherits Bash startup exports and passes literal arguments', async () => {
+test('an explicit launch inherits Bash startup exports and the profile environment, and passes literal arguments', async () => {
   test.skip(process.platform !== 'linux', 'Uses an isolated Linux Bash startup file')
   const { project, userDataDir, cleanup } = await seed()
   const home = join(userDataDir, 'shell-home')
@@ -568,6 +568,7 @@ test('an explicit launch inherits Bash startup exports and passes literal argume
     await writeFile(
       script,
       `console.log('Startup: ' + process.env.ISSUE60_SENTINEL);\n` +
+        `console.log('Profile: ' + process.env.PROFILE_SENTINEL);\n` +
         `console.log('Arguments: ' + JSON.stringify(process.argv.slice(2)));\n` +
         `await import(${JSON.stringify(fixture)});\n`
     )
@@ -577,7 +578,9 @@ test('an explicit launch inherits Bash startup exports and passes literal argume
         'terminal.gpuAcceleration': false,
         'agents.hatfield': {
           executable: 'issue60-agent-probe',
-          args: [script, 'hatfield', 'shell-startup', 'literal ; $(false)', '']
+          // ~/ is the launched app's home folder, where the probe script lives.
+          args: ['~/probe.mjs', 'hatfield', 'shell-startup', 'literal ; $(false)', ''],
+          env: { PROFILE_SENTINEL: 'from-profile' }
         }
       })
     )
@@ -586,6 +589,7 @@ test('an explicit launch inherits Bash startup exports and passes literal argume
         await launch(page, 'Hatfield')
         const pane = page.getByRole('tabpanel', { name: 'Hatfield' }).getByTestId('terminal-pane')
         await expect(output(pane)).toContainText('Startup: from-bashrc')
+        await expect(output(pane)).toContainText('Profile: from-profile')
         await expect(output(pane)).toContainText(
           'Arguments: ["hatfield","shell-startup","literal ; $(false)",""]'
         )
@@ -622,8 +626,28 @@ test('agent launch settings are validated and a missing executable keeps diagnos
     await withApp(
       async (_app, page) => {
         await page.getByRole('button', { name: 'Settings', exact: true }).click()
-        await page.getByRole('textbox', { name: 'Hatfield executable' }).fill(missing)
+        const executable = page.getByRole('textbox', { name: 'Hatfield executable' })
         const args = page.getByRole('textbox', { name: 'Hatfield arguments (JSON array)' })
+        const env = page.getByRole('textbox', { name: 'Hatfield environment (JSON object)' })
+        await executable.fill('caffeinate -i hatfield')
+        await page.getByRole('button', { name: 'Save Hatfield profile' }).click()
+        await expect(page.getByRole('alert')).toHaveText(
+          'Hatfield executable must be one program: put caffeinate here and ["-i","hatfield"] in Arguments.'
+        )
+        await executable.fill('caffeinate')
+        await args.fill('["-i", "hatfield"]')
+        await env.fill('{"FOO": "bar"}')
+        await page.getByRole('button', { name: 'Save Hatfield profile' }).click()
+        await expect(page.getByRole('alert')).toHaveCount(0)
+        // Shown once main has written the setting and broadcast it as customized.
+        await expect(
+          page.getByRole('button', { name: 'Reset Hatfield launch profile' })
+        ).toBeVisible()
+        expect(
+          (await page.evaluate(() => globalThis.desktop.getSettings())).values['agents.hatfield']
+        ).toEqual({ executable: 'caffeinate', args: ['-i', 'hatfield'], env: { FOO: 'bar' } })
+        await executable.fill(missing)
+        await env.fill('{}')
         await args.fill('[23]')
         await page.getByRole('button', { name: 'Save Hatfield profile' }).click()
         await expect(
@@ -631,9 +655,13 @@ test('agent launch settings are validated and a missing executable keeps diagnos
         ).toBeVisible()
         await expect(
           page.evaluate(() =>
-            globalThis.desktop.updateSetting('agents.hatfield', { executable: '\0bad', args: [] })
+            globalThis.desktop.updateSetting('agents.hatfield', {
+              executable: '\0bad',
+              args: [],
+              env: {}
+            })
           )
-        ).rejects.toThrow('must contain an executable')
+        ).rejects.toThrow('executable must be a program name or path')
         await args.fill('[]')
         await page.getByRole('button', { name: 'Save Hatfield profile' }).click()
         await page.getByRole('button', { name: 'Close Settings' }).click()

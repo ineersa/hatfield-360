@@ -3,7 +3,12 @@ import type { TerminalSession } from './terminal-api'
 
 export const AGENT_PROVIDERS = { hatfield: 'Hatfield', claude: 'Claude' } as const
 export type AgentProvider = keyof typeof AGENT_PROVIDERS
-export type AgentProfile = { executable: string; args: string[] }
+export type AgentProfile = {
+  executable: string
+  args: string[]
+  /** Variables added to the agent's environment. */
+  env: Record<string, string>
+}
 type AgentTarget =
   | { project: string; cwd: string }
   | { sourceTerminalId: string }

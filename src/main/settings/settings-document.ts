@@ -7,6 +7,8 @@ import {
   printParseErrorCode
 } from 'jsonc-parser'
 import { isPlainObject } from '../../shared/plain-object'
+import type { AgentProfile } from '../../shared/agent-api'
+import { checkAgentProfile } from '../../shared/agent-profile'
 import { AGENT_SOUND_IDS } from '../../shared/agent-sound-catalog'
 import {
   COMMIT_MESSAGE_INSTRUCTIONS_LIMIT,
@@ -79,25 +81,6 @@ function flag(value: unknown): Checked<boolean> {
   return typeof value === 'boolean' ? { value } : { problem: 'must be true or false' }
 }
 
-function agentProfile(raw: unknown): Checked<Settings['agents.hatfield']> {
-  if (!isPlainObject(raw) || typeof raw.executable !== 'string')
-    return { problem: 'must contain an executable and an array of string arguments' }
-  const executable = raw.executable.trim()
-  if (
-    !executable ||
-    executable.length > 4096 ||
-    Array.from(executable).some((character) => character.charCodeAt(0) < 32) ||
-    !Array.isArray(raw.args) ||
-    raw.args.length > 64 ||
-    !raw.args.every(
-      (arg: unknown): arg is string =>
-        typeof arg === 'string' && arg.length <= 4096 && !arg.includes('\0')
-    )
-  )
-    return { problem: 'must contain an executable and an array of string arguments' }
-  return { value: { executable, args: raw.args } }
-}
-
 /** An agent's id for a model or effort level, such as `haiku` or `claude-sonnet-5`. */
 function agentOptionId(value: unknown): Checked<string> {
   return typeof value === 'string' && /^[\w.:[\]-]{1,64}$/.test(value)
@@ -140,8 +123,8 @@ function environmentVariable(value: unknown): Checked<string> {
 }
 
 const CHECKS: { [K in SettingKey]: (value: unknown) => Checked<Settings[K]> } = {
-  'agents.hatfield': agentProfile,
-  'agents.claude': agentProfile,
+  'agents.hatfield': checkAgentProfile,
+  'agents.claude': checkAgentProfile,
   'chat.model': agentOptionId,
   'chat.effort': agentOptionId,
   'git.commitMessage.provider': oneOf(COMMIT_MESSAGE_PROVIDERS.map(({ value }) => value)),
@@ -267,12 +250,20 @@ export function checkSettingValue<K extends SettingKey>(key: K, raw: unknown): S
   return checked.value
 }
 
+/** A profile is written without an empty env, as users write it by hand. */
+function stored(value: Settings[SettingKey]): Settings[SettingKey] | Omit<AgentProfile, 'env'> {
+  if (typeof value !== 'object' || Object.keys(value.env).length) return value
+  return { executable: value.executable, args: value.args }
+}
+
 function matchesDefault(value: Settings[SettingKey], fallback: Settings[SettingKey]): boolean {
   if (typeof value !== 'object' || typeof fallback !== 'object') return value === fallback
   return (
     value.executable === fallback.executable &&
     value.args.length === fallback.args.length &&
-    value.args.every((arg, index) => arg === fallback.args[index])
+    value.args.every((arg, index) => arg === fallback.args[index]) &&
+    Object.keys(value.env).length === Object.keys(fallback.env).length &&
+    Object.entries(value.env).every(([name, text]) => fallback.env[name] === text)
   )
 }
 
@@ -285,7 +276,8 @@ export function withSetting<K extends SettingKey>(
   key: K,
   value: Settings[K] | null
 ): string {
-  const kept = value === null || matchesDefault(value, DEFAULT_SETTINGS[key]) ? undefined : value
+  const kept =
+    value === null || matchesDefault(value, DEFAULT_SETTINGS[key]) ? undefined : stored(value)
   const base = text.trim() === '' ? '{}\n' : text
   const edits = modify(base, [key], kept, {
     formattingOptions: { insertSpaces: true, tabSize: 2, eol: '\n' }

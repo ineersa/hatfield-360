@@ -27,6 +27,55 @@ export function isMissingHatfieldCatalog(error: unknown): boolean {
   )
 }
 
+const CATALOG_TIMEOUT_MS = 15_000
+
+/** Thrown for output that isn't a session list, so the failure names that instead of a parse error. */
+class CatalogOutputError extends Error {}
+
+function catalogJson(stdout: string): unknown {
+  try {
+    return JSON.parse(stdout) as unknown
+  } catch {
+    throw new CatalogOutputError(
+      'its output is not session:list JSON; does a shell startup file print?'
+    )
+  }
+}
+
+/** The last line of a failed command's stderr, as plain text short enough for a notice. */
+function stderrTail(stderr: unknown): string {
+  if (typeof stderr !== 'string') return ''
+  const line =
+    stderr
+      .split('\n')
+      .map((text) =>
+        Array.from(text)
+          .filter((character) => character >= ' ' && character !== '\x7f')
+          .join('')
+          .trim()
+      )
+      .findLast((text) => text !== '') ?? ''
+  return line.length > 200 ? `${line.slice(0, 199)}…` : line
+}
+
+/** Why a session:list run failed, for the catalog notice: exit status, timeout or bad output. */
+function catalogFailure(error: unknown): string {
+  if (error instanceof CatalogOutputError) return error.message
+  if (!(error instanceof Error)) return String(error)
+  // execFile puts the exit status and output on the error itself.
+  const fields = new Map<string, unknown>(Object.entries(error))
+  const code = fields.get('code')
+  const signal = fields.get('signal')
+  const tail = stderrTail(fields.get('stderr'))
+  const detail = tail ? `: ${tail}` : ''
+  if (fields.get('killed') === true && signal === 'SIGTERM')
+    return `no answer within ${CATALOG_TIMEOUT_MS / 1000} seconds`
+  if (code === 127) return `the configured command could not be started, exit 127${detail}`
+  if (typeof code === 'number') return `exit ${code}${detail}`
+  if (typeof signal === 'string') return `stopped by ${signal}${detail}`
+  return error.message
+}
+
 export function parseHatfieldCatalog(
   value: unknown,
   project: string,
@@ -115,7 +164,8 @@ export async function listHatfieldCatalog(
   folders: WorkspaceView['folders'],
   projects: ProjectWorktrees[],
   profile: AgentProfile,
-  now = Date.now()
+  now = Date.now(),
+  shell?: ShellCommand
 ): Promise<RecentCatalog> {
   const entries = new Map<string, RecentConversation>()
   const errors = new Set<string>()
@@ -133,14 +183,15 @@ export async function listHatfieldCatalog(
     let offset = 0
     try {
       for (;;) {
-        const command = hatfieldCatalogCommand(profile, cwd, since, offset)
+        const command = hatfieldCatalogCommand(profile, cwd, since, offset, shell)
         const { stdout } = await execute(command.file, command.args, {
           encoding: 'utf8',
+          env: { ...process.env, ...profile.env },
           maxBuffer: 2 * 1024 * 1024,
-          timeout: 15_000,
+          timeout: CATALOG_TIMEOUT_MS,
           windowsHide: true
         })
-        const page = parseHatfieldCatalog(JSON.parse(stdout) as unknown, project, now)
+        const page = parseHatfieldCatalog(catalogJson(stdout), project, now)
         for (const entry of page.sessions) {
           const key = conversationKey(entry)
           if (key && (entries.get(key)?.lastModified ?? 0) <= entry.lastModified)
@@ -157,7 +208,9 @@ export async function listHatfieldCatalog(
         errors.add('Hatfield: the configured command could not be started.')
         break
       }
-      errors.add(`Hatfield: could not read the ${basename(cwd)} catalog.`)
+      errors.add(
+        `Hatfield: could not read the ${basename(cwd)} catalog (${catalogFailure(error)}).`
+      )
     }
   }
   return { sessions: [...entries.values()], errors: [...errors], scopeAliases }
