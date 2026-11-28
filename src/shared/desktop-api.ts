@@ -2,6 +2,7 @@ import type { AgentApi } from './agent-api'
 import type { BranchApi } from './branch-api'
 import type { ChatAgentApi } from './chat-agent-api'
 import type { CommitMessageApi } from './commit-message-api'
+import type { DiagnosticsApi } from './diagnostics-api'
 import type { EditorApi } from './editor-api'
 import type { FilesSessionApi } from './files-session-api'
 import type { FileTreeApi } from './file-tree-api'
@@ -52,6 +53,7 @@ export type DesktopApi = WorkspaceApi &
   SearchEverywhereApi &
   EditorApi &
   FilesSessionApi &
-  LanguageServerApi & {
+  LanguageServerApi &
+  DiagnosticsApi & {
     getAppInfo: () => Promise<AppInfo>
   }

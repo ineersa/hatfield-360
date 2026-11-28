@@ -1,4 +1,5 @@
 import { type IpcMainInvokeEvent, ipcMain } from 'electron'
+import { trackRequest } from '../diagnostics/ipc-in-flight'
 import { rendererEntryUrl } from '../window/renderer-entry'
 import { isTrustedSenderUrl } from './trusted-sender'
 
@@ -12,6 +13,6 @@ export function handleTrusted(channel: string, handler: TrustedHandler): void {
     if (!isTrustedSenderUrl(senderUrl, rendererEntryUrl())) {
       throw new Error(`Rejected IPC call on ${channel} from untrusted sender`)
     }
-    return handler(event, ...args)
+    return trackRequest(channel, () => handler(event, ...args))
   })
 }

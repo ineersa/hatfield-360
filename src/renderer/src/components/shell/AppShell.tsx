@@ -1,3 +1,4 @@
+import { startSlowTaskReports } from '@/lib/slow-task-reports'
 import { useEffect, useRef } from 'react'
 import { MemorySearchDialog } from '@/components/memory/MemorySearchDialog'
 import { useMemorySearchShortcut } from '@/components/memory/use-memory-search-shortcut'
@@ -70,6 +71,7 @@ export function AppShell(): React.JSX.Element {
   useEffect(() => connectKeymap(), [connectKeymap])
   useEffect(() => connectLayout(), [connectLayout])
   useEffect(() => connectFilesSession(), [])
+  useEffect(() => startSlowTaskReports(), [])
   useEffect(() => window.desktop.subscribeShowSettings(openSettings), [openSettings])
   useEffect(() => {
     // Loaded ahead of the first file; a failure shows when the editor does.
