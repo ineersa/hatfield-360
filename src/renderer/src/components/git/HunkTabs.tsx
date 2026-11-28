@@ -4,9 +4,12 @@ import {
   Archive,
   GitCompareArrows,
   History,
+  RefreshCw,
+  Send,
   type LucideIcon
 } from 'lucide-react'
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { Button } from '@/components/ui/button'
 import { ScrollingTabList } from '@/components/shell/ScrollingTabList'
 import {
   AlertDialog,
@@ -27,8 +30,9 @@ import {
 import { bindClipboardKeys } from '@/components/terminal/terminal-clipboard'
 import { openTerminalLink } from '@/components/terminal/terminal-link'
 import { cn } from '@/lib/class-names'
+import { countedNoun } from '@/lib/counted-noun'
 import { PaneManager } from '@/lib/pane-manager/pane-manager'
-import { type HunkTab, useHunkTabStore } from '@/state/hunk-tab-store'
+import { type HunkTab, type TabGitHub, useHunkTabStore } from '@/state/hunk-tab-store'
 import type { HunkKind } from '../../../../shared/source-control-api'
 
 const TAB_ICONS: Record<HunkKind, LucideIcon> = {
@@ -86,6 +90,7 @@ function HunkTabBody({
                 return null
               }
               tabs.attachTerminal(tab.id, launch.terminal.id)
+              if (tab.kind === 'pull-request') void tabs.loadGitHub(tab.id)
               return { session: launch.terminal, size }
             },
             name: 'hunk',
@@ -127,8 +132,90 @@ function HunkTabBody({
       )}
       hidden={!active && !pending}
     >
+      {tab.kind === 'pull-request' && <PullRequestBar tab={tab} />}
       {/* The panes' own root: the pane manager positions it, which would undo `absolute` above. */}
       <div ref={root} className="min-h-0 flex-1 rounded-b-island" />
+    </div>
+  )
+}
+
+/** What the pull request tab's hunk shows of GitHub. */
+function gitHubSummary(comments: TabGitHub['comments'] | undefined): {
+  text: string
+  failed: boolean
+} {
+  if (comments === undefined || comments.status === 'loading')
+    return { text: 'Loading GitHub comments…', failed: false }
+  if (comments.status === 'failed')
+    return { text: `Couldn't load GitHub comments: ${comments.message}`, failed: true }
+  const shown =
+    comments.threads + comments.conversation === 0
+      ? 'No open GitHub comments'
+      : `GitHub: ${[
+          ...(comments.threads > 0 ? [countedNoun(comments.threads, 'thread')] : []),
+          ...(comments.conversation > 0 ? [countedNoun(comments.conversation, 'PR comment')] : [])
+        ].join(', ')}`
+  const hidden =
+    comments.notShown > 0 ? ` · ${comments.notShown} not shown (outdated or off the diff)` : ''
+  return { text: shown + hidden, failed: false }
+}
+
+/** Over a pull request tab's hunk: its GitHub comments, reloading them, and publishing notes. */
+function PullRequestBar({ tab }: { tab: HunkTab }): React.JSX.Element {
+  const gitHub = useHunkTabStore((state) => state.gitHub[tab.id])
+  const [asking, setAsking] = useState<number | null>(null)
+  const busy = gitHub === undefined || gitHub.publishing || gitHub.comments.status === 'loading'
+  const { text, failed } = gitHubSummary(gitHub?.comments)
+  const ask = async () => {
+    const tabs = useHunkTabStore.getState()
+    const count = await tabs.notesIn(tab.id)
+    if (count === 0) void tabs.publishToGitHub(tab.id)
+    else setAsking(count)
+  }
+  return (
+    <div className="flex h-status-bar shrink-0 items-center gap-1 bg-island px-2">
+      <span
+        className={cn(
+          'min-w-0 flex-1 truncate type-hint',
+          failed ? 'text-error' : 'text-muted-foreground'
+        )}
+        title={text}
+      >
+        {gitHub?.publishing ? 'Publishing to GitHub…' : text}
+      </span>
+      <Button
+        variant="ghost"
+        size="xs"
+        disabled={busy}
+        onClick={() => void useHunkTabStore.getState().loadGitHub(tab.id)}
+      >
+        <RefreshCw aria-hidden />
+        Reload
+      </Button>
+      <Button variant="ghost" size="xs" disabled={busy} onClick={() => void ask()}>
+        <Send aria-hidden />
+        Publish to GitHub
+      </Button>
+      <AlertDialog open={asking !== null} onOpenChange={(open) => !open && setAsking(null)}>
+        <AlertDialogContent>
+          <AlertDialogTitle>
+            Publish {countedNoun(asking ?? 0, 'note')} to #{tab.target}?
+          </AlertDialogTitle>
+          <AlertDialogDescription>
+            They're posted on GitHub as you: new notes as one review, replies in their threads. Once
+            posted, they show as GitHub comments here.
+          </AlertDialogDescription>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              primary
+              onClick={() => void useHunkTabStore.getState().publishToGitHub(tab.id)}
+            >
+              Publish
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }
@@ -149,6 +236,7 @@ export function HunkTabs({
   const requestClose = useHunkTabStore((state) => state.requestClose)
   const withNotes = useHunkTabStore((state) => state.withNotes)
   const settleNotes = useHunkTabStore((state) => state.settleNotes)
+  const publishAndClose = useHunkTabStore((state) => state.publishAndClose)
   const shownIds = tabs.filter((tab) => !pending.has(tab.id)).map((tab) => tab.id)
 
   return (
@@ -202,17 +290,22 @@ export function HunkTabs({
       >
         <AlertDialogContent>
           <AlertDialogTitle>
-            {withNotes?.count === 1
-              ? 'Close and lose 1 note?'
-              : `Close and lose ${withNotes?.count ?? 0} notes?`}
+            {(withNotes?.publish ?? null) !== null ? 'Publish or lose' : 'Close and lose'}{' '}
+            {countedNoun(withNotes?.count ?? 0, 'note')}?
           </AlertDialogTitle>
           <AlertDialogDescription>
-            hunk keeps review notes only while it runs. Have an agent answer them, or copy what you
-            need, before closing.
+            {(withNotes?.publish ?? null) !== null
+              ? 'Your notes in hunk aren’t on GitHub yet. Publish posts them to the pull request as you; closing ends hunk, and they’re lost.'
+              : 'hunk keeps review notes only while it runs. Have an agent answer them, or copy what you need, before closing.'}
           </AlertDialogDescription>
           <AlertDialogFooter>
             <AlertDialogCancel>Keep Open</AlertDialogCancel>
             <AlertDialogAction onClick={() => settleNotes(true)}>Close Anyway</AlertDialogAction>
+            {(withNotes?.publish ?? null) !== null && (
+              <AlertDialogAction primary onClick={() => void publishAndClose()}>
+                Publish and Close
+              </AlertDialogAction>
+            )}
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

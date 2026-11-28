@@ -14,19 +14,19 @@ import { query } from './source-control'
 const BASE_CANDIDATES = ['origin/main', 'origin/master', 'main', 'master']
 
 /** A `gh` call that hangs (a network stall) is given up, and counts as failed. */
-const GH_TIMEOUT_MS = 30_000
+export const GH_TIMEOUT_MS = 30_000
 
 const PULL_REQUEST_FIELDS = 'number,title,author,headRefName,isDraft,url'
 
 /** `gh` exits with 4 when it isn't signed in. */
-const SIGNED_OUT_EXIT = 4
+export const SIGNED_OUT_EXIT = 4
 
 /** How long a `gh` lookup on the shell PATH is reused: every focus reads each repository again. */
 const GH_LOOKUP_TTL_MS = 60_000
 const ghLookups = new Map<string, { at: number; path: Promise<string | null> }>()
 
 /** The user's `gh`, as their shell finds it in `root`, looked up at most once a minute. */
-function findGh(root: string): Promise<string | null> {
+export function findGh(root: string): Promise<string | null> {
   const cached = ghLookups.get(root)
   if (cached && Date.now() - cached.at < GH_LOOKUP_TTL_MS) return cached.path
   const path = findOnShellPath('gh', root)
@@ -81,7 +81,7 @@ export function gitHubRemote(url: string): GitHubRemote | null {
   return { host, owner, repo }
 }
 
-async function originOnGitHub(root: string): Promise<GitHubRemote | null> {
+export async function originOnGitHub(root: string): Promise<GitHubRemote | null> {
   const url = await query(root, ['remote', 'get-url', 'origin'])
   return url.exitCode === 0 ? gitHubRemote(url.stdout) : null
 }
@@ -96,14 +96,17 @@ export async function pullRequestRepository(root: string): Promise<string> {
   return repositoryName(github)
 }
 
-type GhRun = { exitCode: number | null; stdout: string; stderr: string; timedOut: boolean }
+export type GhRun = { exitCode: number | null; stdout: string; stderr: string; timedOut: boolean }
 
-/** Runs the user's `gh` in `root`, as their shell would find it; its output is only read here. */
-function runGh(gh: string, root: string, args: string[]): Promise<GhRun> {
+/**
+ * Runs the user's `gh` in `root`, as their shell would find it, with `input` on its stdin; its
+ * output is only read here.
+ */
+export function runGh(gh: string, root: string, args: string[], input?: string): Promise<GhRun> {
   return new Promise((resolve) => {
     const child = spawn(gh, args, {
       cwd: root,
-      stdio: ['ignore', 'pipe', 'pipe'],
+      stdio: ['pipe', 'pipe', 'pipe'],
       env: {
         ...terminalEnvironment(process.env, { platform: process.platform, appVersion: '' }),
         GH_PROMPT_DISABLED: '1',
@@ -112,6 +115,7 @@ function runGh(gh: string, root: string, args: string[]): Promise<GhRun> {
     })
     let stdout = ''
     let stderr = ''
+    child.stdin.on('error', () => undefined).end(input)
     child.stdout.setEncoding('utf8').on('data', (chunk: string) => (stdout += chunk))
     child.stderr.setEncoding('utf8').on('data', (chunk: string) => (stderr += chunk))
     let timedOut = false

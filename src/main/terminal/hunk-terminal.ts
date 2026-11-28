@@ -1,6 +1,11 @@
 import { randomUUID } from 'node:crypto'
 import type { WebContents } from 'electron'
-import type { HunkKind, HunkLaunch } from '../../shared/source-control-api'
+import type {
+  HunkKind,
+  HunkLaunch,
+  PullRequestComments,
+  PullRequestPublish
+} from '../../shared/source-control-api'
 import { diffBase } from '../git/source-control'
 import {
   gitHubTokenEnv,
@@ -11,6 +16,7 @@ import {
 import { stashToShow } from '../git/stash'
 import { UnsupportedAgentShell } from './agent-shell-command'
 import { hunkNoteCount } from './hunk-notes'
+import { PullRequestNotes } from './hunk-pull-request'
 import { findOnShellPath } from './shell-lookup'
 import { terminalSessions } from './terminal-sessions'
 
@@ -31,14 +37,43 @@ const HUNK_ARGS: Record<HunkKind, (root: string, target: unknown) => Promise<str
   ]
 }
 
-/** Each hunk terminal's program and process, by terminal id, with the window that owns it. */
-const running = new Map<string, { owner: WebContents; hunk: string; pid: number }>()
+/**
+ * Each hunk terminal's program and process, by terminal id, with the window that owns it, and a
+ * pull request tab's GitHub discussion.
+ */
+const running = new Map<
+  string,
+  { owner: WebContents; hunk: string; pid: number; pullRequest: PullRequestNotes | null }
+>()
 
-/** How many review notes the hunk in the window's terminal holds; 0 for any other terminal. */
+/**
+ * How many review notes closing the window's hunk terminal would lose: on a pull request tab the
+ * user's own, as GitHub keeps the rest. 0 for any other terminal.
+ */
 export function hunkNotesIn(owner: WebContents, terminalId: string): Promise<number> {
   const terminal = running.get(terminalId)
-  return terminal?.owner === owner ? hunkNoteCount(terminal.hunk, terminal.pid) : Promise.resolve(0)
+  if (terminal?.owner !== owner) return Promise.resolve(0)
+  return terminal.pullRequest
+    ? terminal.pullRequest.unpublished()
+    : hunkNoteCount(terminal.hunk, terminal.pid)
 }
+
+const pullRequestIn = (owner: WebContents, terminalId: string): PullRequestNotes => {
+  const terminal = running.get(terminalId)
+  if (terminal?.owner !== owner || terminal.pullRequest === null)
+    throw new Error('That tab is not a pull request’s, or its hunk has ended.')
+  return terminal.pullRequest
+}
+
+export const loadPullRequestComments = (
+  owner: WebContents,
+  terminalId: string
+): Promise<PullRequestComments> => pullRequestIn(owner, terminalId).load()
+
+export const publishPullRequestNotes = (
+  owner: WebContents,
+  terminalId: string
+): Promise<PullRequestPublish> => pullRequestIn(owner, terminalId).publish()
 
 /**
  * Runs hunk in a terminal in `root`, found afresh on the user's shell PATH each time so installing
@@ -65,12 +100,17 @@ export async function launchHunk(
         // hunk reads a token only from its environment; a private repository needs one.
         env: view.kind === 'pull-request' ? await gitHubTokenEnv(place.root) : {},
         onExit: () => {
+          running.get(id)?.pullRequest?.stop()
           running.delete(id)
           return undefined
         }
       }
     )
-    running.set(id, { owner, hunk, pid: terminal.pid })
+    const pullRequest =
+      view.kind === 'pull-request'
+        ? new PullRequestNotes(hunk, terminal.pid, place.root, validPullRequest(view.target))
+        : null
+    running.set(id, { owner, hunk, pid: terminal.pid, pullRequest })
     return { status: 'started', terminal }
   } catch (error) {
     if (error instanceof UnsupportedAgentShell)

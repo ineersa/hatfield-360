@@ -1,6 +1,11 @@
 import { create } from 'zustand'
+import { countedNoun } from '@/lib/counted-noun'
 import { mainErrorMessage } from '@/lib/main-error-message'
-import type { HunkKind } from '../../../shared/source-control-api'
+import type {
+  HunkKind,
+  PullRequestComments,
+  PullRequestPublish
+} from '../../../shared/source-control-api'
 import { notify } from './notification-store'
 
 /** One hunk run in a tab: its pane starts hunk itself, so a remounted pane starts a fresh one. */
@@ -27,8 +32,13 @@ type HunkTabState = {
   activeTabId: string | null
   /** The last launch found no hunk: the Git view shows how to install it. */
   missing: boolean
-  /** Tabs being closed whose hunk holds review notes, waiting on the user to close them anyway. */
-  withNotes: { ids: string[]; count: number } | null
+  /**
+   * Tabs being closed whose hunk holds review notes, waiting on the user to close them anyway;
+   * `publish` is the one pull request tab among them, whose notes can go to GitHub instead.
+   */
+  withNotes: { ids: string[]; count: number; publish: string | null } | null
+  /** By pull request tab id: its GitHub discussion in hunk, and whether its notes are being posted. */
+  gitHub: Readonly<Record<string, TabGitHub>>
   /**
    * Shows the root's tab of that kind and target, opening one (shown once hunk runs) when there is
    * none. `target.label` ends the tab's title.
@@ -56,6 +66,14 @@ type HunkTabState = {
   requestClose: (ids: readonly string[]) => Promise<void>
   /** Closes the tabs that hold notes (or keeps them, with `close: false`). */
   settleNotes: (close: boolean) => void
+  /** How many notes closing the tab would lose: on a pull request tab, those not on GitHub. */
+  notesIn: (id: string) => Promise<number>
+  /** Loads a pull request tab's GitHub discussion into its hunk afresh. */
+  loadGitHub: (id: string) => Promise<void>
+  /** Posts a pull request tab's notes to GitHub; true when all of them went and none are left. */
+  publishToGitHub: (id: string) => Promise<boolean>
+  /** Publishes the pull request tab's notes that `withNotes` holds, then closes those tabs. */
+  publishAndClose: () => Promise<void>
   /**
    * Starts the root's Log tab's hunk afresh, in place: `hunk log` reads the history once, so a
    * commit, pull, switch or other ref change would otherwise not show. Review watches on its own.
@@ -83,6 +101,42 @@ export function tabFor(
   return tabs.find((tab) => tab.kind === kind && tab.root === root && tab.key === key)
 }
 
+export type TabGitHub = {
+  comments: PullRequestComments | { status: 'loading' }
+  publishing: boolean
+}
+
+/** Notes publishing left in hunk. */
+const left = (unplaced: number) =>
+  unplaced === 0
+    ? ''
+    : ` ${countedNoun(unplaced, 'note')} ${unplaced === 1 ? 'is' : 'are'} empty or not on a line, and ${unplaced === 1 ? 'stays' : 'stay'} in hunk.`
+
+/** What the user is told once publishing ends. */
+function publishedNotice(number: string, result: PullRequestPublish): void {
+  if (result.status === 'published')
+    notify({
+      severity: 'info',
+      title: `Published to #${number}`,
+      body: `${countedNoun(result.posted, 'comment')} posted.${left(result.unplaced)}`
+    })
+  else if (result.status === 'nothing')
+    notify({
+      severity: 'info',
+      title: 'Nothing to publish',
+      body: `Write a note in hunk with c, or R to reply to a comment.${left(result.unplaced)}`
+    })
+  else
+    notify({
+      severity: 'error',
+      title: `Couldn't publish to #${number}`,
+      body:
+        result.posted === 0
+          ? result.message
+          : `${result.posted} posted, the rest stay in hunk. ${result.message}`
+    })
+}
+
 /** By tab id: the terminal its hunk runs in. Not state: nothing is drawn from it. */
 const terminals = new Map<string, string>()
 
@@ -93,12 +147,23 @@ async function notesIn(id: string): Promise<number> {
   return window.desktop.hunkNoteCount(terminalId).catch(() => 0)
 }
 
+/** A failed call to main, as the bar shows it. */
+const failedCall = (error: unknown): PullRequestComments => ({
+  status: 'failed',
+  message: mainErrorMessage(error)
+})
+
 const without = (set: ReadonlySet<string>, id: string): ReadonlySet<string> =>
   new Set([...set].filter((each) => each !== id))
 
 export const useHunkTabStore = create<HunkTabState>((set, get) => {
   const remove = (id: string): void => {
     terminals.delete(id)
+    set((state) => {
+      if (!(id in state.gitHub)) return state
+      const { [id]: _gone, ...gitHub } = state.gitHub
+      return { gitHub }
+    })
     set((state) => {
       const index = state.tabs.findIndex((tab) => tab.id === id)
       if (index === -1) return state
@@ -125,6 +190,7 @@ export const useHunkTabStore = create<HunkTabState>((set, get) => {
     activeTabId: null,
     missing: false,
     withNotes: null,
+    gitHub: {},
     open: (kind, root, name, target) => {
       const { tabs, pending } = get()
       const key = target?.key ?? target?.id ?? null
@@ -164,8 +230,67 @@ export const useHunkTabStore = create<HunkTabState>((set, get) => {
       const counts = await Promise.all(ids.map(notesIn))
       const kept = ids.filter((_id, index) => (counts[index] ?? 0) > 0)
       for (const id of ids) if (!kept.includes(id)) remove(id)
-      if (kept.length > 0)
-        set({ withNotes: { ids: kept, count: counts.reduce((sum, count) => sum + count, 0) } })
+      if (kept.length === 0) return
+      const [only] = kept
+      const publish =
+        kept.length === 1 &&
+        get().tabs.some((tab) => tab.id === only && tab.kind === 'pull-request')
+          ? (only ?? null)
+          : null
+      set({
+        withNotes: { ids: kept, count: counts.reduce((sum, count) => sum + count, 0), publish }
+      })
+    },
+    notesIn,
+    loadGitHub: async (id) => {
+      const terminalId = terminals.get(id)
+      if (terminalId === undefined) return
+      const put = (comments: TabGitHub['comments']) =>
+        set((state) =>
+          state.tabs.some((tab) => tab.id === id)
+            ? {
+                gitHub: {
+                  ...state.gitHub,
+                  [id]: { publishing: state.gitHub[id]?.publishing ?? false, comments }
+                }
+              }
+            : state
+        )
+      put({ status: 'loading' })
+      put(await window.desktop.loadPullRequestComments(terminalId).catch(failedCall))
+    },
+    publishToGitHub: async (id) => {
+      const terminalId = terminals.get(id)
+      const tab = get().tabs.find((each) => each.id === id)
+      if (terminalId === undefined || tab === undefined) return false
+      const put = (gitHub: TabGitHub) =>
+        set((state) =>
+          state.tabs.some((each) => each.id === id)
+            ? { gitHub: { ...state.gitHub, [id]: gitHub } }
+            : state
+        )
+      const comments = get().gitHub[id]?.comments ?? { status: 'loading' }
+      put({ comments, publishing: true })
+      const result = await window.desktop
+        .publishPullRequestNotes(terminalId)
+        .catch((error: unknown): PullRequestPublish => ({
+          status: 'failed',
+          message: mainErrorMessage(error),
+          posted: 0,
+          comments: null
+        }))
+      put({
+        comments: result.status === 'nothing' ? comments : (result.comments ?? comments),
+        publishing: false
+      })
+      publishedNotice(tab.target ?? '', result)
+      return result.status === 'published' && result.unplaced === 0
+    },
+    publishAndClose: async () => {
+      const notes = get().withNotes
+      set({ withNotes: null })
+      if (notes === null || notes.publish === null) return
+      if (await get().publishToGitHub(notes.publish)) for (const id of notes.ids) remove(id)
     },
     settleNotes: (close) => {
       const ids = get().withNotes?.ids ?? []
