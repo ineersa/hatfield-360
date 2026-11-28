@@ -48,6 +48,17 @@ test('Review Branch shows the branch’s commits since its base in hunk, against
         await expect(terminalText(page, 'Branch · app · feature vs origin/main')).toContainText(
           `fake hunk diff origin/main...HEAD in ${repo}`
         )
+        // The fake hunk runs no hunk session: the tab's agent items say why they can't run.
+        await page
+          .getByRole('tab', { name: 'Branch · app · feature vs origin/main' })
+          .click({ button: 'right' })
+        for (const item of ['Copy Hunk Session ID', 'Ask in Chat About This Hunk']) {
+          const entry = page.getByRole('menuitem', { name: new RegExp(`^${item}`) })
+          await expect(entry).toContainText('hunk isn’t running')
+          await expect(entry).toBeDisabled()
+        }
+        await saveScreenshot(page, 'git-review-tab-menu')
+        await page.keyboard.press('Escape')
 
         await repositoryMenu(page)
         await page.getByRole('menuitem', { name: 'Review Branch Against…' }).click()

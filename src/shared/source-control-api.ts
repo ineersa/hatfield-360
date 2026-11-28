@@ -106,6 +106,16 @@ type HunkLaunchRequest = {
 /** A terminal running hunk in the root, or `missing` when no `hunk` is on the user's shell PATH. */
 export type HunkLaunch = { status: 'started'; terminal: TerminalSession } | { status: 'missing' }
 
+/** A hunk tab's live session, and the unanswered `?` questions in the hunk selected in it. */
+export type HunkSessionView =
+  | { session: null }
+  | { session: string; questions: number; reason: string | null }
+
+/** Ask in Chat About This Hunk: the chat's first message, or why there's nothing to ask. */
+export type HunkAsk =
+  | { status: 'ask'; prompt: string; count: number }
+  | { status: 'none'; reason: string }
+
 export const SOURCE_CONTROL_CHANNELS = {
   status: 'source-control:status',
   commit: 'source-control:commit',
@@ -119,6 +129,8 @@ export const SOURCE_CONTROL_CHANNELS = {
   abortOperation: 'source-control:abort-operation',
   launchHunk: 'source-control:launch-hunk',
   hunkNoteCount: 'source-control:hunk-note-count',
+  hunkSession: 'source-control:hunk-session',
+  askAboutHunk: 'source-control:ask-about-hunk',
   cancel: 'source-control:cancel'
 } as const
 
@@ -168,4 +180,8 @@ export type SourceControlApi = {
   launchHunk: (request: HunkLaunchRequest) => Promise<HunkLaunch>
   /** How many review notes the hunk in that terminal holds: hunk keeps them only while it runs. */
   hunkNoteCount: (terminalId: string) => Promise<number>
+  /** The hunk session in that terminal (null before hunk starts or after it quits). */
+  hunkSession: (terminalId: string) => Promise<HunkSessionView>
+  /** The chat message asking about the questions in the hunk selected in that terminal's hunk. */
+  askAboutHunk: (terminalId: string) => Promise<HunkAsk>
 }

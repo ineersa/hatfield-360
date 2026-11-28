@@ -29,6 +29,11 @@ type ChatState = {
   /** Closes the panel, ending its chat. */
   close: () => void
   newChat: () => void
+  /**
+   * Opens the panel with a new chat in `cwd` (null: the workspace's) and sends `text`, written by
+   * the app, once the agent is ready; ends the chat the panel had.
+   */
+  ask: (cwd: string | null, text: string) => void
   /** Sends the prompt; false when it can't go (nothing to expand a reference with, no chat). */
   send: (text: string) => boolean
   stop: () => void
@@ -61,6 +66,9 @@ const report =
 /** Counts chat starts, so only the latest one's chat is kept. */
 let starts = 0
 
+/** The message a chat started by `ask` sends once ready, by chat id. */
+const firstMessages = new Map<string, string>()
+
 export const useChatStore = create<ChatState>((set, get) => ({
   open: false,
   chatId: null,
@@ -74,9 +82,22 @@ export const useChatStore = create<ChatState>((set, get) => ({
       if (event.chatId !== state.chatId) return
       const items = applyChatEvent(state.items, event)
       switch (event.kind) {
-        case 'ready':
+        case 'ready': {
           set({ items, status: 'ready', configOptions: event.configOptions })
+          const first = firstMessages.get(event.chatId)
+          firstMessages.delete(event.chatId)
+          if (first !== undefined) {
+            set((current) => ({
+              items: withUserMessage(current.items, first),
+              status: 'busy',
+              error: null
+            }))
+            window.desktop
+              .sendChatPrompt(event.chatId, first)
+              .catch(refused('Sending the message', event.chatId))
+          }
           return
+        }
         case 'config':
           set({ items, configOptions: event.configOptions })
           return
@@ -100,23 +121,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
     set({ open: false, chatId: null, status: 'none', items: [], configOptions: [], error: null })
     if (chatId !== null) window.desktop.endChat(chatId).catch(() => undefined)
   },
-  newChat: () => {
-    const previous = get().chatId
-    const start = ++starts
-    set({ chatId: null, status: 'starting', items: [], configOptions: [], error: null })
-    if (previous !== null) window.desktop.endChat(previous).catch(() => undefined)
-    window.desktop
-      .startChat(null)
-      .then(({ chatId }) => {
-        // Closed, or a newer chat asked for, while this one started.
-        if (start === starts && get().open) set({ chatId })
-        else window.desktop.endChat(chatId).catch(() => undefined)
-      })
-      .catch((error: unknown) => {
-        if (start !== starts) return
-        set({ status: 'none' })
-        report('Starting the chat')(error)
-      })
+  newChat: () => startChat(null, null),
+  ask: (cwd, text) => {
+    set({ open: true })
+    startChat(cwd, text)
   },
   send: (text) => {
     const { chatId, status } = get()
@@ -174,3 +182,31 @@ export const useChatStore = create<ChatState>((set, get) => ({
     useEditorTabStore.getState().open(path, { line: line ?? 1, start, end: start, focus: true })
   }
 }))
+
+/** Starts a chat in `cwd` for the panel, ending the one it had; `first` is sent once it's ready. */
+function startChat(cwd: string | null, first: string | null): void {
+  const { chatId: previous } = useChatStore.getState()
+  const start = ++starts
+  useChatStore.setState({
+    chatId: null,
+    status: 'starting',
+    items: [],
+    configOptions: [],
+    error: null
+  })
+  if (previous !== null) window.desktop.endChat(previous).catch(() => undefined)
+  window.desktop
+    .startChat(cwd)
+    .then(({ chatId }) => {
+      // Closed, or a newer chat asked for, while this one started.
+      if (start === starts && useChatStore.getState().open) {
+        if (first !== null) firstMessages.set(chatId, first)
+        useChatStore.setState({ chatId })
+      } else window.desktop.endChat(chatId).catch(() => undefined)
+    })
+    .catch((error: unknown) => {
+      if (start !== starts) return
+      useChatStore.setState({ status: 'none' })
+      report('Starting the chat')(error)
+    })
+}
