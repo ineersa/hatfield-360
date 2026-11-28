@@ -13,8 +13,16 @@ const REFRESH_DELAY_MS = 150
 /** A watch on one folder, tied to the folder that existed then: a recreated folder needs a new one. */
 type Watch = { watcher: FSWatcher; ino: number }
 
+/** A workspace project, or a repository found directly inside a multi-repo project. */
 type Project = {
   folder: string
+  /** The multi-repo project this repository was found in; null for a workspace project. */
+  parent: string | null
+  multiRepo: boolean
+  /** The repositories found directly inside a multi-repo project, by name. */
+  children: string[]
+  /** A multi-repo project's subfolders as last listed: a rename of one is a folder added or removed. */
+  subfolders: Set<string>
   state: ProjectWorktrees | null
   /** Watched folders by path: the project, the repository's git dir and its worktree records. */
   watchers: Map<string, Watch>
@@ -78,6 +86,11 @@ async function readProject(
   }
 }
 
+/** A workspace folder git is asked about: a project, or a multi-repo folder whose children are. */
+export type WatchedFolder = { path: string; multiRepo: boolean }
+
+const byName = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' })
+
 /** Names in a watched folder whose change can't alter the worktree list. */
 const isNoise = (name: string | null): boolean =>
   name !== null && (name.endsWith('.lock') || name === 'index' || name === 'FETCH_HEAD')
@@ -88,44 +101,64 @@ export class WorktreeStore {
   private order: string[] = []
   private readonly listeners = new Set<ChangeListener>()
 
-  onChange(listener: ChangeListener): void {
+  onChange(listener: ChangeListener): () => void {
     this.listeners.add(listener)
+    return () => this.listeners.delete(listener)
   }
 
   view(): ProjectWorktrees[] {
     return this.order.flatMap((folder) => {
-      const state = this.projects.get(folder)?.state
-      return state ? [state] : []
+      const project = this.projects.get(folder)
+      if (!project?.state) return []
+      if (!project.multiRepo) return [project.state]
+      const repositories = project.children.flatMap((child) => {
+        const state = this.projects.get(child)?.state
+        return state && state.status !== 'not-git' ? [state] : []
+      })
+      return [{ ...project.state, repositories }]
     })
   }
 
   /** Follows the workspace's folders: new ones are listed and watched, removed ones dropped. */
-  async setFolders(folders: string[]): Promise<void> {
-    this.order = folders
+  async setFolders(folders: WatchedFolder[]): Promise<void> {
+    const paths = folders.map((folder) => folder.path)
+    const projectsChanged = JSON.stringify(paths) !== JSON.stringify(this.order)
+    this.order = paths
+    const marked = new Map(folders.map((folder) => [folder.path, folder.multiRepo]))
+    const refreshed: string[] = []
     for (const [folder, project] of this.projects) {
-      if (folders.includes(folder)) continue
-      this.close(project)
-      this.projects.delete(folder)
+      const multiRepo = marked.get(folder)
+      if (project.parent === null && multiRepo !== undefined) {
+        // A marked folder looks again: a repository in it may have become a project, or stopped being one.
+        if (project.multiRepo !== multiRepo || (multiRepo && projectsChanged))
+          refreshed.push(folder)
+        project.multiRepo = multiRepo
+        continue
+      }
+      // A repository that became a workspace project of its own is listed there from now on.
+      if (project.parent !== null && marked.get(project.parent) === true && !marked.has(folder))
+        continue
+      this.drop(project)
     }
-    const added = folders.filter((folder) => !this.projects.has(folder))
+    const added = this.order.filter((folder) => !this.projects.has(folder))
     for (const folder of added) {
-      this.projects.set(folder, {
-        folder,
-        state: null,
-        watchers: new Map(),
-        gitDir: null,
-        timer: null,
-        generation: 0
-      })
+      this.projects.set(folder, this.track(folder, null, marked.get(folder) === true))
     }
-    await Promise.all(added.map((folder) => this.refresh(folder)))
+    await Promise.all([...added, ...refreshed].map((folder) => this.refresh(folder)))
     this.emit()
   }
 
   async pruneMissing(folder: string, path: string): Promise<void> {
     const project = this.projects.get(folder)
-    if (!project) throw new Error('Project is not in the workspace')
-    const { state } = await readProject(folder)
+    if (!project || project.parent !== null) throw new Error('Project is not in the workspace')
+    // The worktree belongs to the project's own repository or one inside a multi-repo project.
+    const repository = [folder, ...project.children].find((each) => {
+      const state = this.projects.get(each)?.state
+      return state?.status === 'git' && state.worktrees.some((tree) => tree.path === path)
+    })
+    if (repository === undefined)
+      throw new Error('That worktree entry is no longer eligible for removal')
+    const { state } = await readProject(repository)
     const entry = state.status === 'git' && state.worktrees.find((tree) => tree.path === path)
     if (!entry || entry.project || entry.locked || !entry.prunable) {
       throw new Error('That worktree entry is no longer eligible for removal')
@@ -137,20 +170,48 @@ export class WorktreeStore {
     if (!absent || this.projects.get(folder) !== project) {
       throw new Error('That worktree is no longer missing from this workspace project')
     }
-    await runGit(folder, ['worktree', 'remove', '--', entry.path])
+    await runGit(repository, ['worktree', 'remove', '--', entry.path])
+    if (await this.refresh(repository)) this.emit()
+  }
+
+  /** Lists a repository's worktrees again now, as after a branch switch, without waiting for its watch. */
+  async relist(folder: string): Promise<void> {
     if (await this.refresh(folder)) this.emit()
   }
 
-  /** Lists the project's worktrees again now, as after a branch switch, without waiting for its watch. */
-  async relist(folder: string): Promise<void> {
-    if (await this.refresh(folder)) this.emit()
+  private track(folder: string, parent: string | null, multiRepo: boolean): Project {
+    return {
+      folder,
+      parent,
+      multiRepo,
+      children: [],
+      subfolders: new Set(),
+      state: null,
+      watchers: new Map(),
+      gitDir: null,
+      timer: null,
+      generation: 0
+    }
+  }
+
+  /** Stops following a project and the repositories found in it. */
+  private drop(project: Project): void {
+    for (const child of project.children) {
+      const tracked = this.projects.get(child)
+      if (tracked?.parent === project.folder) this.drop(tracked)
+    }
+    this.close(project)
+    this.projects.delete(project.folder)
   }
 
   private async refresh(folder: string): Promise<boolean> {
     const project = this.projects.get(folder)
     if (!project) return false
     const generation = ++project.generation
-    const { state, gitDir } = await readProject(folder)
+    const [{ state, gitDir }, found] = await Promise.all([
+      readProject(folder),
+      project.multiRepo ? this.repositoriesIn(folder) : Promise.resolve([])
+    ])
     const current = (): boolean =>
       this.projects.get(folder) === project && generation === project.generation
     if (!current()) return false
@@ -159,12 +220,54 @@ export class WorktreeStore {
     // Broken: keep watching the git dir so a repair shows, found from `.git` if never read.
     else project.gitDir ??= await gitDirOfEntry(folder)
     const dirs = project.gitDir ? await this.gitDirs(project.gitDir) : []
-    const wanted = await this.existing([project.folder, ...dirs])
+    // A multi-repo folder's other subfolders are watched for a `.git` (`git init`, a clone finishing).
+    const plain = project.multiRepo ? await this.plainSubfolders(folder, found) : []
+    const wanted = await this.existing([project.folder, ...dirs, ...plain])
     if (!current()) return false
     this.watch(project, wanted, new Set(dirs))
-    const changed = JSON.stringify(state) !== JSON.stringify(project.state)
+    const changed =
+      JSON.stringify(state) !== JSON.stringify(project.state) ||
+      JSON.stringify(found) !== JSON.stringify(project.children)
+    // Saved before the new repositories are read, so a refresh started meanwhile still wins.
     project.state = state
+    project.subfolders = new Set([...found, ...plain])
+    const added = this.setChildren(project, found)
+    await Promise.all(added.map((child) => this.refresh(child)))
     return changed
+  }
+
+  /** The repositories directly inside a folder, by name: each subfolder with a `.git` that isn't a workspace project. */
+  private async repositoriesIn(folder: string): Promise<string[]> {
+    const names = await readdir(folder).catch(() => [])
+    const found = await Promise.all(
+      names.map(async (name) => {
+        const path = join(folder, name)
+        return !this.order.includes(path) && (await hasGitEntry(path)) ? path : null
+      })
+    )
+    return found
+      .filter((path) => path !== null)
+      .toSorted((a, b) => byName.compare(basename(a), basename(b)))
+  }
+
+  private async plainSubfolders(folder: string, repositories: string[]): Promise<string[]> {
+    const entries = await readdir(folder, { withFileTypes: true }).catch(() => [])
+    return entries
+      .filter((entry) => entry.isDirectory() && entry.name !== '.git')
+      .map((entry) => join(folder, entry.name))
+      .filter((path) => !repositories.includes(path))
+  }
+
+  /** Follows the repositories now found in a multi-repo project; returns those new to it. */
+  private setChildren(project: Project, found: string[]): string[] {
+    for (const child of project.children) {
+      const tracked = this.projects.get(child)
+      if (!found.includes(child) && tracked?.parent === project.folder) this.drop(tracked)
+    }
+    project.children = found
+    const added = found.filter((child) => !this.projects.has(child))
+    for (const child of added) this.projects.set(child, this.track(child, project.folder, false))
+    return added
   }
 
   /** The git dir (main HEAD, `worktrees` appearing), its `worktrees` folder and each record (linked HEADs). */
@@ -201,11 +304,20 @@ export class WorktreeStore {
     }
     for (const [dir, ino] of wanted) {
       if (project.watchers.has(dir)) continue
-      // The project folder alone only matters for `.git` (`git init`, a deleted `.git`); a bare
-      // repository's folder is also its git dir, where every change counts.
-      const onlyGitEntry = dir === project.folder && !gitDirs.has(dir)
+      // Outside a git dir only `.git` counts, except a subfolder added to or removed from a multi-repo folder.
+      const gitDir = gitDirs.has(dir)
       try {
-        const watcher = watch(dir, (_event, name) => {
+        const watcher = watch(dir, (event, name) => {
+          if (
+            dir === project.folder &&
+            project.multiRepo &&
+            event === 'rename' &&
+            name !== '.git'
+          ) {
+            this.subfolderRenamed(project, name)
+            return
+          }
+          const onlyGitEntry = !gitDir && (dir === project.folder || project.multiRepo)
           if (onlyGitEntry ? name !== null && name !== '.git' : isNoise(name)) return
           this.schedule(project)
         })
@@ -220,6 +332,20 @@ export class WorktreeStore {
         // Gone between listing and watching; the next refresh sees that.
       }
     }
+  }
+
+  /** Lists a multi-repo project again for a subfolder added or removed, not for a file (an atomic save). */
+  private subfolderRenamed(project: Project, name: string | null): void {
+    if (name === null || project.subfolders.has(join(project.folder, name))) {
+      this.schedule(project)
+      return
+    }
+    void stat(join(project.folder, name)).then(
+      (info) => {
+        if (info.isDirectory()) this.schedule(project)
+      },
+      () => undefined
+    )
   }
 
   private schedule(project: Project): void {

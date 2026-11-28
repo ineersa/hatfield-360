@@ -1,4 +1,4 @@
-import { mkdtemp, realpath, rm, symlink, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises'
 import { homedir, tmpdir } from 'node:os'
 import { basename, join } from 'node:path'
 import { describe, expect, it } from 'vitest'
@@ -164,7 +164,8 @@ it('reports each missing catalog directory separately without starting the confi
         name,
         path: join(root, name),
         kind: 'project',
-        missing: false
+        missing: false,
+        multiRepo: false
       })),
       [],
       { executable: 'php', args: ['/unused/hatfield.phar'], env: {} },
@@ -183,8 +184,12 @@ async function withProject(
   run: (project: string, folders: Parameters<typeof listHatfieldCatalog>[0]) => Promise<void>
 ) {
   const project = await realpath(await mkdtemp(join(tmpdir(), 'hatfield-command-')))
+  await mkdir(join(project, '.hatfield'))
+  await writeFile(join(project, '.hatfield', 'state.sqlite'), 'store')
   try {
-    await run(project, [{ name: 'app', path: project, kind: 'project', missing: false }])
+    await run(project, [
+      { name: 'app', path: project, kind: 'project', missing: false, multiRepo: false }
+    ])
   } finally {
     await rm(project, { recursive: true, force: true })
   }
@@ -215,6 +220,32 @@ console.log(JSON.stringify({ version: 1, scope: { cwd }, nextOffset: null, sessi
       expect(result.sessions.map(({ title }) => title)).toEqual([
         `from-profile ${join(homedir(), 'tilde')}`
       ])
+    })
+  })
+
+  it('asks only folders with a Hatfield store, and again only once the store changes', async () => {
+    await withProject(async (project, folders) => {
+      const runs = join(project, 'runs.txt')
+      const script = join(project, 'counting.mjs')
+      await writeFile(
+        script,
+        `import { appendFileSync } from 'node:fs'
+const cwd = process.argv[process.argv.indexOf('--cwd') + 1]
+appendFileSync(${JSON.stringify(runs)}, cwd + '\\n')
+console.log(JSON.stringify({ version: 1, scope: { cwd }, nextOffset: null, sessions: [] }))\n`
+      )
+      const plain = join(project, 'plain')
+      await mkdir(plain)
+      const withPlain = [
+        ...folders,
+        { name: 'plain', path: plain, kind: 'project' as const, missing: false, multiRepo: false }
+      ]
+      const profile = { executable: process.execPath, args: [script], env: {} }
+      expect((await read(withPlain, profile)).errors).toEqual([])
+      expect((await read(withPlain, profile)).errors).toEqual([])
+      await writeFile(join(project, '.hatfield', 'state.sqlite'), 'store with a new session')
+      await read(withPlain, profile)
+      expect((await readFile(runs, 'utf8')).split('\n').filter(Boolean)).toEqual([project, project])
     })
   })
 

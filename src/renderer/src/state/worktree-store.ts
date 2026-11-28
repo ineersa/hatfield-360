@@ -9,6 +9,9 @@ type WorktreeState = {
   /** Project folders whose worktree rows are hidden; kept while the app runs. */
   collapsed: Record<string, boolean>
   toggleCollapsed: (folder: string) => void
+  /** Repositories of multi-repo projects unfolded or folded by hand; unset, one is open while an agent runs in it. */
+  repositoryOpen: Record<string, boolean>
+  setRepositoryOpen: (folder: string, open: boolean) => void
   /** Removes only the selected missing worktree registration. */
   pruneMissing: (project: string, path: string) => Promise<void>
   /** Loads the worktrees and follows git changes main sees; returns the unsubscribe. */
@@ -23,6 +26,9 @@ export const useWorktreeStore = create<WorktreeState>((set) => ({
   collapsed: {},
   toggleCollapsed: (folder) =>
     set((state) => ({ collapsed: { ...state.collapsed, [folder]: !state.collapsed[folder] } })),
+  repositoryOpen: {},
+  setRepositoryOpen: (folder, open) =>
+    set((state) => ({ repositoryOpen: { ...state.repositoryOpen, [folder]: open } })),
   pruneMissing: async (project, path) => {
     try {
       await window.desktop.pruneMissingWorktrees(project, path)

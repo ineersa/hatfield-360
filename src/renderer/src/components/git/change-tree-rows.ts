@@ -23,8 +23,8 @@ export const untrackedFiles = (group: GitGroup): ChangedFile[] => group.files.fi
 export const addableFiles = (group: GitGroup): ChangedFile[] =>
   untrackedFiles(group).filter((file) => !file.nestedRepository)
 
-/** A row of the Commit panel's changes tree. */
-export type ChangeRow =
+/** A row of the Commit panel's changes tree; `indent` is 1 in a linked worktree's group, listed under its repository's. */
+export type ChangeRow = (
   | { type: 'group'; key: string; group: SourceControlGroup; expanded: boolean }
   /** `depth` 2 is under the group's Unversioned Files row. */
   | { type: 'file'; key: string; group: GitGroup; file: ChangedFile; depth: 1 | 2 }
@@ -34,8 +34,15 @@ export type ChangeRow =
   /** Says why a group lists no files: none changed, not git, or git failed. */
   | { type: 'note'; key: string; note: 'clean' | 'not-git' }
   | { type: 'error'; key: string; message: string }
+) & { indent: number }
 
-const fileRows = (group: GitGroup, files: ChangedFile[], depth: 1 | 2): ChangeRow[] =>
+type Unindented = ChangeRow extends infer Row
+  ? Row extends unknown
+    ? Omit<Row, 'indent'>
+    : never
+  : never
+
+const fileRows = (group: GitGroup, files: ChangedFile[], depth: 1 | 2): Unindented[] =>
   files.map((file) => ({ type: 'file', key: fileKey(group.root, file.path), group, file, depth }))
 
 /** Conflicted files first, the rest in git's order: during an operation they are what blocks the commit. */
@@ -47,44 +54,64 @@ const conflictsFirst = (files: ChangedFile[]): ChangedFile[] => [
 /**
  * Each group's row, followed (unless folded) by the notice of an operation in progress, its
  * tracked changes (conflicted first during an operation) and then its Unversioned Files row,
- * folded unless its root is in `unversionedOpen`, or a row saying why it has none.
+ * folded unless its root is in `unversionedOpen`, or a row saying why it has none. A linked
+ * worktree's group comes after its repository's, one level in, and folds away with it.
  */
 export function changeTreeRows(
   groups: readonly SourceControlGroup[],
   collapsed: ReadonlySet<string>,
   unversionedOpen: ReadonlySet<string>
 ): ChangeRow[] {
-  return groups.flatMap((group): ChangeRow[] => {
-    const expanded = !collapsed.has(group.root)
-    const head: ChangeRow = { type: 'group', key: group.root, group, expanded }
-    if (!expanded) return [head]
-    const inner = `${group.root}\0`
-    if (group.status === 'not-git') return [head, { type: 'note', key: inner, note: 'not-git' }]
-    if (group.status === 'error')
-      return [head, { type: 'error', key: inner, message: group.message }]
-    const notice: ChangeRow[] =
-      group.operation === null ? [] : [{ type: 'operation', key: operationKey(group.root), group }]
-    if (group.files.length === 0)
-      return [head, ...notice, { type: 'note', key: inner, note: 'clean' }]
-    const untracked = untrackedFiles(group)
-    const open = unversionedOpen.has(group.root)
-    const unversioned: ChangeRow[] =
-      untracked.length === 0
-        ? []
-        : [
-            {
-              type: 'unversioned',
-              key: unversionedKey(group.root),
-              group,
-              files: untracked,
-              expanded: open
-            },
-            ...(open ? fileRows(group, untracked, 2) : [])
-          ]
-    const tracked =
-      group.operation === null ? trackedFiles(group) : conflictsFirst(trackedFiles(group))
-    return [head, ...notice, ...fileRows(group, tracked, 1), ...unversioned]
-  })
+  const roots = new Set(groups.map((group) => group.root))
+  const nested = (group: SourceControlGroup): boolean =>
+    group.parent !== null && group.parent !== group.root && roots.has(group.parent)
+  return groups
+    .filter((group) => !nested(group))
+    .flatMap((group) => {
+      const own = groupRows(group, collapsed, unversionedOpen).map((row) => ({ ...row, indent: 0 }))
+      if (collapsed.has(group.root)) return own
+      const children = groups
+        .filter((child) => nested(child) && child.parent === group.root)
+        .flatMap((child) =>
+          groupRows(child, collapsed, unversionedOpen).map((row) => ({ ...row, indent: 1 }))
+        )
+      return [...own, ...children]
+    })
+}
+
+function groupRows(
+  group: SourceControlGroup,
+  collapsed: ReadonlySet<string>,
+  unversionedOpen: ReadonlySet<string>
+): Unindented[] {
+  const expanded = !collapsed.has(group.root)
+  const head: Unindented = { type: 'group', key: group.root, group, expanded }
+  if (!expanded) return [head]
+  const inner = `${group.root}\0`
+  if (group.status === 'not-git') return [head, { type: 'note', key: inner, note: 'not-git' }]
+  if (group.status === 'error') return [head, { type: 'error', key: inner, message: group.message }]
+  const notice: Unindented[] =
+    group.operation === null ? [] : [{ type: 'operation', key: operationKey(group.root), group }]
+  if (group.files.length === 0)
+    return [head, ...notice, { type: 'note', key: inner, note: 'clean' }]
+  const untracked = untrackedFiles(group)
+  const open = unversionedOpen.has(group.root)
+  const unversioned: Unindented[] =
+    untracked.length === 0
+      ? []
+      : [
+          {
+            type: 'unversioned',
+            key: unversionedKey(group.root),
+            group,
+            files: untracked,
+            expanded: open
+          },
+          ...(open ? fileRows(group, untracked, 2) : [])
+        ]
+  const tracked =
+    group.operation === null ? trackedFiles(group) : conflictsFirst(trackedFiles(group))
+  return [head, ...notice, ...fileRows(group, tracked, 1), ...unversioned]
 }
 
 export type CheckState = 'checked' | 'unchecked' | 'mixed'

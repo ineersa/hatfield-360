@@ -65,6 +65,8 @@ const desktopApi: DesktopApi = {
   removeWorkspaceFolder: (path) => ipcRenderer.invoke(WORKSPACE_CHANNELS.removeFolder, path),
   setWorkspaceFolderKind: (path, kind) =>
     ipcRenderer.invoke(WORKSPACE_CHANNELS.setFolderKind, path, kind),
+  setWorkspaceFolderMultiRepo: (path, multiRepo) =>
+    ipcRenderer.invoke(WORKSPACE_CHANNELS.setFolderMultiRepo, path, multiRepo),
   openWorkspaceFile: () => ipcRenderer.invoke(WORKSPACE_CHANNELS.openFile),
   openRecent: (target) => ipcRenderer.invoke(WORKSPACE_CHANNELS.openRecent, target),
   removeRecent: (target) => ipcRenderer.invoke(WORKSPACE_CHANNELS.removeRecent, target),

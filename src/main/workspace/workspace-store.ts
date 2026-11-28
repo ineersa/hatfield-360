@@ -138,10 +138,11 @@ class WorkspaceStore {
     const { workspace, state } = await this.ready()
     const terminalGeneration = this.terminalGeneration
     const folders: WorkspaceFolder[] = await Promise.all(
-      workspace.folders.map(async ({ path, kind }) => ({
+      workspace.folders.map(async ({ path, kind, multiRepo }) => ({
         path,
         name: folderName(path),
         kind,
+        multiRepo: multiRepo === true,
         missing: !(await isDirectory(path))
       }))
     )
@@ -219,8 +220,27 @@ class WorkspaceStore {
     return this.change(async ({ workspace }) => {
       if (workspace.problem) throw new Error(workspace.problem)
       if (!workspace.folders.some((folder) => folder.path === path)) return false
+      // A folder hidden from Projects stops being a multi-repo folder too.
       const folders = workspace.folders.map((folder) =>
-        folder.path === path ? { path, kind } : folder
+        folder.path !== path ? folder : kind === 'project' ? { ...folder, kind } : { path, kind }
+      )
+      await writeWorkspaceFile(workspace.file, { ...workspace, folders })
+      workspace.folders = folders
+      return true
+    })
+  }
+
+  /** Marks a folder as holding repositories (making it a project) or unmarks it; false when it isn't in the workspace. */
+  setFolderMultiRepo(path: string, multiRepo: boolean): Promise<boolean> {
+    return this.change(async ({ workspace }) => {
+      if (workspace.problem) throw new Error(workspace.problem)
+      if (!workspace.folders.some((folder) => folder.path === path)) return false
+      const folders = workspace.folders.map((folder): WorkspaceEntry =>
+        folder.path !== path
+          ? folder
+          : multiRepo
+            ? { path, kind: 'project', multiRepo: true }
+            : { path, kind: folder.kind }
       )
       await writeWorkspaceFile(workspace.file, { ...workspace, folders })
       workspace.folders = folders

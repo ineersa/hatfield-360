@@ -16,6 +16,7 @@ import {
   Crosshair,
   Eye,
   EyeOff,
+  FolderGit2,
   FolderInput,
   FolderMinus,
   FilePlus,
@@ -335,6 +336,7 @@ function RootRow({
   ...state
 }: RowState & { row: Row; root: TreeRoot; expanded: boolean }): React.JSX.Element {
   const setFolderKind = useWorkspaceStore((store) => store.setFolderKind)
+  const setFolderMultiRepo = useWorkspaceStore((store) => store.setFolderMultiRepo)
   const removeFolder = useWorkspaceStore((store) => store.removeFolder)
   const afterMenu = useAfterMenu()
   const { folder } = root
@@ -358,7 +360,11 @@ function RootRow({
             className="size-4.5 shrink-0"
           />
         ) : (
-          <RootFolderIcon open={expanded} className="size-4.5 shrink-0" />
+          <RootFolderIcon
+            open={expanded}
+            multiRepo={folder.multiRepo}
+            className="size-4.5 shrink-0"
+          />
         )
       }
       hint={
@@ -390,6 +396,10 @@ function RootRow({
             </>
           )}
           <ContextMenuSeparator />
+          <ContextMenuItem onSelect={() => void setFolderMultiRepo(folder.path, !folder.multiRepo)}>
+            <FolderGit2 aria-hidden />
+            {folder.multiRepo ? 'Unmark as Multi-Repo Folder' : 'Mark as Multi-Repo Folder'}
+          </ContextMenuItem>
           {folder.kind === 'folder' ? (
             <ContextMenuItem onSelect={() => void setFolderKind(folder.path, 'project')}>
               <FolderInput aria-hidden />
@@ -770,7 +780,13 @@ export function FilesPanel(): React.JSX.Element {
         .map((root) => ({
           path: root.path,
           kind: root.folder.kind,
-          worktrees: root.worktrees.map((tree) => tree.path)
+          worktrees: root.worktrees.map((tree) => tree.path),
+          nested: Object.fromEntries(
+            Object.entries(root.nested).map(([folder, trees]) => [
+              folder,
+              trees.map((tree) => tree.path)
+            ])
+          )
         })),
     [roots]
   )

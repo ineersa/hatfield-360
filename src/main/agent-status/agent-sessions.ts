@@ -10,6 +10,7 @@ import type {
   AgentProvider
 } from '../../shared/agent-api'
 import { worktreeStore } from '../git/worktree-store'
+import { linkedWorktrees } from '../../shared/project-repositories'
 import { workspaceStore } from '../workspace/workspace-store'
 import { UnsupportedAgentShell } from '../terminal/agent-shell-command'
 import { terminalSessions } from '../terminal/terminal-sessions'
@@ -101,9 +102,9 @@ async function placementRoots() {
     ({ path }) => ({ path, project: path, worktree: null })
   )
   for (const entry of worktreeStore.view()) {
-    if (entry.status !== 'git' || !projects.has(entry.folder)) continue
-    for (const tree of entry.worktrees) {
-      if (!tree.prunable && !tree.project)
+    if (!projects.has(entry.folder)) continue
+    for (const tree of linkedWorktrees(entry)) {
+      if (!tree.prunable)
         candidates.push({ path: tree.path, project: entry.folder, worktree: tree.path })
     }
   }

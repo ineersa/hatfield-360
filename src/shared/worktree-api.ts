@@ -14,11 +14,15 @@ export type Worktree = {
   prunable: boolean
 }
 
-/** What git says about a workspace project folder. */
-export type ProjectWorktrees =
+/** A git repository and its working trees, or why git can't list them. */
+export type RepositoryWorktrees =
   | { folder: string; status: 'git'; worktrees: Worktree[] }
-  | { folder: string; status: 'not-git' }
   | { folder: string; status: 'error'; message: string }
+
+/** What git says about a workspace project folder; a multi-repo folder also lists the repositories inside it. */
+export type ProjectWorktrees = (RepositoryWorktrees | { folder: string; status: 'not-git' }) & {
+  repositories?: RepositoryWorktrees[]
+}
 
 export const WORKTREE_CHANNELS = {
   get: 'worktrees:get',

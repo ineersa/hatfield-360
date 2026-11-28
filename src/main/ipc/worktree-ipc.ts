@@ -1,15 +1,15 @@
 import { BrowserWindow } from 'electron'
 import type { WorkspaceFolder } from '../../shared/workspace-api'
 import { WORKTREE_CHANNELS } from '../../shared/worktree-api'
-import { worktreeStore } from '../git/worktree-store'
+import { type WatchedFolder, worktreeStore } from '../git/worktree-store'
 import { workspaceStore } from '../workspace/workspace-store'
 import { handleTrusted } from './trusted-ipc'
 
 /** Projects git can look into: missing ones stay listed in the workspace but have nothing to show. */
-const presentFolders = (folders: WorkspaceFolder[]): string[] =>
+const presentFolders = (folders: WorkspaceFolder[]): WatchedFolder[] =>
   folders
     .filter((folder) => folder.kind === 'project' && !folder.missing)
-    .map((folder) => folder.path)
+    .map(({ path, multiRepo }) => ({ path, multiRepo }))
 
 let loaded: Promise<void> = Promise.resolve()
 
@@ -35,7 +35,10 @@ export function registerWorktreeIpc(): void {
     }
     await loaded
     const workspace = await workspaceStore.view()
-    if (workspace.problem || !presentFolders(workspace.folders).includes(project)) {
+    if (
+      workspace.problem ||
+      !presentFolders(workspace.folders).some((folder) => folder.path === project)
+    ) {
       throw new Error('Project is not in the writable workspace')
     }
     await worktreeStore.pruneMissing(project, path)

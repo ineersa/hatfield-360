@@ -71,7 +71,7 @@ function RecentRow({
                   {name}
                 </span>
                 {session.branch && session.branch !== projectBranch ? (
-                  <span className="type-hint flex max-w-24 shrink-0 items-center gap-1">
+                  <span className="type-hint flex min-w-0 items-center gap-1">
                     <GitBranch className="size-3 shrink-0" aria-hidden />
                     <span className="truncate">{session.branch}</span>
                   </span>

@@ -26,6 +26,8 @@ export function startAcpAgent(
 ): AcpAgentProcess {
   const child = spawn(command.file, command.args, {
     cwd,
+    // Its own session: an interactive shell would take over the terminal `pnpm dev` runs in and stop main.
+    detached: true,
     env: command.env,
     stdio: ['pipe', 'pipe', 'pipe']
   })

@@ -37,6 +37,24 @@ describe('parseWorkspaceDocument', () => {
     })
   })
 
+  it('keeps the multi-repo mark only on projects, and only when it is true', () => {
+    expect(
+      parseWorkspaceDocument(
+        '{"version":1,"folders":[{"path":"/a","kind":"project","multiRepo":true},{"path":"/b","kind":"folder","multiRepo":true},{"path":"/c","multiRepo":"yes"}]}'
+      )
+    ).toEqual({
+      status: 'ok',
+      document: {
+        version: 1,
+        folders: [
+          { path: '/a', kind: 'project', multiRepo: true },
+          { path: '/b', kind: 'folder' },
+          { path: '/c', kind: 'project' }
+        ]
+      }
+    })
+  })
+
   it('drops repeated folders, keeping the first', () => {
     const parsed = parseWorkspaceDocument(
       '{"version":1,"folders":[{"path":"/a","kind":"folder"},{"path":"/b"},{"path":"/a"}]}'

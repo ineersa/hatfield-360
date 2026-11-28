@@ -3,7 +3,7 @@ import {
   type LanguageServerConnectResult
 } from '../../shared/language-server-api'
 import { app } from 'electron'
-import { join } from 'node:path'
+import { join, relative } from 'node:path'
 import { fileRoots } from '../files/file-roots'
 import { realpath } from 'node:fs/promises'
 import { isPathInside, resolveInsideRoots } from '../files/path-containment'
@@ -12,7 +12,9 @@ import {
   libraryRoots,
   serverForLanguage
 } from '../language-servers/language-server-registry'
+import { multiRepoServerRoot } from '../language-servers/language-server-root'
 import { languageServerSessions } from '../language-servers/language-server-sessions'
+import { worktreeStore } from '../git/worktree-store'
 import { handleTrusted } from './trusted-ipc'
 
 const LANGUAGE_ID = /^[a-z0-9][a-z0-9._-]{0,63}$/i
@@ -22,6 +24,30 @@ const realFolders = (folders: string[]) =>
   Promise.all(
     folders.map(async (folder) => ({ folder, real: await realpath(folder).catch(() => folder) }))
   )
+
+/**
+ * One server per workspace folder, as in VS Code: it finds the projects inside it itself. A
+ * multi-repo folder gets one per repository instead, so opening a file indexes only its repository.
+ */
+async function serverRoot(
+  folder: string,
+  realFolder: string,
+  file: string
+): Promise<string | null> {
+  const project = worktreeStore.view().find((each) => each.folder === folder)
+  if (project?.repositories === undefined) return folder
+  const trees = project.repositories.flatMap((repository) =>
+    repository.status === 'git'
+      ? repository.worktrees.filter((tree) => !tree.prunable).map((tree) => tree.path)
+      : [repository.folder]
+  )
+  const real = await Promise.all(trees.map((tree) => realpath(tree).catch(() => tree)))
+  const root = multiRepoServerRoot(file, realFolder, real)
+  // Named through the workspace folder, so the server stops with it as the others do.
+  return root !== null && isPathInside(root, realFolder)
+    ? join(folder, relative(realFolder, root))
+    : root
+}
 
 const rootPaths = async (): Promise<string[]> =>
   (await fileRoots.current()).map((root) => root.path)
@@ -60,11 +86,11 @@ export function registerLanguageServerIpc(): void {
         return connection === null ? { kind: 'none' } : { kind: 'connected', connection }
       }
       const { folder } = inside
+      const root = await serverRoot(folder, inside.real, real)
+      if (root === null) return { kind: 'none' }
       const command = await definition.command()
       if ('missing' in command)
         return { kind: 'missing', server: definition.name, message: command.missing }
-      // One server per workspace folder, as in VS Code: it finds the projects inside it itself.
-      const root = folder
       const configuration =
         (await definition.configure?.(root, join(app.getPath('userData'), 'language-servers'))) ??
         {}

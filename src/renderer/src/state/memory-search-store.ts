@@ -4,6 +4,7 @@ import { terminalTabControllers } from '@/components/terminal/terminal-tab-contr
 import { useTerminalStore } from './terminal-store'
 import { useWorkspaceStore } from './workspace-store'
 import { useWorktreeStore } from './worktree-store'
+import { projectRepositories } from '../../../shared/project-repositories'
 
 type MemorySearchState = {
   /** The project being searched while the popup is open; null when it is closed. */
@@ -33,11 +34,13 @@ function activeProject(): string | null {
     cwd === null
       ? undefined
       : projects.find((folder) => {
-          const linked = worktrees[folder.path]
           return (
             isInsideFolder(cwd, folder.path) ||
-            (linked?.status === 'git' &&
-              linked.worktrees.some((tree) => isInsideFolder(cwd, tree.path)))
+            projectRepositories(worktrees[folder.path]).some(
+              (repository) =>
+                repository.status === 'git' &&
+                repository.worktrees.some((tree) => isInsideFolder(cwd, tree.path))
+            )
           )
         })
   return owner?.path ?? projects[0]?.path ?? null

@@ -1,5 +1,6 @@
 import { join } from 'node:path'
-import { runGit } from './git-command'
+import { mapWithConcurrency } from '../../shared/limited-concurrency'
+import { GitError, runGit } from './git-command'
 
 /** Names in `folder` that git ignores; none when git can't say (not a repository, a submodule's files). */
 export async function ignoredNames(folder: string, names: string[]): Promise<Set<string>> {
@@ -15,27 +16,38 @@ export async function ignoredNames(folder: string, names: string[]): Promise<Set
   }
 }
 
+/** A multi-repo folder may hold dozens of working trees; each listing walks its untracked files. */
+const IGNORE_CONCURRENCY = 8
+
 /**
  * What git ignores under `folder`, each wholly ignored folder named once instead of its contents;
  * nothing when git can't say.
  */
-export async function ignoredPaths(folder: string): Promise<string[]> {
+export async function ignoredPaths(folder: string, workingTrees: string[] = []): Promise<string[]> {
   try {
-    const output = await runGit(folder, [
-      'ls-files',
-      '--others',
-      '--ignored',
-      '--exclude-standard',
-      '--directory',
-      '-z'
-    ])
-    return output
-      .split('\0')
-      .filter((path) => path !== '')
-      .map((path) => join(folder, path.replace(/\/$/, '')))
-  } catch {
-    return []
+    return await repositoryIgnoredPaths(folder)
+  } catch (error) {
+    if (!(error instanceof GitError) || error.reason !== 'not-git') return []
+    const inside = await mapWithConcurrency(workingTrees, IGNORE_CONCURRENCY, (path) =>
+      repositoryIgnoredPaths(path).catch((): string[] => [])
+    )
+    return inside.flat()
   }
+}
+
+async function repositoryIgnoredPaths(folder: string): Promise<string[]> {
+  const output = await runGit(folder, [
+    'ls-files',
+    '--others',
+    '--ignored',
+    '--exclude-standard',
+    '--directory',
+    '-z'
+  ])
+  return output
+    .split('\0')
+    .filter((path) => path !== '')
+    .map((path) => join(folder, path.replace(/\/$/, '')))
 }
 
 /**
