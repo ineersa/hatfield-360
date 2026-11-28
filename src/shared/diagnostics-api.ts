@@ -1,3 +1,8 @@
+/** Frames and stalls shorter than this aren't worth a line: nobody notices them. */
+export const SLOW_MS = 200
+/** The most scripts one slow frame line names, longest first. */
+export const MAX_SCRIPTS = 10
+
 export const DIAGNOSTICS_CHANNELS = {
   reportSlowTask: 'diagnostics:report-slow-task'
 } as const
@@ -11,7 +16,7 @@ export type SlowTaskScript = {
   duration: number
 }
 
-/** A page frame that took 200 ms or more, with what the user last did before it. */
+/** A page frame that took SLOW_MS or more, with what the user last did before it. */
 type SlowTaskReport = {
   duration: number
   /** The active view, or `settings`. */

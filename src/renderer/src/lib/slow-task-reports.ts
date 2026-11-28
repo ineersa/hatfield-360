@@ -1,10 +1,14 @@
 import { useShellLayoutStore } from '@/state/shell-layout-store'
-import type { SlowTaskScript } from '../../../shared/diagnostics-api'
-import { clickActionLabel, keyActionLabel } from './user-action-label'
+import { MAX_SCRIPTS, SLOW_MS, type SlowTaskScript } from '../../../shared/diagnostics-api'
+import {
+  actionBefore,
+  type UserAction,
+  clickActionLabel,
+  keyActionLabel
+} from './user-action-label'
 
-/** Frames shorter than this aren't worth a line: nobody notices them. */
-const SLOW_MS = 200
-const MAX_SCRIPTS = 10
+/** Recent actions kept, so a frame reported late is matched to the action before it, not a newer one. */
+const ACTIONS_KEPT = 16
 
 /** A property the DOM types don't know yet (Long Animation Frames); browser getters, so not own keys. */
 function field(entry: object, name: string): unknown {
@@ -41,14 +45,17 @@ function blamedScripts(entry: PerformanceEntry): SlowTaskScript[] {
  */
 export function startSlowTaskReports(): () => void {
   if (!PerformanceObserver.supportedEntryTypes.includes('long-animation-frame')) return () => {}
-  let action: { label: string; at: number } | null = null
+  const actions: UserAction[] = []
+  const remember = (label: string): void => {
+    actions.push({ label, at: performance.now() })
+    if (actions.length > ACTIONS_KEPT) actions.shift()
+  }
   const onPointer = (event: PointerEvent): void => {
-    if (event.target instanceof Element)
-      action = { label: clickActionLabel(event.target), at: performance.now() }
+    if (event.target instanceof Element) remember(clickActionLabel(event.target))
   }
   const onKey = (event: KeyboardEvent): void => {
     const label = keyActionLabel(event)
-    if (label !== null) action = { label, at: performance.now() }
+    if (label !== null) remember(label)
   }
   window.addEventListener('pointerdown', onPointer, { capture: true, passive: true })
   window.addEventListener('keydown', onKey, { capture: true, passive: true })
@@ -60,10 +67,7 @@ export function startSlowTaskReports(): () => void {
         .reportSlowTask({
           duration: entry.duration,
           view: layout.settingsOpen ? 'settings' : layout.activeView,
-          action:
-            action === null
-              ? null
-              : { label: action.label, before: Math.max(0, entry.startTime - action.at) },
+          action: actionBefore(actions, entry.startTime),
           scripts: blamedScripts(entry)
         })
         .catch((error: unknown) => console.warn('Reporting a slow frame failed:', error))

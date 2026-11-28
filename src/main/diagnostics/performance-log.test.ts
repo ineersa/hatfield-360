@@ -3,8 +3,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { openLogFile } from '../logs/log-file'
-import { watchMainStalls } from './main-stalls'
-import { PerformanceLog, slowTaskLine, stallLine } from './performance-log'
+import { stallBetween } from './main-stalls'
+import { PerformanceLog, slowHandlerLine, slowTaskLine, stallLine } from './performance-log'
 
 const now = new Date('2026-11-28T10:00:00.000Z')
 
@@ -32,14 +32,15 @@ describe('slowTaskLine', () => {
     const line = slowTaskLine(
       {
         duration: 300,
-        view: 'files\nforged line',
+        view: 'files\nforged\u2028line\u009b2J',
         action: null,
         scripts: [{ invoker: 'x'.repeat(1000), source: 's', duration: 1 }, 'junk', { invoker: 1 }]
       },
       now
     )
     expect(line).not.toContain('\n')
-    expect(line).toContain('view files forged line · no action yet · scripts: xxx')
+    expect(line).toContain('view files forged line 2J · no action yet · scripts: xxx')
+    expect(line).not.toMatch(/[\u2028\u009b]/u)
     expect(line?.length).toBeLessThan(500)
     for (const malformed of [
       null,
@@ -52,13 +53,23 @@ describe('slowTaskLine', () => {
   })
 })
 
-it('names the IPC requests a main stall interrupted', () => {
+it('names the requests a main stall left pending, and a handler that blocked main itself', () => {
   expect(stallLine(812.3, [{ channel: 'agent:recent', age: 900.2 }], now)).toBe(
-    '2026-11-28T10:00:00.000Z main stall 812 ms · handling agent:recent (started 900 ms before)'
+    '2026-11-28T10:00:00.000Z main stall 812 ms · pending agent:recent (started 900 ms before)'
   )
   expect(stallLine(250, [], now)).toBe(
-    '2026-11-28T10:00:00.000Z main stall 250 ms · no IPC request in flight'
+    '2026-11-28T10:00:00.000Z main stall 250 ms · no IPC request pending'
   )
+  expect(slowHandlerLine('file-tree:list', 640.7, now)).toBe(
+    '2026-11-28T10:00:00.000Z main handler file-tree:list ran 641 ms without yielding'
+  )
+})
+
+it('counts a tick late by 200 ms or more past its 100 ms interval as a stall', () => {
+  expect(stallBetween(1000, 1100)).toBeNull()
+  expect(stallBetween(1000, 1299)).toBeNull()
+  expect(stallBetween(1000, 1300)).toBe(200)
+  expect(stallBetween(1000, 2000)).toBe(900)
 })
 
 it('writes at most 500 lines a run, then says the rest were dropped', async () => {
@@ -75,17 +86,4 @@ it('writes at most 500 lines a run, then says the rest were dropped', async () =
   } finally {
     await rm(folder, { recursive: true, force: true })
   }
-})
-
-it('reports a block of main’s event loop with how long it lasted', async () => {
-  const stalls: Array<(duration: number) => void> = []
-  const stop = watchMainStalls((duration) => stalls.shift()?.(duration))
-  const stall = new Promise<number>((resolve) => stalls.push(resolve))
-  // Blocks the event loop for 400 ms however busy the machine is.
-  const until = performance.now() + 400
-  while (performance.now() < until) {
-    // Busy on purpose.
-  }
-  expect(await stall).toBeGreaterThanOrEqual(300)
-  stop()
 })

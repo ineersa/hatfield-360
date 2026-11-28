@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest'
-import { type KeyAction, keyActionLabel } from './user-action-label'
+import { actionBefore, type KeyAction, keyActionLabel } from './user-action-label'
 
 const press = (key: string, code: string, modifiers: Partial<KeyAction> = {}): KeyAction => ({
   key,
@@ -25,4 +25,14 @@ it('names shortcuts by physical key and named keys by name, and skips a lone mod
   expect(keyActionLabel(press('Enter', 'Enter'))).toBe('key Enter')
   expect(keyActionLabel(press('Tab', 'Tab', { shiftKey: true }))).toBe('key Shift+Tab')
   expect(keyActionLabel(press('Shift', 'ShiftLeft', { shiftKey: true }))).toBeNull()
+})
+
+it('matches a frame to the last action before it, never to one that came after', () => {
+  const actions = [
+    { label: 'click "Files"', at: 100 },
+    { label: 'key Ctrl+W', at: 400 },
+    { label: 'click "Close"', at: 900 }
+  ]
+  expect(actionBefore(actions, 650)).toEqual({ label: 'key Ctrl+W', before: 250 })
+  expect(actionBefore(actions, 50)).toBeNull()
 })

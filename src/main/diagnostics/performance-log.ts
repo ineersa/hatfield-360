@@ -1,20 +1,17 @@
+import { MAX_SCRIPTS } from '../../shared/diagnostics-api'
 import { isPlainObject } from '../../shared/plain-object'
 import type { LogFile } from '../logs/log-file'
 
-/** Frames and stalls shorter than this aren't worth a line: nobody notices them. */
-export const SLOW_MS = 200
 /** One app run writes at most this many lines, so a page stuck in slow frames can't fill the disk. */
 const MAX_LINES = 500
-const MAX_SCRIPTS = 10
 const MAX_TEXT = 300
 
-/** One line of plain text from untrusted input: no control characters, capped. */
+/** One line of plain text from untrusted input: no control characters or line separators, capped. */
 function plain(value: string): string {
-  const text = Array.from(value)
-    .map((character) => (character < ' ' || character === '\x7f' ? ' ' : character))
-    .join('')
-    .trim()
-  return text.length > MAX_TEXT ? `${text.slice(0, MAX_TEXT - 1)}…` : text
+  const characters = Array.from(value.replace(/[\p{Cc}\p{Zl}\p{Zp}]/gu, ' ').trim())
+  return characters.length > MAX_TEXT
+    ? `${characters.slice(0, MAX_TEXT - 1).join('')}…`
+    : characters.join('')
 }
 
 const milliseconds = (value: unknown): number | null =>
@@ -53,17 +50,25 @@ export function slowTaskLine(raw: unknown, now: Date): string | null {
   return `${now.toISOString()} renderer frame ${duration} ms · view ${plain(raw.view)} · ${action}${scriptsText(raw.scripts)}`
 }
 
-/** The log line for a main-process stall, naming the IPC requests it was handling. */
+/**
+ * The log line for a main-process stall. The stall is seen only after it ended, so the requests
+ * still pending were waiting, not running: a slow handler gets its own line from `slowHandlerLine`.
+ */
 export function stallLine(
   duration: number,
-  inFlight: { channel: string; age: number }[],
+  pending: { channel: string; age: number }[],
   now: Date
 ): string {
-  const handling =
-    inFlight.length > 0
-      ? `handling ${inFlight.map(({ channel, age }) => `${channel} (started ${Math.round(age)} ms before)`).join(', ')}`
-      : 'no IPC request in flight'
-  return `${now.toISOString()} main stall ${Math.round(duration)} ms · ${handling}`
+  const waiting =
+    pending.length > 0
+      ? `pending ${pending.map(({ channel, age }) => `${channel} (started ${Math.round(age)} ms before)`).join(', ')}`
+      : 'no IPC request pending'
+  return `${now.toISOString()} main stall ${Math.round(duration)} ms · ${waiting}`
+}
+
+/** The log line for an IPC handler that kept main busy itself before returning. */
+export function slowHandlerLine(channel: string, duration: number, now: Date): string {
+  return `${now.toISOString()} main handler ${channel} ran ${Math.round(duration)} ms without yielding`
 }
 
 /** The performance log: capped lines, each also printed to stderr, where `pnpm dev` shows it. */
