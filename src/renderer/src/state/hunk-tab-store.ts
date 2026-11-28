@@ -27,6 +27,8 @@ type HunkTabState = {
   activeTabId: string | null
   /** The last launch found no hunk: the Git view shows how to install it. */
   missing: boolean
+  /** Tabs whose notes couldn't be saved, waiting on the user to close them anyway. */
+  unsaved: { ids: string[]; message: string } | null
   /**
    * Shows the root's tab of that kind and target, opening one (shown once hunk runs) when there is
    * none. `target.label` ends the tab's title.
@@ -43,8 +45,17 @@ type HunkTabState = {
   hunkMissing: (id: string) => void
   /** hunk couldn't be started: the tab goes and the reason is a notification. */
   startFailed: (id: string, error: unknown) => void
-  /** Removes the tab; its hunk ends as the tab unmounts. */
+  /** Removes the tab; its hunk ends as the tab unmounts, saving its notes for the next run. */
   closeTab: (id: string) => void
+  /** The terminal a tab's hunk runs in, once started. */
+  attachTerminal: (id: string, terminalId: string) => void
+  /**
+   * The user closes tabs: their notes are saved first, and the tabs close unless that failed, which
+   * `unsaved` then asks about.
+   */
+  requestClose: (ids: readonly string[]) => Promise<void>
+  /** Closes the tabs whose notes couldn't be saved (or keeps them, with `close: false`). */
+  settleUnsaved: (close: boolean) => void
   /**
    * Starts the root's Log tab's hunk afresh, in place: `hunk log` reads the history once, so a
    * commit, pull, switch or other ref change would otherwise not show. Review watches on its own.
@@ -72,11 +83,15 @@ export function tabFor(
   return tabs.find((tab) => tab.kind === kind && tab.root === root && tab.key === key)
 }
 
+/** By tab id: the terminal its hunk runs in. Not state: nothing is drawn from it. */
+const terminals = new Map<string, string>()
+
 const without = (set: ReadonlySet<string>, id: string): ReadonlySet<string> =>
   new Set([...set].filter((each) => each !== id))
 
 export const useHunkTabStore = create<HunkTabState>((set, get) => {
-  const remove = (id: string): void =>
+  const remove = (id: string): void => {
+    terminals.delete(id)
     set((state) => {
       const index = state.tabs.findIndex((tab) => tab.id === id)
       if (index === -1) return state
@@ -91,6 +106,7 @@ export const useHunkTabStore = create<HunkTabState>((set, get) => {
         activeTabId: state.activeTabId === id ? (neighbour?.id ?? null) : state.activeTabId
       }
     })
+  }
   const removeIfOpen = (id: string): boolean => {
     if (!get().tabs.some((tab) => tab.id === id)) return false
     remove(id)
@@ -101,6 +117,7 @@ export const useHunkTabStore = create<HunkTabState>((set, get) => {
     pending: new Set(),
     activeTabId: null,
     missing: false,
+    unsaved: null,
     open: (kind, root, name, target) => {
       const { tabs, pending } = get()
       const key = target?.key ?? target?.id ?? null
@@ -135,6 +152,34 @@ export const useHunkTabStore = create<HunkTabState>((set, get) => {
         notify({ severity: 'error', title: "Couldn't start hunk", body: mainErrorMessage(error) })
     },
     closeTab: remove,
+    attachTerminal: (id, terminalId) => terminals.set(id, terminalId),
+    requestClose: async (ids) => {
+      const failed: string[] = []
+      let message = ''
+      await Promise.all(
+        ids.map(async (id) => {
+          const terminalId = terminals.get(id)
+          if (terminalId === undefined) return
+          try {
+            const saved = await window.desktop.saveHunkNotes(terminalId)
+            if (saved.status === 'failed') {
+              failed.push(id)
+              message = saved.message
+            }
+          } catch (error) {
+            failed.push(id)
+            message = mainErrorMessage(error)
+          }
+        })
+      )
+      for (const id of ids) if (!failed.includes(id)) remove(id)
+      if (failed.length > 0) set({ unsaved: { ids: failed, message } })
+    },
+    settleUnsaved: (close) => {
+      const ids = get().unsaved?.ids ?? []
+      set({ unsaved: null })
+      if (close) for (const id of ids) remove(id)
+    },
     reloadLog: (root) =>
       set((state) => {
         const tab = tabFor(state.tabs, 'log', root)

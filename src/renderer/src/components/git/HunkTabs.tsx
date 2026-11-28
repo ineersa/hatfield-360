@@ -8,6 +8,15 @@ import {
 } from 'lucide-react'
 import { useEffect, useRef } from 'react'
 import { ScrollingTabList } from '@/components/shell/ScrollingTabList'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogTitle
+} from '@/components/ui/alert-dialog'
 import { StripTab } from '@/components/shell/StripTab'
 import { startPaneProgram } from '@/components/terminal/pane-shell'
 import {
@@ -76,6 +85,7 @@ function HunkTabBody({
                 tabs.hunkMissing(tab.id)
                 return null
               }
+              tabs.attachTerminal(tab.id, launch.terminal.id)
               return { session: launch.terminal, size }
             },
             name: 'hunk',
@@ -136,7 +146,9 @@ export function HunkTabs({
   const pending = useHunkTabStore((state) => state.pending)
   const activeTabId = useHunkTabStore((state) => state.activeTabId)
   const activateTab = useHunkTabStore((state) => state.activateTab)
-  const closeTab = useHunkTabStore((state) => state.closeTab)
+  const requestClose = useHunkTabStore((state) => state.requestClose)
+  const unsaved = useHunkTabStore((state) => state.unsaved)
+  const settleUnsaved = useHunkTabStore((state) => state.settleUnsaved)
   const shownIds = tabs.filter((tab) => !pending.has(tab.id)).map((tab) => tab.id)
 
   return (
@@ -158,14 +170,14 @@ export function HunkTabs({
                 <StripTab
                   key={tab.id}
                   id={tab.id}
-                  menu={{ tabs: shownIds, close: (ids) => ids.forEach((id) => closeTab(id)) }}
+                  menu={{ tabs: shownIds, close: (ids) => void requestClose(ids) }}
                   title={tab.title}
                   label={tab.title}
                   active={tab.id === activeTabId}
                   icon={<Icon className="size-4 shrink-0" aria-hidden />}
                   tip={tab.root}
                   onActivate={() => activateTab(tab.id)}
-                  onClose={() => closeTab(tab.id)}
+                  onClose={() => void requestClose([tab.id])}
                 />
               )
             })}
@@ -182,6 +194,23 @@ export function HunkTabs({
           />
         ))}
       </div>
+      <AlertDialog
+        open={unsaved !== null}
+        onOpenChange={(open) => {
+          if (!open) settleUnsaved(false)
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogTitle>Close without saving the notes?</AlertDialogTitle>
+          <AlertDialogDescription className="break-words">
+            {`The review notes in hunk couldn't be saved: ${unsaved?.message ?? ''} Closing ends hunk, and they're lost.`}
+          </AlertDialogDescription>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Keep Open</AlertDialogCancel>
+            <AlertDialogAction onClick={() => settleUnsaved(true)}>Close Anyway</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

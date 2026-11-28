@@ -106,6 +106,11 @@ type HunkLaunchRequest = {
 /** A terminal running hunk in the root, or `missing` when no `hunk` is on the user's shell PATH. */
 export type HunkLaunch = { status: 'started'; terminal: TerminalSession } | { status: 'missing' }
 
+/** A hunk tab's notes written for its next run: how many (null: hunk had quit, the last save stands), or why not. */
+export type HunkNotesSave =
+  | { status: 'saved'; count: number | null }
+  | { status: 'failed'; message: string }
+
 export const SOURCE_CONTROL_CHANNELS = {
   status: 'source-control:status',
   commit: 'source-control:commit',
@@ -118,6 +123,7 @@ export const SOURCE_CONTROL_CHANNELS = {
   ignoreUntracked: 'source-control:ignore-untracked',
   abortOperation: 'source-control:abort-operation',
   launchHunk: 'source-control:launch-hunk',
+  saveHunkNotes: 'source-control:save-hunk-notes',
   cancel: 'source-control:cancel'
 } as const
 
@@ -165,4 +171,6 @@ export type SourceControlApi = {
    * driven by the terminal API.
    */
   launchHunk: (request: HunkLaunchRequest) => Promise<HunkLaunch>
+  /** Saves the notes of the hunk running in that terminal, as closing its tab is about to end it. */
+  saveHunkNotes: (terminalId: string) => Promise<HunkNotesSave>
 }
