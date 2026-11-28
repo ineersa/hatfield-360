@@ -13,6 +13,7 @@ import { SHELL_LAYOUT_CHANNELS } from '../shared/shell-layout-api'
 import { BRANCH_CHANNELS } from '../shared/branch-api'
 import { STASH_CHANNELS } from '../shared/stash-api'
 import { COMMIT_MESSAGE_CHANNELS } from '../shared/commit-message-api'
+import { DIAGNOSTICS_CHANNELS } from '../shared/diagnostics-api'
 import { SOURCE_CONTROL_CHANNELS } from '../shared/source-control-api'
 import { MEMORY_SEARCH_CHANNELS } from '../shared/memory-search-api'
 import { LANGUAGE_SERVER_CHANNELS, type LanguageServerStatus } from '../shared/language-server-api'
@@ -22,6 +23,7 @@ import { WEB_LINK_CHANNELS } from '../shared/web-link-api'
 import { type ProjectWorktrees, WORKTREE_CHANNELS } from '../shared/worktree-api'
 
 const desktopApi: DesktopApi = {
+  reportSlowTask: (report) => ipcRenderer.invoke(DIAGNOSTICS_CHANNELS.reportSlowTask, report),
   startChat: (cwd) => ipcRenderer.invoke(CHAT_AGENT_CHANNELS.start, cwd),
   sendChatPrompt: (chatId, text) => ipcRenderer.invoke(CHAT_AGENT_CHANNELS.prompt, chatId, text),
   answerChatPermission: (chatId, requestId, optionId) =>
