@@ -3,8 +3,6 @@ import type { WorkspaceView } from '../../../shared/workspace-api'
 import { mainErrorMessage } from '@/lib/main-error-message'
 import { notify } from './notification-store'
 import { useTerminalStore } from './terminal-store'
-import { useAgentSessionStore } from './agent-session-store'
-import { pinnedTabIds, stripOrder } from './pinned-sessions'
 
 let generation: number | undefined
 const tabs = new Map<string, SavedTerminalTab>()
@@ -47,16 +45,19 @@ function checkpointTerminals(): void {
     const state = useTerminalStore.getState()
     const open = new Set(state.tabs.map((tab) => tab.id))
     for (const id of tabs.keys()) if (!open.has(id)) tabs.delete(id)
-    // Saved in the strip's order, so pinned tabs lead before their sessions report again.
-    const order = stripOrder(
-      state.tabs,
-      pinnedTabIds(state.tabTerminals, useAgentSessionStore.getState().sessions, state.pinned)
-    )
+    // Saved in the order tabs were opened; the strip puts pinned ones first when it draws them.
+    const sent = state.pinned
     void window.desktop
       .checkpointTerminals(owner, {
-        tabs: order.flatMap(({ id }) => tabs.get(id) ?? []),
+        tabs: state.tabs.flatMap(({ id }) => tabs.get(id) ?? []),
         activeTabId: state.activeTabId,
-        ...(state.pinned.length ? { pinned: state.pinned } : {})
+        ...(sent.length ? { pinned: sent } : {})
+      })
+      .then((kept) => {
+        // Main drops a pin once no saved pane holds its conversation, e.g. after the agent exited.
+        if (kept === null || owner !== generation) return
+        const { setPinned } = useTerminalStore.getState()
+        for (const key of sent) if (!kept.includes(key)) setPinned(key, false)
       })
       .catch((error: unknown) =>
         notify({

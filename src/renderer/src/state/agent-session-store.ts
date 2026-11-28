@@ -24,12 +24,13 @@ function receive(next: AgentSnapshot): void {
   })
 }
 
-/** Follows main's agent sessions for the window's lifetime; every view reads the same snapshot. */
-export function connectAgentSessions(): void {
-  window.desktop.subscribeAgentSessions(receive)
+/** Follows main's agent sessions until stopped (a hot reload); every view reads the same snapshot. */
+export function connectAgentSessions(): () => void {
+  const stop = window.desktop.subscribeAgentSessions(receive)
   void window.desktop
     .getAgentSessions()
     .then(receive, (failure: unknown) =>
       useAgentSessionStore.setState({ error: mainErrorMessage(failure) })
     )
+  return stop
 }

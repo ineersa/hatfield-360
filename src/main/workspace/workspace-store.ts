@@ -459,12 +459,12 @@ class WorkspaceStore {
     generation: number,
     layout: TerminalLayout,
     ended: Set<string>
-  ): Promise<void> {
-    if (this.terminalsFrozen) return Promise.resolve()
+  ): Promise<string[] | null> {
+    if (this.terminalsFrozen) return Promise.resolve(null)
     const run = this.queue.then(async () => {
       const { workspace } = await this.ready()
-      if (generation !== this.terminalGeneration) return
-      if (!workspace.terminals && layout.tabs.length === 0) return
+      if (generation !== this.terminalGeneration) return null
+      if (!workspace.terminals && layout.tabs.length === 0) return []
       if (workspace.problem) throw new Error(workspace.problem)
       const previous = new Map<string, PaneLeaf>()
       const remember = (node: PaneLayout): void => {
@@ -500,9 +500,10 @@ class WorkspaceStore {
         activeTabId: layout.activeTabId,
         ...(pinned.length ? { pinned } : {})
       }
-      if (JSON.stringify(workspace.terminals) === JSON.stringify(layout)) return
+      if (JSON.stringify(workspace.terminals) === JSON.stringify(layout)) return pinned
       await writeWorkspaceFile(workspace.file, { ...workspace, terminals: layout })
       workspace.terminals = layout
+      return pinned
     })
     this.queue = run.catch(() => undefined)
     return run

@@ -93,7 +93,7 @@ function PinnedIcon({ session }: { session: AgentSession }): React.JSX.Element {
   )
 }
 
-/** The session the tab's Pin item acts on: its active pane's, else the first pinned one. */
+/** The session the tab's Pin item acts on: a pinned one (the active pane's first), else the active pane's. */
 function menuSession(
   terminals: readonly string[],
   active: string | null,
@@ -106,9 +106,11 @@ function menuSession(
       session.providerSessionId !== null &&
       terminals.includes(session.terminalId)
   )
+  const held = live.filter((session) => isPinned(session, pinned))
   return (
+    held.find((session) => session.terminalId === active) ??
+    held[0] ??
     live.find((session) => session.terminalId === active) ??
-    live.find((session) => isPinned(session, pinned)) ??
     live[0]
   )
 }

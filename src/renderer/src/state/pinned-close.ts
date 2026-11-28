@@ -14,6 +14,8 @@ export const usePinnedCloseStore = create<{ pending: PendingClose | null }>(() =
 
 /** Closes at once, or first asks when these terminals run pinned sessions. */
 export function closeUnlessPinned(terminalIds: readonly string[], close: () => void): void {
+  // One question at a time: a close asked for while the dialog is open is dropped, not queued.
+  if (usePinnedCloseStore.getState().pending) return
   const sessions = pinnedIn(
     terminalIds,
     useAgentSessionStore.getState().sessions,

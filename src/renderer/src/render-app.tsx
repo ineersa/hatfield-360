@@ -21,7 +21,8 @@ if (!root) {
 const stopAgentNotifications = window.desktop.subscribeAgentNotifications(receiveAgentNotification)
 if (import.meta.hot) import.meta.hot.dispose(stopAgentNotifications)
 
-connectAgentSessions()
+const stopAgentSessions = connectAgentSessions()
+if (import.meta.hot) import.meta.hot.dispose(stopAgentSessions)
 connectTerminalWorkspace()
 const workspace = window.desktop
   .getWorkspace()

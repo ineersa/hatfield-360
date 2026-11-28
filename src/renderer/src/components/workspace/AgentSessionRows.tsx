@@ -165,7 +165,7 @@ export function AgentSessionRows({
   const pinned = useTerminalStore((state) => state.pinned)
   const setPinned = useTerminalStore((state) => state.setPinned)
   const focusAfterMenu = useRef<string | null>(null)
-  const closeAfterMenu = useRef<(() => void) | null>(null)
+  const afterMenu = useRef<(() => void) | null>(null)
   return (
     <>
       {sessions.map((session) => {
@@ -284,12 +284,13 @@ export function AgentSessionRows({
               </Tooltip>
               <ContextMenuContent
                 onCloseAutoFocus={(event) => {
-                  const close = closeAfterMenu.current
-                  if (close) {
-                    // Run once the menu has let go of focus, so a confirmation keeps it.
-                    closeAfterMenu.current = null
+                  const action = afterMenu.current
+                  if (action) {
+                    // Run once the menu has let go of focus: a confirmation keeps it, and a pinned
+                    // row moving to its section doesn't take the menu's trigger with it first.
+                    afterMenu.current = null
                     event.preventDefault()
-                    close()
+                    action()
                     return
                   }
                   if (focusAfterMenu.current !== session.id) return
@@ -309,7 +310,9 @@ export function AgentSessionRows({
                 <ContextMenuItem
                   disabled={key === null}
                   onSelect={() => {
-                    if (key) setPinned(key, !sessionPinned)
+                    afterMenu.current = () => {
+                      if (key) setPinned(key, !sessionPinned)
+                    }
                   }}
                 >
                   {sessionPinned ? <PinOff aria-hidden /> : <Pin aria-hidden />}
@@ -333,7 +336,7 @@ export function AgentSessionRows({
                 ) : null}
                 <ContextMenuItem
                   onSelect={() => {
-                    closeAfterMenu.current = () => {
+                    afterMenu.current = () => {
                       if (!closeTerminal(session.terminalId))
                         notify({ severity: 'warning', title: 'Terminal is no longer available' })
                     }

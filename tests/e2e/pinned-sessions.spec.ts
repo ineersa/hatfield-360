@@ -45,6 +45,9 @@ test('a pinned session leads the panel and the strip, asks before closing, and s
         await page.getByRole('menuitem', { name: 'Launch Hatfield', exact: true }).click()
         await expect(page.getByRole('tab')).toHaveCount(2)
         await report(page)
+        await projectRow.click({ button: 'right' })
+        await page.getByRole('menuitem', { name: 'Open Terminal Here' }).click()
+        await expect(page.getByRole('tab')).toHaveCount(3)
 
         await projectList(page).getByRole('button', { name: sessionRow }).click({ button: 'right' })
         await page.getByRole('menuitem', { name: 'Pin Session' }).click()
@@ -55,10 +58,11 @@ test('a pinned session leads the panel and the strip, asks before closing, and s
         await expect(page.getByRole('button', { name: /^Close .* · pinned$/ })).toHaveCount(0)
         await saveScreenshot(page, 'pinned-sessions/pinned')
 
-        // Close All Tabs leaves the pinned tab open.
-        await page.getByRole('tab', { name: 'pin-project', exact: true }).click({ button: 'right' })
-        await page.getByRole('menuitem', { name: 'Close All Tabs' }).click()
-        await expect(page.getByRole('tab')).toHaveCount(1)
+        // Close Other Tabs, on the shell opened first, closes the last shell and leaves the pinned tab.
+        await page.getByRole('tab').nth(1).click({ button: 'right' })
+        await page.getByRole('menuitem', { name: 'Close Other Tabs' }).click()
+        await expect(page.getByRole('tab')).toHaveCount(2)
+        await page.getByRole('tab').first().click()
 
         // Each way of closing the pinned session asks first; Keep Open keeps it running.
         await panes(page).first().click({ button: 'right' })
@@ -84,19 +88,23 @@ test('a pinned session leads the panel and the strip, asks before closing, and s
 
     await withApp(
       async (_app, page) => {
+        // Tabs are saved in the order they were opened: the shell, then the agent.
+        await page.getByRole('tab').nth(1).click()
         await report(page)
         await expect(pinnedList(page).getByRole('button', { name: sessionRow })).toBeVisible()
         const tab = page.getByRole('tab').first()
         await expect(tab).toHaveAccessibleName(/ · pinned$/)
 
-        // Unpinning from the tab gives it its close button back; pinning again from the tab works too.
+        // Unpinning from the tab gives it its close button back and its place after the shell.
         await tab.click({ button: 'right' })
         await page.getByRole('menuitem', { name: 'Unpin Session' }).click()
         await expect(pinnedList(page)).toHaveCount(0)
         await expect(
           page.getByRole('button', { name: 'Close pin-project', exact: true })
-        ).toBeVisible()
-        await page.getByRole('tab').first().click({ button: 'right' })
+        ).toHaveCount(2)
+        await expect(page.getByRole('tab').nth(1)).toHaveAttribute('aria-selected', 'true')
+        await expect(panes(page).first().locator('.xterm-rows')).toContainText('Scenario ready')
+        await page.getByRole('tab').nth(1).click({ button: 'right' })
         await page.getByRole('menuitem', { name: 'Pin Session' }).click()
         await expect(pinnedList(page).getByRole('button', { name: sessionRow })).toBeVisible()
 
@@ -104,7 +112,28 @@ test('a pinned session leads the panel and the strip, asks before closing, and s
         await pinnedList(page).getByRole('button', { name: sessionRow }).click({ button: 'right' })
         await page.getByRole('menuitem', { name: 'Close terminal' }).click()
         await dialog(page).getByRole('button', { name: 'Unpin and Close' }).click()
-        await expect(page.getByRole('tab')).toHaveCount(0)
+        await expect(page.getByRole('tab')).toHaveCount(1)
+        await expect(pinnedList(page)).toHaveCount(0)
+
+        // An agent that exits on its own takes its pin with it: the same conversation started
+        // again isn't pinned.
+        const projectRow = page.getByRole('listitem', { name: 'pin-project', exact: true })
+        const relaunch = async () => {
+          await projectRow.click({ button: 'right' })
+          await page.getByRole('menuitem', { name: 'Launch Hatfield', exact: true }).click()
+          await expect(page.getByRole('tab')).toHaveCount(2)
+          await report(page)
+        }
+        await relaunch()
+        await projectList(page).getByRole('button', { name: sessionRow }).click({ button: 'right' })
+        await page.getByRole('menuitem', { name: 'Pin Session' }).click()
+        await expect(pinnedList(page).getByRole('button', { name: sessionRow })).toBeVisible()
+        await panes(page).first().click()
+        await page.keyboard.type('quit')
+        await page.keyboard.press('Enter')
+        await expect(page.getByRole('tab')).toHaveCount(1)
+        await relaunch()
+        await expect(projectList(page).getByRole('button', { name: sessionRow })).toBeVisible()
         await expect(pinnedList(page)).toHaveCount(0)
       },
       { userDataDir }
