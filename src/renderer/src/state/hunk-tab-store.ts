@@ -10,6 +10,8 @@ export type HunkTab = {
   root: string
   /** The stash, base branch or pull request number a `stash`, `branch` or `pull-request` tab shows; null for the others. */
   target: string | null
+  /** What makes two tabs of a kind and root the same: the target, or more (a branch review's branch). */
+  key: string | null
   /** "Review · app": what the strip shows and the tab is named by. */
   title: string
   /** Counts restarts: a new value remounts the pane, which starts hunk afresh. */
@@ -29,7 +31,12 @@ type HunkTabState = {
    * Shows the root's tab of that kind and target, opening one (shown once hunk runs) when there is
    * none. `target.label` ends the tab's title.
    */
-  open: (kind: HunkKind, root: string, name: string, target?: { id: string; label: string }) => void
+  open: (
+    kind: HunkKind,
+    root: string,
+    name: string,
+    target?: { id: string; label: string; key?: string }
+  ) => void
   /** hunk runs in the tab: the strip shows it, chosen. */
   started: (id: string) => void
   /** No hunk on the user's PATH: the tab goes and the install steps show. */
@@ -55,14 +62,14 @@ const KIND_LABEL: Record<HunkKind, string> = {
   'pull-request': 'Pull Request'
 }
 
-/** The root's tab of that kind and target, if one is open or opening. */
+/** The root's tab of that kind and key (its target, unless it was opened with one), if one is open or opening. */
 export function tabFor(
   tabs: readonly HunkTab[],
   kind: HunkKind,
   root: string,
-  target: string | null = null
+  key: string | null = null
 ): HunkTab | undefined {
-  return tabs.find((tab) => tab.kind === kind && tab.root === root && tab.target === target)
+  return tabs.find((tab) => tab.kind === kind && tab.root === root && tab.key === key)
 }
 
 const without = (set: ReadonlySet<string>, id: string): ReadonlySet<string> =>
@@ -96,7 +103,8 @@ export const useHunkTabStore = create<HunkTabState>((set, get) => {
     missing: false,
     open: (kind, root, name, target) => {
       const { tabs, pending } = get()
-      const existing = tabFor(tabs, kind, root, target?.id ?? null)
+      const key = target?.key ?? target?.id ?? null
+      const existing = tabFor(tabs, kind, root, key)
       if (existing) {
         // One still starting is chosen once hunk runs.
         if (!pending.has(existing.id)) set({ activeTabId: existing.id, missing: false })
@@ -107,6 +115,7 @@ export const useHunkTabStore = create<HunkTabState>((set, get) => {
         kind,
         root,
         target: target?.id ?? null,
+        key,
         title: [KIND_LABEL[kind], name, ...(target ? [target.label] : [])].join(' · '),
         run: 0
       }

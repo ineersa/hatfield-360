@@ -28,7 +28,7 @@ import {
 import { cn } from '@/lib/class-names'
 import { useEditorTabStore } from '@/state/editor-tab-store'
 import { tabFor, useHunkTabStore } from '@/state/hunk-tab-store'
-import { useReviewStore } from '@/state/review-store'
+import { reviewOf, useReviewStore } from '@/state/review-store'
 import { useShellLayoutStore } from '@/state/shell-layout-store'
 import { useSourceControlStore } from '@/state/source-control-store'
 import type {
@@ -187,7 +187,7 @@ function HunkButton({
 
 /** The current branch's open pull request, by number: a click reviews it in hunk. */
 function PullRequestBadge({ group }: { group: GitGroup }): React.JSX.Element | null {
-  const pullRequest = useReviewStore((state) => state.reviews[group.root]?.pullRequest ?? null)
+  const pullRequest = useReviewStore((state) => reviewOf(state.reviews, group)?.pullRequest ?? null)
   const reviewPullRequest = useReviewStore((state) => state.reviewPullRequest)
   if (pullRequest === null) return null
   return (

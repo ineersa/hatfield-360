@@ -2,7 +2,12 @@ import { randomUUID } from 'node:crypto'
 import type { WebContents } from 'electron'
 import type { HunkKind, HunkLaunch } from '../../shared/source-control-api'
 import { diffBase } from '../git/source-control'
-import { gitHubTokenEnv, validPullRequest, validReviewBase } from '../git/review'
+import {
+  gitHubTokenEnv,
+  pullRequestRepository,
+  validPullRequest,
+  validReviewBase
+} from '../git/review'
 import { stashToShow } from '../git/stash'
 import { UnsupportedAgentShell } from './agent-shell-command'
 import { findOnShellPath } from './shell-lookup'
@@ -15,7 +20,14 @@ const HUNK_ARGS: Record<HunkKind, (root: string, target: unknown) => Promise<str
   stash: async (root, target) => ['stash', 'show', await stashToShow(root, target)],
   // From where the branch left the base: the base's own later commits don't show.
   branch: async (root, target) => ['diff', `${await validReviewBase(root, target)}...HEAD`],
-  'pull-request': (_root, target) => Promise.resolve(['gh', 'pr', validPullRequest(target)])
+  // Named with origin's repository, so a fork's `upstream` remote doesn't decide which #n it is.
+  'pull-request': async (root, target) => [
+    'gh',
+    'pr',
+    validPullRequest(target),
+    '--repo',
+    await pullRequestRepository(root)
+  ]
 }
 
 /**

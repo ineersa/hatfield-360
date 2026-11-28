@@ -66,6 +66,17 @@ test('Review Branch shows the branch’s commits since its base in hunk, against
         )
         // The first tab is still there, for its own base.
         await expect(page.getByRole('tab', { name: /feature vs origin\/main/ })).toHaveCount(1)
+
+        // On another branch, Review Branch is that branch's review, not the old tab again.
+        git(repo, 'switch', '-q', '-c', 'other', 'main')
+        await page.getByRole('button', { name: 'Refresh', exact: true }).click()
+        await expect(row(page, 'app')).toContainText('other')
+        await repositoryMenu(page)
+        await page.getByRole('menuitem', { name: /^Review Branch vs origin\/main/ }).click()
+        await expect(terminalText(page, 'Branch · app · other vs origin/main')).toContainText(
+          `fake hunk diff origin/main...HEAD in ${repo}`
+        )
+        await expect(page.getByRole('tab', { name: /feature vs origin\/main/ })).toHaveCount(1)
       },
       {
         userDataDir: fixture.userData,

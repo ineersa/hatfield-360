@@ -21,6 +21,19 @@ const PULL_REQUEST_FIELDS = 'number,title,author,headRefName,isDraft,url'
 /** `gh` exits with 4 when it isn't signed in. */
 const SIGNED_OUT_EXIT = 4
 
+/** How long a `gh` lookup on the shell PATH is reused: every focus reads each repository again. */
+const GH_LOOKUP_TTL_MS = 60_000
+const ghLookups = new Map<string, { at: number; path: Promise<string | null> }>()
+
+/** The user's `gh`, as their shell finds it in `root`, looked up at most once a minute. */
+function findGh(root: string): Promise<string | null> {
+  const cached = ghLookups.get(root)
+  if (cached && Date.now() - cached.at < GH_LOOKUP_TTL_MS) return cached.path
+  const path = findOnShellPath('gh', root)
+  ghLookups.set(root, { at: Date.now(), path })
+  return path
+}
+
 const refExists = async (root: string, ref: string): Promise<boolean> =>
   (await query(root, ['rev-parse', '--verify', '--quiet', '--end-of-options', `${ref}^{commit}`]))
     .exitCode === 0
@@ -55,10 +68,12 @@ export async function validReviewBase(root: string, base: unknown): Promise<stri
  */
 export function gitHubRemote(url: string): GitHubRemote | null {
   const match =
-    /^(?:[\w.-]+@(?<scpHost>[\w.-]+):|(?:ssh|https?|git):\/\/(?:[^@/]+@)?(?<urlHost>[\w.-]+)(?::\d+)?\/)(?<owner>[\w.-]+)\/(?<repo>[\w.-]+?)(?:\.git)?\/?$/.exec(
+    /^(?:(?:[\w.-]+@)?(?<scpHost>[\w.-]+):(?!\/\/)|(?:ssh|https?|git):\/\/(?:[^@/]+@)?(?<urlHost>[\w.-]+)(?::\d+)?\/)(?<owner>[\w.-]+)\/(?<repo>[\w.-]+?)(?:\.git)?\/?$/.exec(
       url.trim()
     )
-  const host = (match?.groups?.['scpHost'] ?? match?.groups?.['urlHost'])?.toLowerCase()
+  const named = (match?.groups?.['scpHost'] ?? match?.groups?.['urlHost'])?.toLowerCase()
+  // GitHub's SSH over port 443.
+  const host = named === 'ssh.github.com' ? 'github.com' : named
   const owner = match?.groups?.['owner']
   const repo = match?.groups?.['repo']
   if (host === undefined || owner === undefined || repo === undefined) return null
@@ -71,7 +86,17 @@ async function originOnGitHub(root: string): Promise<GitHubRemote | null> {
   return url.exitCode === 0 ? gitHubRemote(url.stdout) : null
 }
 
-type GhRun = { exitCode: number | null; stdout: string; stderr: string }
+const repositoryName = (github: GitHubRemote): string =>
+  `${github.host}/${github.owner}/${github.repo}`
+
+/** `host/owner/repo` of origin, for `hunk gh pr --repo`. */
+export async function pullRequestRepository(root: string): Promise<string> {
+  const github = await originOnGitHub(root)
+  if (github === null) throw new Error('origin is not a GitHub repository.')
+  return repositoryName(github)
+}
+
+type GhRun = { exitCode: number | null; stdout: string; stderr: string; timedOut: boolean }
 
 /** Runs the user's `gh` in `root`, as their shell would find it; its output is only read here. */
 function runGh(gh: string, root: string, args: string[]): Promise<GhRun> {
@@ -89,14 +114,18 @@ function runGh(gh: string, root: string, args: string[]): Promise<GhRun> {
     let stderr = ''
     child.stdout.setEncoding('utf8').on('data', (chunk: string) => (stdout += chunk))
     child.stderr.setEncoding('utf8').on('data', (chunk: string) => (stderr += chunk))
-    const timer = setTimeout(() => child.kill('SIGKILL'), GH_TIMEOUT_MS)
+    let timedOut = false
+    const timer = setTimeout(() => {
+      timedOut = true
+      child.kill('SIGKILL')
+    }, GH_TIMEOUT_MS)
     child.on('error', (error) => {
       clearTimeout(timer)
-      resolve({ exitCode: null, stdout: '', stderr: error.message })
+      resolve({ exitCode: null, stdout: '', stderr: error.message, timedOut })
     })
     child.on('close', (code) => {
       clearTimeout(timer)
-      resolve({ exitCode: code, stdout, stderr })
+      resolve({ exitCode: code, stdout, stderr, timedOut })
     })
   })
 }
@@ -139,13 +168,13 @@ export function parsePullRequests(json: string): PullRequest[] | null {
 export async function listPullRequests(root: string): Promise<PullRequestList> {
   const github = await originOnGitHub(root)
   if (github === null) return { status: 'failed', output: 'origin is not a GitHub repository.' }
-  const gh = await findOnShellPath('gh', root)
+  const gh = await findGh(root)
   if (gh === null) return { status: 'no-gh' }
   const run = await runGh(gh, root, [
     'pr',
     'list',
     '--repo',
-    `${github.host}/${github.owner}/${github.repo}`,
+    repositoryName(github),
     '--state',
     'open',
     '--limit',
@@ -153,6 +182,8 @@ export async function listPullRequests(root: string): Promise<PullRequestList> {
     '--json',
     PULL_REQUEST_FIELDS
   ])
+  if (run.timedOut)
+    return { status: 'failed', output: `gh did not answer within ${GH_TIMEOUT_MS / 1000} s.` }
   if (run.exitCode === SIGNED_OUT_EXIT) return { status: 'signed-out', host: github.host }
   if (run.exitCode !== 0)
     return { status: 'failed', output: run.stderr.trim() || `gh exited with ${run.exitCode}` }
@@ -162,18 +193,29 @@ export async function listPullRequests(root: string): Promise<PullRequestList> {
     : { status: 'listed', pullRequests }
 }
 
-/** The current branch's open pull request; null when there is none or `gh` can't say. */
+/** The current branch's open pull request on origin; null when there is none or `gh` can't say. */
 async function currentPullRequest(root: string, github: GitHubRemote): Promise<PullRequest | null> {
-  const gh = await findOnShellPath('gh', root)
+  const branch = (await query(root, ['branch', '--show-current'])).stdout.trim()
+  // Detached, or a name gh would take for an option (git doesn't allow those).
+  if (branch === '' || branch.startsWith('-')) return null
+  const gh = await findGh(root)
   if (gh === null) return null
-  const run = await runGh(gh, root, ['pr', 'view', '--json', `${PULL_REQUEST_FIELDS},state`])
+  const run = await runGh(gh, root, [
+    'pr',
+    'view',
+    branch,
+    '--repo',
+    repositoryName(github),
+    '--json',
+    `${PULL_REQUEST_FIELDS},state,isCrossRepository`
+  ])
   if (run.exitCode !== 0) return null
   try {
     const value: unknown = JSON.parse(run.stdout)
-    if (!isPlainObject(value) || value['state'] !== 'OPEN') return null
-    const pullRequest = pullRequestOf(value)
-    // A fork's PR from a branch of the same name belongs to another repository.
-    return pullRequest?.url.includes(`/${github.owner}/${github.repo}/pull/`) ? pullRequest : null
+    // A fork's PR from a branch of the same name isn't this branch's.
+    if (!isPlainObject(value) || value['state'] !== 'OPEN' || value['isCrossRepository'] !== false)
+      return null
+    return pullRequestOf(value)
   } catch {
     return null
   }
@@ -196,7 +238,7 @@ export async function repositoryReview(root: string): Promise<RepositoryReview> 
 export async function gitHubTokenEnv(root: string): Promise<Record<string, string>> {
   if (process.env['GH_TOKEN'] || process.env['GITHUB_TOKEN']) return {}
   const github = await originOnGitHub(root)
-  const gh = github === null ? null : await findOnShellPath('gh', root)
+  const gh = github === null ? null : await findGh(root)
   if (github === null || gh === null) return {}
   const run = await runGh(gh, root, ['auth', 'token', '--hostname', github.host])
   const token = run.stdout.trim()

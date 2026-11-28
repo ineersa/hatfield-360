@@ -99,6 +99,9 @@ describe('gitHubRemote', () => {
       repo: 'my.app'
     })
     expect(gitHubRemote('https://acme.ghe.com/team/app')).toEqual({ ...app, host: 'acme.ghe.com' })
+    // GitHub's SSH over port 443, and an scp-style URL without a user.
+    expect(gitHubRemote('ssh://git@ssh.github.com:443/team/app.git')).toEqual(app)
+    expect(gitHubRemote('github.com:team/app.git')).toEqual(app)
   })
 
   it('finds no GitHub repository in other hosts, local paths or partial URLs', () => {
@@ -108,7 +111,8 @@ describe('gitHubRemote', () => {
       '/srv/git/app.git',
       'file:///srv/git/app.git',
       'https://github.com/team',
-      'https://github.com/team/app/pull/1'
+      'https://github.com/team/app/pull/1',
+      'git@github-work:team/app.git'
     ])
       expect(gitHubRemote(url)).toBe(null)
   })

@@ -32,7 +32,7 @@ import {
 import { rendererPlatform } from '@/lib/shortcut-keys'
 import { useHunkTabStore } from '@/state/hunk-tab-store'
 import { type FileTargets, useSourceControlStore } from '@/state/source-control-store'
-import { useReviewStore } from '@/state/review-store'
+import { reviewOf, useReviewStore } from '@/state/review-store'
 import { useStashStore } from '@/state/stash-store'
 import type { ChangedFile, SourceControlGroup } from '../../../../shared/source-control-api'
 import { addableFiles, fileKey, type GitGroup, isUntracked } from './change-tree-rows'
@@ -237,7 +237,7 @@ export function GroupMenu({ group }: { group: SourceControlGroup }): React.JSX.E
   const openStash = useStashStore((state) => state.openStash)
   const openUnstash = useStashStore((state) => state.openUnstash)
   const afterMenu = useAfterMenu()
-  const review = useReviewStore((state) => state.reviews[group.root])
+  const review = useReviewStore((state) => reviewOf(state.reviews, group))
   const reviewBranch = useReviewStore((state) => state.reviewBranch)
   const openBaseChooser = useReviewStore((state) => state.openBaseChooser)
   const openPullRequests = useReviewStore((state) => state.openPullRequests)
@@ -294,7 +294,13 @@ export function GroupMenu({ group }: { group: SourceControlGroup }): React.JSX.E
             label="Review Branch"
             {...(review?.base ? { shortcut: `vs ${review.base}` } : {})}
             unavailable={
-              review === undefined ? 'Reading…' : review.base === null ? 'No main branch' : false
+              review === undefined
+                ? 'Reading…'
+                : review.problem !== null
+                  ? "Couldn't read the branches"
+                  : review.base === null
+                    ? 'No main branch'
+                    : false
             }
             onSelect={() => reviewBranch(group)}
           />

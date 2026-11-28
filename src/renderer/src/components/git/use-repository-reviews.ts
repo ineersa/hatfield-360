@@ -16,16 +16,21 @@ export function useRepositoryReviews(groups: readonly SourceControlGroup[] | nul
   useEffect(() => {
     const parsed: unknown = JSON.parse(repositories)
     const list: unknown[] = Array.isArray(parsed) ? parsed : []
-    const load = (): void => {
-      for (const entry of list) {
-        const pair: unknown[] = Array.isArray(entry) ? entry : []
-        const [root, branch] = pair
-        if (typeof root === 'string')
-          void useReviewStore.getState().load(root, typeof branch === 'string' ? branch : null)
-      }
+    const pairs = list.flatMap((entry) => {
+      const pair: unknown[] = Array.isArray(entry) ? entry : []
+      const [root, branch] = pair
+      return typeof root === 'string'
+        ? [{ root, branch: typeof branch === 'string' ? branch : null }]
+        : []
+    })
+    const store = useReviewStore.getState()
+    store.keepOnly(pairs.map((pair) => pair.root))
+    const load = (focus: boolean): void => {
+      for (const { root, branch } of pairs) void store.load(root, branch, { focus })
     }
-    load()
-    window.addEventListener('focus', load)
-    return () => window.removeEventListener('focus', load)
+    const onFocus = (): void => load(true)
+    load(false)
+    window.addEventListener('focus', onFocus)
+    return () => window.removeEventListener('focus', onFocus)
   }, [repositories])
 }
