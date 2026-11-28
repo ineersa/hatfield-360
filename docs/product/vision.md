@@ -7,7 +7,7 @@ Orca covers most of this ground (QA scratch change, not for merge).
 ## Layout
 
 Two columns, JetBrains-style (QA scratch change).
-QA scratch line that a later commit changes.
+QA scratch line, changed by the second commit.
 
 ```
 ┌──┬──────────────────┬───────────────────────────────────────────┐
