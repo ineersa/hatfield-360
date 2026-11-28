@@ -1,4 +1,11 @@
-import { Archive, GitCompareArrows, History, type LucideIcon } from 'lucide-react'
+import {
+  GitBranch,
+  GitPullRequest,
+  Archive,
+  GitCompareArrows,
+  History,
+  type LucideIcon
+} from 'lucide-react'
 import { useEffect, useRef } from 'react'
 import { ScrollingTabList } from '@/components/shell/ScrollingTabList'
 import { StripTab } from '@/components/shell/StripTab'
@@ -18,7 +25,9 @@ import type { HunkKind } from '../../../../shared/source-control-api'
 const TAB_ICONS: Record<HunkKind, LucideIcon> = {
   review: GitCompareArrows,
   log: History,
-  stash: Archive
+  stash: Archive,
+  branch: GitBranch,
+  'pull-request': GitPullRequest
 }
 
 /**
@@ -60,7 +69,7 @@ function HunkTabBody({
               const launch = await window.desktop.launchHunk({
                 kind: tab.kind,
                 root: tab.root,
-                ...(tab.stash === null ? {} : { stash: tab.stash }),
+                ...(tab.target === null ? {} : { target: tab.target }),
                 ...size
               })
               if (launch.status === 'missing') {

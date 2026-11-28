@@ -28,12 +28,12 @@ import {
 import { cn } from '@/lib/class-names'
 import { useEditorTabStore } from '@/state/editor-tab-store'
 import { tabFor, useHunkTabStore } from '@/state/hunk-tab-store'
+import { useReviewStore } from '@/state/review-store'
 import { useShellLayoutStore } from '@/state/shell-layout-store'
 import { useSourceControlStore } from '@/state/source-control-store'
 import type {
   ChangedFile,
   ChangeKind,
-  HunkKind,
   SourceControlGroup
 } from '../../../../shared/source-control-api'
 import { isDeleteKey } from '@/components/files/delete-key'
@@ -144,7 +144,7 @@ function HunkButton({
   group,
   icon: Icon
 }: {
-  kind: Exclude<HunkKind, 'stash'>
+  kind: 'review' | 'log'
   group: GitGroup
   icon: LucideIcon
 }): React.JSX.Element {
@@ -181,6 +181,33 @@ function HunkButton({
           ? `Review ${group.name}'s changes in hunk`
           : `Browse ${group.name}'s history in hunk`}
       </TooltipContent>
+    </Tooltip>
+  )
+}
+
+/** The current branch's open pull request, by number: a click reviews it in hunk. */
+function PullRequestBadge({ group }: { group: GitGroup }): React.JSX.Element | null {
+  const pullRequest = useReviewStore((state) => state.reviews[group.root]?.pullRequest ?? null)
+  const reviewPullRequest = useReviewStore((state) => state.reviewPullRequest)
+  if (pullRequest === null) return null
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          type="button"
+          tabIndex={-1}
+          aria-label={`Review pull request #${pullRequest.number} of ${group.name}`}
+          onClick={(event) => {
+            event.stopPropagation()
+            reviewPullRequest(group, pullRequest)
+          }}
+          onDoubleClick={(event) => event.stopPropagation()}
+          className="type-hint ml-1 shrink-0 rounded-button px-1 tabular-nums hover:bg-hover hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none @max-[220px]:hidden"
+        >
+          {`#${pullRequest.number}`}
+        </button>
+      </TooltipTrigger>
+      <TooltipContent side="bottom">{`Review #${pullRequest.number} ${pullRequest.title} in hunk`}</TooltipContent>
     </Tooltip>
   )
 }
@@ -243,6 +270,7 @@ function GroupRowContent({
         </span>
       ) : null}
       {sync ? <span className="sr-only">{sync}</span> : null}
+      <PullRequestBadge group={group} />
       <span className="ml-auto flex shrink-0 items-center gap-0.5 pl-1 @max-[260px]:hidden">
         <HunkButton kind="review" group={group} icon={GitCompareArrows} />
         <HunkButton kind="log" group={group} icon={History} />

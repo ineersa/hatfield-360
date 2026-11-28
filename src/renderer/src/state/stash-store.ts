@@ -43,7 +43,8 @@ const git = () => useSourceControlStore.getState()
 /** A popped or dropped stash's tab could only fail to start again. */
 function closeTabsOf(root: string, id: string): void {
   const hunk = useHunkTabStore.getState()
-  for (const tab of hunk.tabs) if (tab.root === root && tab.stash === id) hunk.closeTab(tab.id)
+  for (const tab of hunk.tabs)
+    if (tab.root === root && tab.kind === 'stash' && tab.target === id) hunk.closeTab(tab.id)
 }
 
 export const useStashStore = create<StashState>((set, get) => {
@@ -113,7 +114,9 @@ export const useStashStore = create<StashState>((set, get) => {
       const { dialog } = get()
       if (dialog?.kind !== 'unstash') return
       set({ dialog: null })
-      useHunkTabStore.getState().open('stash', dialog.group.root, dialog.group.name, stash)
+      useHunkTabStore
+        .getState()
+        .open('stash', dialog.group.root, dialog.group.name, { id: stash.id, label: stash.message })
     }
   }
 })

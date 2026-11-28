@@ -11,6 +11,8 @@ import {
   GitBranchPlus,
   GitCommitHorizontal,
   GitCompareArrows,
+  GitPullRequest,
+  GitPullRequestArrow,
   History,
   RefreshCw,
   Trash2,
@@ -30,6 +32,7 @@ import {
 import { rendererPlatform } from '@/lib/shortcut-keys'
 import { useHunkTabStore } from '@/state/hunk-tab-store'
 import { type FileTargets, useSourceControlStore } from '@/state/source-control-store'
+import { useReviewStore } from '@/state/review-store'
 import { useStashStore } from '@/state/stash-store'
 import type { ChangedFile, SourceControlGroup } from '../../../../shared/source-control-api'
 import { addableFiles, fileKey, type GitGroup, isUntracked } from './change-tree-rows'
@@ -234,6 +237,11 @@ export function GroupMenu({ group }: { group: SourceControlGroup }): React.JSX.E
   const openStash = useStashStore((state) => state.openStash)
   const openUnstash = useStashStore((state) => state.openUnstash)
   const afterMenu = useAfterMenu()
+  const review = useReviewStore((state) => state.reviews[group.root])
+  const reviewBranch = useReviewStore((state) => state.reviewBranch)
+  const openBaseChooser = useReviewStore((state) => state.openBaseChooser)
+  const openPullRequests = useReviewStore((state) => state.openPullRequests)
+  const reviewPullRequest = useReviewStore((state) => state.reviewPullRequest)
   return (
     <OpenTerminalMenuContent
       cwd={group.root}
@@ -281,6 +289,39 @@ export function GroupMenu({ group }: { group: SourceControlGroup }): React.JSX.E
             label="Log"
             onSelect={() => openHunk('log', group.root, group.name)}
           />
+          <Item
+            icon={<GitBranch aria-hidden />}
+            label="Review Branch"
+            {...(review?.base ? { shortcut: `vs ${review.base}` } : {})}
+            unavailable={
+              review === undefined ? 'Reading…' : review.base === null ? 'No main branch' : false
+            }
+            onSelect={() => reviewBranch(group)}
+          />
+          <Item
+            icon={<GitBranch aria-hidden />}
+            label="Review Branch Against…"
+            onSelect={() => afterMenu.choose(() => void openBaseChooser(group))}
+          />
+          {review?.github ? (
+            <>
+              {review.pullRequest ? (
+                <Item
+                  icon={<GitPullRequestArrow aria-hidden />}
+                  label={`Review Pull Request #${review.pullRequest.number}`}
+                  onSelect={() => {
+                    const own = review.pullRequest
+                    if (own) reviewPullRequest(group, own)
+                  }}
+                />
+              ) : null}
+              <Item
+                icon={<GitPullRequest aria-hidden />}
+                label="Review Pull Request…"
+                onSelect={() => afterMenu.choose(() => void openPullRequests(group))}
+              />
+            </>
+          ) : null}
           <ContextMenuSeparator />
           <Item
             icon={<CloudDownload aria-hidden />}

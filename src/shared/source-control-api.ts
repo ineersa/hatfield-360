@@ -85,13 +85,20 @@ type CommitRequest = {
   amend: boolean
 }
 
-export type HunkKind = 'review' | 'log' | 'stash'
+/**
+ * `review`: uncommitted changes; `log`: history; `stash`: one stash; `branch`: the current branch's
+ * commits on top of a base; `pull-request`: a GitHub pull request.
+ */
+export type HunkKind = 'review' | 'log' | 'stash' | 'branch' | 'pull-request'
 
 type HunkLaunchRequest = {
   root: string
   kind: HunkKind
-  /** For `stash`: the stash's commit (`StashEntry.id`). */
-  stash?: string
+  /**
+   * What `stash`, `branch` and `pull-request` show: the stash's commit (`StashEntry.id`), the base
+   * branch, or the pull request's number.
+   */
+  target?: string
   cols: number
   rows: number
 }

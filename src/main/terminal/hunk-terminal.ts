@@ -2,15 +2,20 @@ import { randomUUID } from 'node:crypto'
 import type { WebContents } from 'electron'
 import type { HunkKind, HunkLaunch } from '../../shared/source-control-api'
 import { diffBase } from '../git/source-control'
+import { gitHubTokenEnv, validPullRequest, validReviewBase } from '../git/review'
 import { stashToShow } from '../git/stash'
 import { UnsupportedAgentShell } from './agent-shell-command'
 import { findOnShellPath } from './shell-lookup'
 import { terminalSessions } from './terminal-sessions'
 
-/** Review compares with HEAD, not the index, so staged changes show too, as the Commit panel lists them. */
-async function hunkArgs(root: string, kind: HunkKind, stash: unknown): Promise<string[]> {
-  if (kind === 'review') return ['diff', '--watch', await diffBase(root)]
-  return kind === 'log' ? ['log'] : ['stash', 'show', await stashToShow(root, stash)]
+const HUNK_ARGS: Record<HunkKind, (root: string, target: unknown) => Promise<string[]>> = {
+  // Compared with HEAD, not the index, so staged changes show too, as the Commit panel lists them.
+  review: async (root) => ['diff', '--watch', await diffBase(root)],
+  log: () => Promise.resolve(['log']),
+  stash: async (root, target) => ['stash', 'show', await stashToShow(root, target)],
+  // From where the branch left the base: the base's own later commits don't show.
+  branch: async (root, target) => ['diff', `${await validReviewBase(root, target)}...HEAD`],
+  'pull-request': (_root, target) => Promise.resolve(['gh', 'pr', validPullRequest(target)])
 }
 
 /**
@@ -20,7 +25,7 @@ async function hunkArgs(root: string, kind: HunkKind, stash: unknown): Promise<s
 export async function launchHunk(
   owner: WebContents,
   place: { root: string; project: string },
-  view: { kind: HunkKind; stash: unknown },
+  view: { kind: HunkKind; target: unknown },
   size: { cols: number; rows: number }
 ): Promise<HunkLaunch> {
   const hunk = await findOnShellPath('hunk', place.root)
@@ -33,8 +38,9 @@ export async function launchHunk(
         id: randomUUID(),
         project: place.project,
         executable: hunk,
-        args: await hunkArgs(place.root, view.kind, view.stash),
-        env: {}
+        args: await HUNK_ARGS[view.kind](place.root, view.target),
+        // hunk reads a token only from its environment; a private repository needs one.
+        env: view.kind === 'pull-request' ? await gitHubTokenEnv(place.root) : {}
       }
     )
     return { status: 'started', terminal }
