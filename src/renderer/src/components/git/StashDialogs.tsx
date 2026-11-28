@@ -15,9 +15,7 @@ import { useSourceControlStore } from '@/state/source-control-store'
 import { type StashDialog, useStashStore } from '@/state/stash-store'
 import { MAX_STASH_MESSAGE_LENGTH, type StashEntry } from '../../../../shared/stash-api'
 import { ChangedFileList } from './ChangedFileList'
-
-const STASH_ROW =
-  'type-body flex h-tree-row shrink-0 cursor-pointer items-center gap-2 rounded-component px-2 hover:bg-row-hover has-checked:bg-selection has-focus-visible:ring-2 has-focus-visible:ring-ring'
+import { ChoiceList } from './ChoiceList'
 
 const count = (n: number, noun: string): string => `${n} ${noun}${n === 1 ? '' : 's'}`
 
@@ -105,33 +103,22 @@ function UnstashDialog({
           <AlertDialogDescription>{`${group.name} has no stashes.`}</AlertDialogDescription>
         ) : (
           <>
-            <div
-              role="radiogroup"
-              aria-labelledby={labelId}
-              className="flex max-h-64 flex-col overflow-y-auto"
-            >
-              {stashes.map((entry) => (
-                <label key={entry.id} className={STASH_ROW}>
-                  <input
-                    type="radio"
-                    name="stash"
-                    value={entry.id}
-                    checked={entry.id === chosen?.id}
-                    onChange={() => setPicked(entry.id)}
-                    className="sr-only"
-                  />
-                  <span className="min-w-0 truncate">{entry.message}</span>
-                  <span className="type-hint ml-auto shrink-0 pl-2">
-                    {[
-                      entry.detached ? 'detached HEAD' : entry.branch,
-                      agoText(entry.createdAt, now)
-                    ]
-                      .filter((part) => part !== null)
-                      .join(' · ')}
-                  </span>
-                </label>
-              ))}
-            </div>
+            <ChoiceList
+              labelledBy={labelId}
+              name="stash"
+              choices={stashes.map((entry) => ({
+                id: entry.id,
+                label: entry.message,
+                hint: [
+                  entry.detached ? 'detached HEAD' : entry.branch,
+                  agoText(entry.createdAt, now)
+                ]
+                  .filter((part) => part !== null)
+                  .join(' · ')
+              }))}
+              chosen={chosen?.id ?? null}
+              onChoose={setPicked}
+            />
             <AlertDialogDescription>
               Apply brings the changes back and keeps the stash; Pop also removes it. A conflict
               keeps the stash and lists the files to resolve.

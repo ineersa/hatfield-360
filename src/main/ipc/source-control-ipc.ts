@@ -28,8 +28,10 @@ import {
 } from '../git/source-control'
 import { dropStash, listStashes, stashChanges, unstash } from '../git/stash'
 import { STASH_CHANNELS } from '../../shared/stash-api'
+import { REVIEW_CHANNELS } from '../../shared/review-api'
+import { listPullRequests, repositoryReview } from '../git/review'
 import { worktreeStore } from '../git/worktree-store'
-import { launchHunk } from '../terminal/hunk-terminal'
+import { hunkNotesIn, launchHunk } from '../terminal/hunk-terminal'
 import { gridSize } from '../terminal/terminal-request'
 import { existingDirectory } from './terminal-ipc'
 import { handleTrusted } from './trusted-ipc'
@@ -41,7 +43,13 @@ export async function workingTree(root: unknown) {
   return workingTreeOf(worktreeStore.view(), root)
 }
 
-const HUNK_KINDS = new Set<unknown>(['review', 'log', 'stash'] satisfies HunkKind[])
+const HUNK_KINDS = new Set<unknown>([
+  'review',
+  'log',
+  'stash',
+  'branch',
+  'pull-request'
+] satisfies HunkKind[])
 const isHunkKind = (value: unknown): value is HunkKind => HUNK_KINDS.has(value)
 
 /** The git action each window is running, by its webContents id: only that window may stop it. */
@@ -139,6 +147,14 @@ export function registerSourceControlIpc(): void {
     return cancellable(event.sender, root, (signal) => abortOperation(root, operation, signal))
   })
 
+  handleTrusted(REVIEW_CHANNELS.repository, async (_event, root) =>
+    repositoryReview((await workingTree(root)).root)
+  )
+
+  handleTrusted(REVIEW_CHANNELS.pullRequests, async (_event, root) =>
+    listPullRequests((await workingTree(root)).root)
+  )
+
   handleTrusted(STASH_CHANNELS.list, async (_event, root) =>
     listStashes((await workingTree(root)).root)
   )
@@ -199,6 +215,11 @@ export function registerSourceControlIpc(): void {
     if (!size) throw new Error('Invalid hunk terminal size.')
     const place = await workingTree(request.root)
     await existingDirectory(place.root)
-    return launchHunk(event.sender, place, { kind, stash: request.stash }, size)
+    return launchHunk(event.sender, place, { kind, target: request.target }, size)
+  })
+
+  handleTrusted(SOURCE_CONTROL_CHANNELS.hunkNoteCount, (event, terminalId) => {
+    if (typeof terminalId !== 'string') throw new Error('Invalid terminal.')
+    return hunkNotesIn(event.sender, terminalId)
   })
 }
