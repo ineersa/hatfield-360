@@ -86,6 +86,9 @@ export function tabFor(
 /** By tab id: the terminal its hunk runs in. Not state: nothing is drawn from it. */
 const terminals = new Map<string, string>()
 
+/** The terminal a tab's hunk runs in, once started. */
+export const hunkTerminalOf = (id: string): string | undefined => terminals.get(id)
+
 /** The notes a tab's hunk holds; 0 when it can't say, so the tab closes as before. */
 async function notesIn(id: string): Promise<number> {
   const terminalId = terminals.get(id)

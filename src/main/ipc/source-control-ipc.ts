@@ -31,7 +31,7 @@ import { STASH_CHANNELS } from '../../shared/stash-api'
 import { REVIEW_CHANNELS } from '../../shared/review-api'
 import { listPullRequests, repositoryReview } from '../git/review'
 import { worktreeStore } from '../git/worktree-store'
-import { hunkNotesIn, launchHunk } from '../terminal/hunk-terminal'
+import { askAboutHunkIn, hunkNotesIn, hunkSessionIn, launchHunk } from '../terminal/hunk-terminal'
 import { gridSize } from '../terminal/terminal-request'
 import { existingDirectory } from './terminal-ipc'
 import { handleTrusted } from './trusted-ipc'
@@ -221,5 +221,15 @@ export function registerSourceControlIpc(): void {
   handleTrusted(SOURCE_CONTROL_CHANNELS.hunkNoteCount, (event, terminalId) => {
     if (typeof terminalId !== 'string') throw new Error('Invalid terminal.')
     return hunkNotesIn(event.sender, terminalId)
+  })
+
+  handleTrusted(SOURCE_CONTROL_CHANNELS.hunkSession, (event, terminalId) => {
+    if (typeof terminalId !== 'string') throw new Error('Invalid terminal.')
+    return hunkSessionIn(event.sender, terminalId)
+  })
+
+  handleTrusted(SOURCE_CONTROL_CHANNELS.askAboutHunk, (event, terminalId) => {
+    if (typeof terminalId !== 'string') throw new Error('Invalid terminal.')
+    return askAboutHunkIn(event.sender, terminalId)
   })
 }

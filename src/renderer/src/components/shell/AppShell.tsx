@@ -1,5 +1,6 @@
 import { startSlowTaskReports } from '@/lib/slow-task-reports'
 import { useEffect, useRef } from 'react'
+import { AskInChatDialog } from '@/components/chat/AskInChatDialog'
 import { MemorySearchDialog } from '@/components/memory/MemorySearchDialog'
 import { useMemorySearchShortcut } from '@/components/memory/use-memory-search-shortcut'
 import { ChatPanel } from '@/components/chat/ChatPanel'
@@ -107,6 +108,7 @@ export function AppShell(): React.JSX.Element {
   return (
     <TooltipProvider>
       <MemorySearchDialog />
+      <AskInChatDialog />
       {/* Every place without a menu of its own gets the text items. */}
       <TextContextMenu>
         <div className="type-body flex h-screen flex-col bg-frame">

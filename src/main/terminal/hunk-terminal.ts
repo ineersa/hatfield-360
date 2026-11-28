@@ -1,6 +1,11 @@
 import { randomUUID } from 'node:crypto'
 import type { WebContents } from 'electron'
-import type { HunkKind, HunkLaunch } from '../../shared/source-control-api'
+import type {
+  HunkAsk,
+  HunkKind,
+  HunkLaunch,
+  HunkSessionView
+} from '../../shared/source-control-api'
 import { diffBase } from '../git/source-control'
 import {
   gitHubTokenEnv,
@@ -10,6 +15,7 @@ import {
 } from '../git/review'
 import { stashToShow } from '../git/stash'
 import { UnsupportedAgentShell } from './agent-shell-command'
+import { askAboutHunk, hunkSessionView } from './hunk-ask'
 import { hunkNoteCount } from './hunk-notes'
 import { findOnShellPath } from './shell-lookup'
 import { terminalSessions } from './terminal-sessions'
@@ -32,12 +38,30 @@ const HUNK_ARGS: Record<HunkKind, (root: string, target: unknown) => Promise<str
 }
 
 /** Each hunk terminal's program and process, by terminal id, with the window that owns it. */
-const running = new Map<string, { owner: WebContents; hunk: string; pid: number }>()
+const running = new Map<string, { owner: WebContents; hunk: string; pid: number; root: string }>()
 
 /** How many review notes the hunk in the window's terminal holds; 0 for any other terminal. */
 export function hunkNotesIn(owner: WebContents, terminalId: string): Promise<number> {
   const terminal = running.get(terminalId)
-  return terminal?.owner === owner ? hunkNoteCount(terminal.hunk, terminal.pid) : Promise.resolve(0)
+  return terminal?.owner === owner
+    ? hunkNoteCount(terminal.hunk, terminal.pid, 'all')
+    : Promise.resolve(0)
+}
+
+/** The hunk session in the window's terminal; none for any other terminal. */
+export function hunkSessionIn(owner: WebContents, terminalId: string): Promise<HunkSessionView> {
+  const terminal = running.get(terminalId)
+  return terminal?.owner === owner
+    ? hunkSessionView(terminal.hunk, terminal.pid)
+    : Promise.resolve({ session: null })
+}
+
+/** Ask in Chat About This Hunk for the window's hunk terminal. */
+export function askAboutHunkIn(owner: WebContents, terminalId: string): Promise<HunkAsk> {
+  const terminal = running.get(terminalId)
+  return terminal?.owner === owner
+    ? askAboutHunk(terminal.hunk, terminal.pid, terminal.root)
+    : Promise.resolve({ status: 'none', reason: 'hunk isn’t running' })
 }
 
 /**
@@ -70,7 +94,7 @@ export async function launchHunk(
         }
       }
     )
-    running.set(id, { owner, hunk, pid: terminal.pid })
+    running.set(id, { owner, hunk, pid: terminal.pid, root: place.root })
     return { status: 'started', terminal }
   } catch (error) {
     if (error instanceof UnsupportedAgentShell)

@@ -99,6 +99,9 @@ const desktopApi: DesktopApi = {
   launchHunk: (request) => ipcRenderer.invoke(SOURCE_CONTROL_CHANNELS.launchHunk, request),
   hunkNoteCount: (terminalId) =>
     ipcRenderer.invoke(SOURCE_CONTROL_CHANNELS.hunkNoteCount, terminalId),
+  hunkSession: (terminalId) => ipcRenderer.invoke(SOURCE_CONTROL_CHANNELS.hunkSession, terminalId),
+  askAboutHunk: (terminalId) =>
+    ipcRenderer.invoke(SOURCE_CONTROL_CHANNELS.askAboutHunk, terminalId),
   abortGitOperation: (root, operation) =>
     ipcRenderer.invoke(SOURCE_CONTROL_CHANNELS.abortOperation, root, operation),
   cancelSourceControlAction: () => ipcRenderer.invoke(SOURCE_CONTROL_CHANNELS.cancel),

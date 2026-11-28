@@ -7,6 +7,7 @@ import {
   type LucideIcon
 } from 'lucide-react'
 import { useEffect, useRef } from 'react'
+import { HunkTabMenuItems } from '@/components/git/HunkTabMenuItems'
 import { ScrollingTabList } from '@/components/shell/ScrollingTabList'
 import {
   AlertDialog,
@@ -170,7 +171,11 @@ export function HunkTabs({
                 <StripTab
                   key={tab.id}
                   id={tab.id}
-                  menu={{ tabs: shownIds, close: (ids) => void requestClose(ids) }}
+                  menu={{
+                    tabs: shownIds,
+                    close: (ids) => void requestClose(ids),
+                    renderItems: (choose) => <HunkTabMenuItems tab={tab} choose={choose} />
+                  }}
                   title={tab.title}
                   label={tab.title}
                   active={tab.id === activeTabId}
