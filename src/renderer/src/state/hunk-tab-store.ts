@@ -27,8 +27,8 @@ type HunkTabState = {
   activeTabId: string | null
   /** The last launch found no hunk: the Git view shows how to install it. */
   missing: boolean
-  /** Tabs whose notes couldn't be saved, waiting on the user to close them anyway. */
-  unsaved: { ids: string[]; message: string } | null
+  /** Tabs being closed whose hunk holds review notes, waiting on the user to close them anyway. */
+  withNotes: { ids: string[]; count: number } | null
   /**
    * Shows the root's tab of that kind and target, opening one (shown once hunk runs) when there is
    * none. `target.label` ends the tab's title.
@@ -45,17 +45,17 @@ type HunkTabState = {
   hunkMissing: (id: string) => void
   /** hunk couldn't be started: the tab goes and the reason is a notification. */
   startFailed: (id: string, error: unknown) => void
-  /** Removes the tab; its hunk ends as the tab unmounts, saving its notes for the next run. */
+  /** Removes the tab; its hunk ends as the tab unmounts, and its review notes with it. */
   closeTab: (id: string) => void
   /** The terminal a tab's hunk runs in, once started. */
   attachTerminal: (id: string, terminalId: string) => void
   /**
-   * The user closes tabs: their notes are saved first, and the tabs close unless that failed, which
-   * `unsaved` then asks about.
+   * The user closes tabs: those whose hunk holds notes wait for `withNotes` to be answered, as
+   * hunk keeps notes only while it runs; the rest close.
    */
   requestClose: (ids: readonly string[]) => Promise<void>
-  /** Closes the tabs whose notes couldn't be saved (or keeps them, with `close: false`). */
-  settleUnsaved: (close: boolean) => void
+  /** Closes the tabs that hold notes (or keeps them, with `close: false`). */
+  settleNotes: (close: boolean) => void
   /**
    * Starts the root's Log tab's hunk afresh, in place: `hunk log` reads the history once, so a
    * commit, pull, switch or other ref change would otherwise not show. Review watches on its own.
@@ -85,6 +85,13 @@ export function tabFor(
 
 /** By tab id: the terminal its hunk runs in. Not state: nothing is drawn from it. */
 const terminals = new Map<string, string>()
+
+/** The notes a tab's hunk holds; 0 when it can't say, so the tab closes as before. */
+async function notesIn(id: string): Promise<number> {
+  const terminalId = terminals.get(id)
+  if (terminalId === undefined) return 0
+  return window.desktop.hunkNoteCount(terminalId).catch(() => 0)
+}
 
 const without = (set: ReadonlySet<string>, id: string): ReadonlySet<string> =>
   new Set([...set].filter((each) => each !== id))
@@ -117,7 +124,7 @@ export const useHunkTabStore = create<HunkTabState>((set, get) => {
     pending: new Set(),
     activeTabId: null,
     missing: false,
-    unsaved: null,
+    withNotes: null,
     open: (kind, root, name, target) => {
       const { tabs, pending } = get()
       const key = target?.key ?? target?.id ?? null
@@ -154,30 +161,15 @@ export const useHunkTabStore = create<HunkTabState>((set, get) => {
     closeTab: remove,
     attachTerminal: (id, terminalId) => terminals.set(id, terminalId),
     requestClose: async (ids) => {
-      const failed: string[] = []
-      let message = ''
-      await Promise.all(
-        ids.map(async (id) => {
-          const terminalId = terminals.get(id)
-          if (terminalId === undefined) return
-          try {
-            const saved = await window.desktop.saveHunkNotes(terminalId)
-            if (saved.status === 'failed') {
-              failed.push(id)
-              message = saved.message
-            }
-          } catch (error) {
-            failed.push(id)
-            message = mainErrorMessage(error)
-          }
-        })
-      )
-      for (const id of ids) if (!failed.includes(id)) remove(id)
-      if (failed.length > 0) set({ unsaved: { ids: failed, message } })
+      const counts = await Promise.all(ids.map(notesIn))
+      const kept = ids.filter((_id, index) => (counts[index] ?? 0) > 0)
+      for (const id of ids) if (!kept.includes(id)) remove(id)
+      if (kept.length > 0)
+        set({ withNotes: { ids: kept, count: counts.reduce((sum, count) => sum + count, 0) } })
     },
-    settleUnsaved: (close) => {
-      const ids = get().unsaved?.ids ?? []
-      set({ unsaved: null })
+    settleNotes: (close) => {
+      const ids = get().withNotes?.ids ?? []
+      set({ withNotes: null })
       if (close) for (const id of ids) remove(id)
     },
     reloadLog: (root) =>

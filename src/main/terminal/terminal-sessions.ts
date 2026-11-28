@@ -20,8 +20,6 @@ const OUTPUT_FLUSH_MS = 5
 const OUTPUT_FLUSH_BYTES = 256 * 1024
 /** How long a shell and its jobs get to exit after SIGHUP before they are killed. */
 const KILL_GRACE_MS = 1500
-/** How long a program's last words (hunk saving its notes) may hold up its ending. */
-const BEFORE_END_MS = 5000
 const EXIT_POLL_MS = 50
 /**
  * Flow control: output the page hasn't drawn yet. Past the high mark the pty stops being read (the
@@ -50,7 +48,6 @@ type Session = {
   exited: Promise<void>
   ending: Promise<void> | null
   onClosing: (() => void) | undefined
-  beforeEnd: (() => Promise<void>) | undefined
 }
 
 /** Packaged macOS builds can lose node-pty's spawn-helper exec bit, which breaks every spawn. */
@@ -110,8 +107,6 @@ class TerminalSessions {
       args: string[]
       env: Record<string, string>
       onClosing?: () => void
-      /** Runs, still alive, before it is hung up: bounded, and its failure doesn't stop the end. */
-      beforeEnd?: () => Promise<void>
       onExit?: () => string | undefined
     }
   ): Promise<TerminalSession> {
@@ -173,8 +168,7 @@ class TerminalSessions {
       detached: false,
       exited: new Promise((resolve) => pty.onExit(() => resolve())),
       ending: null,
-      onClosing: command?.onClosing,
-      beforeEnd: command?.beforeEnd
+      onClosing: command?.onClosing
     }
     this.sessions.set(id, session)
     this.endWithOwner(owner)
@@ -241,9 +235,7 @@ class TerminalSessions {
     if (!session.ending) {
       session.onClosing?.()
       if (session.bootstrapToken) agentStatusServer.closeBootstrap(session.bootstrapToken)
-      const ending = lastWords(session)
-        .then(() => this.terminate(session))
-        .finally(() => this.endings.delete(ending))
+      const ending = this.terminate(session).finally(() => this.endings.delete(ending))
       this.endings.add(ending)
       session.ending = ending
     }
@@ -340,16 +332,6 @@ class TerminalSessions {
       session.pty.pause()
     }
   }
-}
-
-/** The session's `beforeEnd`, given at most BEFORE_END_MS; whatever it does, the end goes on. */
-function lastWords(session: Session): Promise<void> {
-  if (!session.beforeEnd) return Promise.resolve()
-  let timer: NodeJS.Timeout | undefined
-  return Promise.race([
-    session.beforeEnd().catch((error: unknown) => console.warn('Before ending a terminal:', error)),
-    new Promise<void>((resolve) => (timer = setTimeout(resolve, BEFORE_END_MS)))
-  ]).finally(() => clearTimeout(timer))
 }
 
 function sendSignal(pid: number, name: NodeJS.Signals): void {

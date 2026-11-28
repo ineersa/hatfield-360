@@ -147,8 +147,8 @@ export function HunkTabs({
   const activeTabId = useHunkTabStore((state) => state.activeTabId)
   const activateTab = useHunkTabStore((state) => state.activateTab)
   const requestClose = useHunkTabStore((state) => state.requestClose)
-  const unsaved = useHunkTabStore((state) => state.unsaved)
-  const settleUnsaved = useHunkTabStore((state) => state.settleUnsaved)
+  const withNotes = useHunkTabStore((state) => state.withNotes)
+  const settleNotes = useHunkTabStore((state) => state.settleNotes)
   const shownIds = tabs.filter((tab) => !pending.has(tab.id)).map((tab) => tab.id)
 
   return (
@@ -195,19 +195,24 @@ export function HunkTabs({
         ))}
       </div>
       <AlertDialog
-        open={unsaved !== null}
+        open={withNotes !== null}
         onOpenChange={(open) => {
-          if (!open) settleUnsaved(false)
+          if (!open) settleNotes(false)
         }}
       >
         <AlertDialogContent>
-          <AlertDialogTitle>Close without saving the notes?</AlertDialogTitle>
-          <AlertDialogDescription className="break-words">
-            {`The review notes in hunk couldn't be saved: ${unsaved?.message ?? ''} Closing ends hunk, and they're lost.`}
+          <AlertDialogTitle>
+            {withNotes?.count === 1
+              ? 'Close and lose 1 note?'
+              : `Close and lose ${withNotes?.count ?? 0} notes?`}
+          </AlertDialogTitle>
+          <AlertDialogDescription>
+            hunk keeps review notes only while it runs. Have an agent answer them, or copy what you
+            need, before closing.
           </AlertDialogDescription>
           <AlertDialogFooter>
             <AlertDialogCancel>Keep Open</AlertDialogCancel>
-            <AlertDialogAction onClick={() => settleUnsaved(true)}>Close Anyway</AlertDialogAction>
+            <AlertDialogAction onClick={() => settleNotes(true)}>Close Anyway</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
