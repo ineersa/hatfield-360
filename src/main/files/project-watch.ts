@@ -1,8 +1,21 @@
 import { type FSWatcher, watch } from 'chokidar'
+import { realpath } from 'node:fs/promises'
 import { basename, dirname } from 'node:path'
 import { isDependencyFolder } from '../../shared/dependency-folders'
 import { ignoredNames, ignoredPaths } from '../git/git-ignore'
+import { worktreeStore } from '../git/worktree-store'
 import { isPathInside } from './path-containment'
+
+/** The repositories directly inside `root` that the worktree store follows (a multi-repo project), as real paths. */
+async function repositoriesInside(root: string): Promise<string[]> {
+  const folders = worktreeStore
+    .view()
+    .flatMap((project) => (project.repositories ?? []).map((repository) => repository.folder))
+  const real = await Promise.all(folders.map((folder) => realpath(folder).catch(() => null)))
+  return real
+    .filter((folder): folder is string => folder !== null && dirname(folder) === root)
+    .toSorted((a, b) => a.localeCompare(b))
+}
 
 /** Writes come in bursts (a save, a checkout, an install); they are reported together. */
 const BATCH_DELAY_MS = 100
@@ -34,12 +47,16 @@ class ProjectWatch {
   private timer: NodeJS.Timeout | null = null
   private closed = false
   private failed = false
+  /** The multi-repo project's repositories whose ignore rules apply here. */
+  private repositories: string[] = []
+  private readonly unfollowRepositories: () => void
 
   constructor(
     readonly root: string,
     private readonly fail: (message: string) => void
   ) {
     this.ready = this.start()
+    this.unfollowRepositories = worktreeStore.onChange(() => void this.repositoriesChanged())
   }
 
   /** Whether changes to `path` are heard here: inside the folder and not ignored. */
@@ -50,13 +67,15 @@ class ProjectWatch {
   close(): void {
     this.closed = true
     this.started = false
+    this.unfollowRepositories()
     if (this.timer) clearTimeout(this.timer)
     void this.watcher?.close()
     projectsChanged()
   }
 
   private async start(): Promise<boolean> {
-    this.ignored = new Set(await ignoredPaths(this.root))
+    this.repositories = await repositoriesInside(this.root)
+    this.ignored = new Set(await ignoredPaths(this.root, this.repositories))
     if (this.closed) return false
     const watcher = watch(this.root, {
       ignoreInitial: true,
@@ -112,8 +131,16 @@ class ProjectWatch {
     projectsChanged()
   }
 
+  /** A repository cloned into, or removed from, a multi-repo project brings its own ignore rules. */
+  private async repositoriesChanged(): Promise<void> {
+    const now = await repositoriesInside(this.root)
+    if (this.closed || JSON.stringify(now) === JSON.stringify(this.repositories)) return
+    this.repositories = now
+    await this.refreshIgnored()
+  }
+
   private async refreshIgnored(): Promise<void> {
-    const now = new Set(await ignoredPaths(this.root))
+    const now = new Set(await ignoredPaths(this.root, this.repositories))
     if (this.closed) return
     const before = this.ignored
     this.ignored = now

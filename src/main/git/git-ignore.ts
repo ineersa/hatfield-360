@@ -1,4 +1,3 @@
-import { lstat, readdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import { GitError, runGit } from './git-command'
 
@@ -18,24 +17,15 @@ export async function ignoredNames(folder: string, names: string[]): Promise<Set
 
 /**
  * What git ignores under `folder`, each wholly ignored folder named once instead of its contents;
- * nothing when git can't say. A folder that isn't a repository (a multi-repo folder) gets what each
- * repository directly inside it ignores.
+ * nothing when git can't say.
  */
-export async function ignoredPaths(folder: string): Promise<string[]> {
+export async function ignoredPaths(folder: string, repositories: string[] = []): Promise<string[]> {
   try {
     return await repositoryIgnoredPaths(folder)
   } catch (error) {
     if (!(error instanceof GitError) || error.reason !== 'not-git') return []
-    const names = await readdir(folder).catch((): string[] => [])
     const inside = await Promise.all(
-      names.map(async (name) => {
-        const path = join(folder, name)
-        const repository = await lstat(join(path, '.git')).then(
-          () => true,
-          () => false
-        )
-        return repository ? repositoryIgnoredPaths(path).catch((): string[] => []) : []
-      })
+      repositories.map((path) => repositoryIgnoredPaths(path).catch((): string[] => []))
     )
     return inside.flat()
   }

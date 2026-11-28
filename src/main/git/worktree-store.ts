@@ -21,6 +21,8 @@ type Project = {
   multiRepo: boolean
   /** The repositories found directly inside a multi-repo project, by name. */
   children: string[]
+  /** A multi-repo project's subfolders as last listed: a rename of one is a folder added or removed. */
+  subfolders: Set<string>
   state: ProjectWorktrees | null
   /** Watched folders by path: the project, the repository's git dir and its worktree records. */
   watchers: Map<string, Watch>
@@ -99,8 +101,9 @@ export class WorktreeStore {
   private order: string[] = []
   private readonly listeners = new Set<ChangeListener>()
 
-  onChange(listener: ChangeListener): void {
+  onChange(listener: ChangeListener): () => void {
     this.listeners.add(listener)
+    return () => this.listeners.delete(listener)
   }
 
   view(): ProjectWorktrees[] {
@@ -118,14 +121,17 @@ export class WorktreeStore {
 
   /** Follows the workspace's folders: new ones are listed and watched, removed ones dropped. */
   async setFolders(folders: WatchedFolder[]): Promise<void> {
-    this.order = folders.map((folder) => folder.path)
+    const paths = folders.map((folder) => folder.path)
+    const projectsChanged = JSON.stringify(paths) !== JSON.stringify(this.order)
+    this.order = paths
     const marked = new Map(folders.map((folder) => [folder.path, folder.multiRepo]))
     const refreshed: string[] = []
     for (const [folder, project] of this.projects) {
       const multiRepo = marked.get(folder)
       if (project.parent === null && multiRepo !== undefined) {
         // A marked folder looks again: a repository in it may have become a project, or stopped being one.
-        if (project.multiRepo !== multiRepo || multiRepo) refreshed.push(folder)
+        if (project.multiRepo !== multiRepo || (multiRepo && projectsChanged))
+          refreshed.push(folder)
         project.multiRepo = multiRepo
         continue
       }
@@ -179,6 +185,7 @@ export class WorktreeStore {
       parent,
       multiRepo,
       children: [],
+      subfolders: new Set(),
       state: null,
       watchers: new Map(),
       gitDir: null,
@@ -218,10 +225,15 @@ export class WorktreeStore {
     const wanted = await this.existing([project.folder, ...dirs, ...plain])
     if (!current()) return false
     this.watch(project, wanted, new Set(dirs))
-    const childrenChanged = await this.setChildren(project, found)
-    const changed = JSON.stringify(state) !== JSON.stringify(project.state)
+    const changed =
+      JSON.stringify(state) !== JSON.stringify(project.state) ||
+      JSON.stringify(found) !== JSON.stringify(project.children)
+    // Saved before the new repositories are read, so a refresh started meanwhile still wins.
     project.state = state
-    return changed || childrenChanged
+    project.subfolders = new Set([...found, ...plain])
+    const added = this.setChildren(project, found)
+    await Promise.all(added.map((child) => this.refresh(child)))
+    return changed
   }
 
   /** The repositories directly inside a folder, by name: each subfolder with a `.git` that isn't a workspace project. */
@@ -246,18 +258,16 @@ export class WorktreeStore {
       .filter((path) => !repositories.includes(path))
   }
 
-  /** Follows the repositories now found in a multi-repo project; true when the list or a new one's state changed. */
-  private async setChildren(project: Project, found: string[]): Promise<boolean> {
-    const before = project.children
-    project.children = found
-    for (const child of before) {
+  /** Follows the repositories now found in a multi-repo project; returns those new to it. */
+  private setChildren(project: Project, found: string[]): string[] {
+    for (const child of project.children) {
       const tracked = this.projects.get(child)
       if (!found.includes(child) && tracked?.parent === project.folder) this.drop(tracked)
     }
+    project.children = found
     const added = found.filter((child) => !this.projects.has(child))
     for (const child of added) this.projects.set(child, this.track(child, project.folder, false))
-    await Promise.all(added.map((child) => this.refresh(child)))
-    return JSON.stringify(before) !== JSON.stringify(found)
+    return added
   }
 
   /** The git dir (main HEAD, `worktrees` appearing), its `worktrees` folder and each record (linked HEADs). */
@@ -294,16 +304,21 @@ export class WorktreeStore {
     }
     for (const [dir, ino] of wanted) {
       if (project.watchers.has(dir)) continue
-      // The project folder alone only matters for `.git` (`git init`, a deleted `.git`), as do a
-      // multi-repo folder's plain subfolders; a bare repository's folder is also its git dir, where
-      // every change counts. In a multi-repo folder, a subfolder added or removed counts too.
-      // The mark is read per event: a folder marked later keeps the watch it had.
+      // Outside a git dir only `.git` counts, except a subfolder added to or removed from a multi-repo folder.
       const gitDir = gitDirs.has(dir)
       try {
         const watcher = watch(dir, (event, name) => {
-          const added = dir === project.folder && project.multiRepo && event === 'rename'
+          if (
+            dir === project.folder &&
+            project.multiRepo &&
+            event === 'rename' &&
+            name !== '.git'
+          ) {
+            this.subfolderRenamed(project, name)
+            return
+          }
           const onlyGitEntry = !gitDir && (dir === project.folder || project.multiRepo)
-          if (!added && (onlyGitEntry ? name !== null && name !== '.git' : isNoise(name))) return
+          if (onlyGitEntry ? name !== null && name !== '.git' : isNoise(name)) return
           this.schedule(project)
         })
         // A watched record folder disappears when its worktree is removed.
@@ -317,6 +332,20 @@ export class WorktreeStore {
         // Gone between listing and watching; the next refresh sees that.
       }
     }
+  }
+
+  /** Lists a multi-repo project again for a subfolder added or removed, not for a file (an atomic save). */
+  private subfolderRenamed(project: Project, name: string | null): void {
+    if (name === null || project.subfolders.has(join(project.folder, name))) {
+      this.schedule(project)
+      return
+    }
+    void stat(join(project.folder, name)).then(
+      (info) => {
+        if (info.isDirectory()) this.schedule(project)
+      },
+      () => undefined
+    )
   }
 
   private schedule(project: Project): void {

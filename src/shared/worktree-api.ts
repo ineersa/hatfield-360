@@ -19,10 +19,7 @@ export type RepositoryWorktrees =
   | { folder: string; status: 'git'; worktrees: Worktree[] }
   | { folder: string; status: 'error'; message: string }
 
-/**
- * What git says about a workspace project folder. A multi-repo folder also lists the repositories
- * directly inside it, by name; one that is itself a workspace project is listed there instead.
- */
+/** What git says about a workspace project folder; a multi-repo folder also lists the repositories inside it. */
 export type ProjectWorktrees = (RepositoryWorktrees | { folder: string; status: 'not-git' }) & {
   repositories?: RepositoryWorktrees[]
 }

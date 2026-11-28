@@ -119,21 +119,19 @@ test('a folder marked as multi-repo gives each repository inside it the Git pane
         await expect(fileItem(page, 'dist')).toHaveAttribute('data-ignored', 'true')
         await expect(fileItem(page, '.gitignore')).not.toHaveAttribute('data-ignored')
 
-        // A repository made in the folder later shows up without a restart.
-        await repository(fixture.apps, 'cli', 'c.txt')
-        await showGit(page)
-        await expect(row(page, 'apps/cli')).toBeVisible()
-        // The next launch reopens the last view; leaving Git lets it be opened again there.
-        await showView(page, 'Files')
+        // The next launch reopens this last view, Files, so Git can be opened there.
       },
       { userDataDir: fixture.userData, env: fixture.env }
     )
 
+    // A repository cloned into the folder while the app is closed is listed at the next launch.
+    await repository(fixture.apps, 'cli', 'c.txt')
     await withApp(
       async (_app, page) => {
         // The mark is kept; Unmark from the Files tree turns the folder back into one project.
         await showGit(page)
         await expect(row(page, 'apps/api')).toBeVisible()
+        await expect(row(page, 'apps/cli')).toBeVisible()
         await showView(page, 'Files')
         await fileItem(page, 'apps').click({ button: 'right' })
         await page.getByRole('menuitem', { name: 'Unmark as Multi-Repo Folder' }).click()

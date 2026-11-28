@@ -19,8 +19,7 @@ type GroupPlace =
  * still has a folder for, each listed once even when two projects share a repository. A project's
  * own working tree goes by its workspace folder, as the Files tree and editor tabs name its files,
  * even when that folder is a symlink and git prints the resolved path; linked worktrees go by git's
- * path, as the Files tree lists them. A repository inside a multi-repo project goes by
- * `project/repository`; a multi-repo project with repositories has no "not git" place of its own.
+ * path, as the Files tree lists them.
  */
 function groupPlaces(projects: ProjectWorktrees[]): GroupPlace[] {
   const ownFolder = new Map<string, string>()
@@ -36,6 +35,7 @@ function groupPlaces(projects: ProjectWorktrees[]): GroupPlace[] {
       return [{ ...own, name: basename(project.folder), worktree: false, status: 'not-git' }]
     }
     return repositories.flatMap((repository): GroupPlace[] => {
+      // A repository inside a multi-repo project goes by `project/repository`.
       const inside = repository.folder !== project.folder
       const label = (folder: string): string =>
         inside && folder === repository.folder
