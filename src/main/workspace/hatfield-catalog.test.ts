@@ -164,7 +164,8 @@ it('reports each missing catalog directory separately without starting the confi
         name,
         path: join(root, name),
         kind: 'project',
-        missing: false
+        missing: false,
+        multiRepo: false
       })),
       [],
       { executable: 'php', args: ['/unused/hatfield.phar'], env: {} },
@@ -184,7 +185,9 @@ async function withProject(
 ) {
   const project = await realpath(await mkdtemp(join(tmpdir(), 'hatfield-command-')))
   try {
-    await run(project, [{ name: 'app', path: project, kind: 'project', missing: false }])
+    await run(project, [
+      { name: 'app', path: project, kind: 'project', missing: false, multiRepo: false }
+    ])
   } finally {
     await rm(project, { recursive: true, force: true })
   }

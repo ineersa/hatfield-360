@@ -16,6 +16,7 @@ type WorkspaceState = {
   addFolder: () => Promise<void>
   removeFolder: (path: string) => Promise<void>
   setFolderKind: (path: string, kind: WorkspaceFolderKind) => Promise<void>
+  setFolderMultiRepo: (path: string, multiRepo: boolean) => Promise<void>
   openWorkspaceFile: () => Promise<void>
   openRecent: (target: RecentTarget) => Promise<void>
   removeRecent: (target: RecentTarget) => Promise<void>
@@ -49,6 +50,8 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => {
     addFolder: () => run(() => window.desktop.addWorkspaceFolder()),
     removeFolder: (path) => run(() => window.desktop.removeWorkspaceFolder(path)),
     setFolderKind: (path, kind) => run(() => window.desktop.setWorkspaceFolderKind(path, kind)),
+    setFolderMultiRepo: (path, multiRepo) =>
+      run(() => window.desktop.setWorkspaceFolderMultiRepo(path, multiRepo)),
     openWorkspaceFile: () => run(() => window.desktop.openWorkspaceFile()),
     openRecent: ({ kind, path }) => run(() => window.desktop.openRecent({ kind, path })),
     removeRecent: ({ kind, path }) => run(() => window.desktop.removeRecent({ kind, path }))

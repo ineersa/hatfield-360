@@ -6,7 +6,7 @@ const project: TreeRoot = {
   path: '/work/app',
   name: 'app',
   branch: 'main',
-  folder: { path: '/work/app', name: 'app', kind: 'project', missing: false },
+  folder: { path: '/work/app', name: 'app', kind: 'project', missing: false, multiRepo: false },
   // A linked worktree kept inside its project's folder.
   worktrees: [{ path: '/work/app/.worktrees/fix', name: 'fix', branch: 'fix' }]
 }
@@ -14,7 +14,7 @@ const notes: TreeRoot = {
   path: '/notes',
   name: 'notes',
   branch: null,
-  folder: { path: '/notes', name: 'notes', kind: 'folder', missing: false },
+  folder: { path: '/notes', name: 'notes', kind: 'folder', missing: false, multiRepo: false },
   worktrees: []
 }
 

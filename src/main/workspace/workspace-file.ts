@@ -36,7 +36,7 @@ function containedInstructionsFile(stored: string, file: string): string | null 
 }
 
 /** A folder of an open workspace, by absolute path. */
-export type WorkspaceEntry = { path: string; kind: WorkspaceFolderKind }
+export type WorkspaceEntry = { path: string; kind: WorkspaceFolderKind; multiRepo?: true }
 
 /** What a workspace file holds, with paths absolute. */
 export type WorkspaceContents = {
@@ -77,10 +77,10 @@ export async function readWorkspaceFile(file: string): Promise<ReadWorkspaceFile
   }
   const parsed = parseWorkspaceDocument(text)
   if (parsed.status !== 'ok') return parsed
-  const folders = new Map<string, WorkspaceFolderKind>()
-  for (const { path, kind } of parsed.document.folders) {
-    const absolute = fromStoredFolderPath(path, file)
-    if (!folders.has(absolute)) folders.set(absolute, kind)
+  const folders = new Map<string, WorkspaceEntry>()
+  for (const folder of parsed.document.folders) {
+    const absolute = fromStoredFolderPath(folder.path, file)
+    if (!folders.has(absolute)) folders.set(absolute, { ...folder, path: absolute })
   }
   const instructions =
     parsed.document.instructions === undefined
@@ -89,7 +89,7 @@ export async function readWorkspaceFile(file: string): Promise<ReadWorkspaceFile
   return {
     status: 'ok',
     ...(parsed.document.terminals ? { terminals: parsed.document.terminals } : {}),
-    folders: [...folders].map(([path, kind]) => ({ path, kind })),
+    folders: [...folders.values()],
     ...(instructions === null ? {} : { instructions })
   }
 }
@@ -101,7 +101,7 @@ export function writeWorkspaceFile(
   const document = {
     ...EMPTY_WORKSPACE_DOCUMENT,
     ...(terminals?.tabs.length ? { terminals } : {}),
-    folders: folders.map(({ path, kind }) => ({ path: toStoredFolderPath(path, file), kind })),
+    folders: folders.map((folder) => ({ ...folder, path: toStoredFolderPath(folder.path, file) })),
     ...(instructions === undefined ? {} : { instructions: toStoredFolderPath(instructions, file) })
   }
   return writeFileAtomic(file, serializeWorkspaceDocument(document))

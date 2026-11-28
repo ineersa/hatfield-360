@@ -39,7 +39,7 @@ afterEach(() => {
 
 async function follow(folder: string): Promise<WorktreeStore> {
   store = new WorktreeStore()
-  await store.setFolders([folder])
+  await store.setFolders([{ path: folder, multiRepo: false }])
   return store
 }
 

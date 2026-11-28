@@ -1,4 +1,5 @@
 import type { WorkspaceFolder } from '../../shared/workspace-api'
+import { linkedWorktrees } from '../../shared/project-repositories'
 import type { ProjectWorktrees } from '../../shared/worktree-api'
 import { worktreeStore } from '../git/worktree-store'
 import { workspaceStore } from '../workspace/workspace-store'
@@ -18,9 +19,9 @@ function rootsOf(folders: WorkspaceFolder[], projects: ProjectWorktrees[]): File
     present.filter((folder) => folder.kind === 'project').map((folder) => folder.path)
   )
   const worktrees = projects.flatMap((project) =>
-    project.status === 'git' && projectPaths.has(project.folder)
-      ? project.worktrees
-          .filter((worktree) => !worktree.project && !worktree.prunable)
+    projectPaths.has(project.folder)
+      ? linkedWorktrees(project)
+          .filter((worktree) => !worktree.prunable)
           .map((worktree) => ({ path: worktree.path, git: true }))
       : []
   )

@@ -71,17 +71,17 @@ async function cancellable<T extends GitOutcome>(
   }
 }
 
-/** Runs a branch action, then lists the project's worktrees again: their branches changed. */
+/** Runs a branch action, then lists the repository's worktrees again: their branches changed. */
 async function onBranches<T extends GitOutcome>(
   sender: WebContents,
   request: unknown,
   action: (root: string, signal: AbortSignal) => Promise<T>
 ): Promise<T> {
-  const { root, project } = await workingTree(request)
+  const { root, repository } = await workingTree(request)
   try {
     return await cancellable(sender, root, (signal) => action(root, signal))
   } finally {
-    await worktreeStore.relist(project)
+    await worktreeStore.relist(repository)
   }
 }
 

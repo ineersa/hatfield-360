@@ -19,6 +19,7 @@ import { type AgentSession } from '../../../../shared/agent-api'
 import {
   ChevronRight,
   CircleAlert,
+  FolderGit2,
   FolderMinus,
   FolderPlus,
   FolderX,
@@ -54,18 +55,30 @@ import { useWorkspaceStore } from '@/state/workspace-store'
 import { useWorktreeStore } from '@/state/worktree-store'
 import type { WorkspaceFolder } from '../../../../shared/workspace-api'
 import type { ProjectWorktrees, Worktree } from '../../../../shared/worktree-api'
+import {
+  type LinkedWorktree,
+  linkedWorktrees,
+  projectRepositories
+} from '../../../../shared/project-repositories'
 
 const worktreeLabel = (worktree: Worktree): string =>
   worktree.branch ?? `detached ${worktree.head.slice(0, 7)}`
+
+/** The folder's last name, whichever separator its platform uses. */
+const lastName = (path: string): string => path.split(/[\\/]/).filter(Boolean).at(-1) ?? path
 
 function WorktreeRow({
   worktree,
   project
 }: {
-  worktree: Worktree
+  worktree: LinkedWorktree
   project: string
 }): React.JSX.Element {
-  const label = worktreeLabel(worktree)
+  // A worktree of a repository inside a multi-repo folder names the repository first.
+  const label =
+    worktree.repository === project
+      ? worktreeLabel(worktree)
+      : `${lastName(worktree.repository)}: ${worktreeLabel(worktree)}`
   const pathTip = usePointerTooltip()
   const pruneMissing = useWorktreeStore((state) => state.pruneMissing)
   return (
@@ -110,10 +123,12 @@ function WorktreeRow({
   )
 }
 
-/** Rows a project can fold away: its linked worktrees, or why git can't list them. */
+/** Rows a project can fold away: its linked worktrees, or why git can't list a repository. */
 function hasChildRows(project: ProjectWorktrees | undefined): boolean {
-  if (project?.status === 'error') return true
-  return project?.status === 'git' && project.worktrees.some((worktree) => !worktree.project)
+  return (
+    projectRepositories(project).some((repository) => repository.status === 'error') ||
+    linkedWorktrees(project).length > 0
+  )
 }
 
 function LinkedWorktrees({
@@ -121,7 +136,7 @@ function LinkedWorktrees({
   worktrees
 }: {
   folder: WorkspaceFolder
-  worktrees: Worktree[]
+  worktrees: LinkedWorktree[]
 }): React.JSX.Element {
   const [expanded, setExpanded] = useState(false)
   const listId = useId()
@@ -165,7 +180,10 @@ function ProjectContents({
   const project = useWorktreeStore((state) => state.projects[folder.path])
   const collapsed = useWorktreeStore((state) => state.collapsed[folder.path] === true)
   if (collapsed) return null
-  const linked = project?.status === 'git' ? project.worktrees.filter((tree) => !tree.project) : []
+  const linked = linkedWorktrees(project)
+  const failed = projectRepositories(project).flatMap((repository) =>
+    repository.status === 'error' ? [repository] : []
+  )
   return (
     <>
       {visible.length > 0 && (
@@ -188,14 +206,17 @@ function ProjectContents({
         live={live}
         now={now}
       />
-      {project?.status === 'error' && (
-        <li>
+      {failed.map((repository) => (
+        <li key={repository.folder}>
           <p role="alert" className="type-hint flex gap-2 px-1 py-1">
             <CircleAlert className="mt-0.5 size-3.5 shrink-0 text-error" aria-hidden />
-            <span className="min-w-0 break-words">Git: {project.message}</span>
+            <span className="min-w-0 break-words">
+              {repository.folder === folder.path ? 'Git' : `Git (${lastName(repository.folder)})`}:{' '}
+              {repository.message}
+            </span>
           </p>
         </li>
-      )}
+      ))}
       {linked.length > 0 && <LinkedWorktrees folder={folder} worktrees={linked} />}
     </>
   )
@@ -210,6 +231,7 @@ function ProjectRow({
 }): React.JSX.Element {
   const removeFolder = useWorkspaceStore((state) => state.removeFolder)
   const setFolderKind = useWorkspaceStore((state) => state.setFolderKind)
+  const setFolderMultiRepo = useWorkspaceStore((state) => state.setFolderMultiRepo)
   const pathTip = usePointerTooltip()
   const project = useWorktreeStore((state) => state.projects[folder.path])
   const collapsed = useWorktreeStore((state) => state.collapsed[folder.path] === true)
@@ -252,7 +274,7 @@ function ProjectRow({
               {folder.missing ? (
                 <FolderX className="size-4.5 shrink-0 text-error" aria-hidden />
               ) : (
-                <RootFolderIcon className="size-4.5 shrink-0" />
+                <RootFolderIcon multiRepo={folder.multiRepo} className="size-4.5 shrink-0" />
               )}
               <span
                 className={cn(
@@ -305,6 +327,10 @@ function ProjectRow({
         >
           <Search aria-hidden />
           Search Memory…
+        </ContextMenuItem>
+        <ContextMenuItem onSelect={() => void setFolderMultiRepo(folder.path, !folder.multiRepo)}>
+          <FolderGit2 aria-hidden />
+          {folder.multiRepo ? 'Unmark as Multi-Repo Folder' : 'Mark as Multi-Repo Folder'}
         </ContextMenuItem>
         <ContextMenuItem onSelect={() => void setFolderKind(folder.path, 'folder')}>
           <FolderMinus aria-hidden />

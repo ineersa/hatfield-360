@@ -7,6 +7,7 @@ import { AGENT_CHANNELS, type AgentNotification, type AgentProvider } from '../.
 import { isPlainObject } from '../../shared/plain-object'
 import { agentSnapshot, trackAgentSessions } from '../agent-status/agent-sessions'
 import { worktreeStore } from '../git/worktree-store'
+import { linkedWorktrees } from '../../shared/project-repositories'
 import { settingsStore } from '../settings/settings-store'
 import { gridSize, isTerminalId } from '../terminal/terminal-request'
 import { terminalSessions } from '../terminal/terminal-sessions'
@@ -159,11 +160,7 @@ export function registerAgentIpc(): void {
       cwd = placement.cwd
       const linked = worktreeStore
         .view()
-        .find(
-          (entry) =>
-            entry.status === 'git' &&
-            entry.worktrees.some((tree) => tree.path === cwd && !tree.prunable)
-        )
+        .find((entry) => linkedWorktrees(entry).some((tree) => tree.path === cwd && !tree.prunable))
       project =
         placement.project ??
         folders.find((folder) => folder.path === cwd)?.path ??
@@ -181,10 +178,7 @@ export function registerAgentIpc(): void {
       const linked = worktreeStore.view().find((entry) => entry.folder === project)
       if (
         cwd !== project &&
-        !(
-          linked?.status === 'git' &&
-          linked.worktrees.some((tree) => tree.path === cwd && !tree.prunable)
-        )
+        !linkedWorktrees(linked).some((tree) => tree.path === cwd && !tree.prunable)
       )
         throw new Error('Choose a worktree belonging to this project.')
     }

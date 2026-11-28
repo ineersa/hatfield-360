@@ -86,6 +86,15 @@ export function registerWorkspaceIpc(): void {
     }
   })
 
+  handleTrusted(WORKSPACE_CHANNELS.setFolderMultiRepo, async (_event, path, multiRepo) => {
+    if (typeof path !== 'string' || path === '' || typeof multiRepo !== 'boolean') {
+      throw new Error('setWorkspaceFolderMultiRepo expects a folder path and a boolean')
+    }
+    if (!(await workspaceStore.setFolderMultiRepo(path, multiRepo))) {
+      throw new Error(`Not in the workspace: ${path}`)
+    }
+  })
+
   handleTrusted(WORKSPACE_CHANNELS.openFile, (event) =>
     pickAndOpenWorkspaceFile(BrowserWindow.fromWebContents(event.sender))
   )

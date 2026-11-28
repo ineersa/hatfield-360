@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import type { RecentCatalog } from '../../../shared/recent-conversation'
 import type { WorkspaceView } from '../../../shared/workspace-api'
+import { projectRepositories } from '../../../shared/project-repositories'
 import type { ProjectWorktrees } from '../../../shared/worktree-api'
 import { mainErrorMessage } from '@/lib/main-error-message'
 
@@ -15,9 +16,11 @@ export function recentCatalogScope(
       .map(({ path, missing }) => [
         path,
         missing,
-        projects[path]?.status === 'git'
-          ? projects[path].worktrees.map(({ path: treePath, prunable }) => [treePath, prunable])
-          : []
+        projectRepositories(projects[path]).flatMap((repository) =>
+          repository.status === 'git'
+            ? repository.worktrees.map(({ path: treePath, prunable }) => [treePath, prunable])
+            : []
+        )
       ])
   )
 }

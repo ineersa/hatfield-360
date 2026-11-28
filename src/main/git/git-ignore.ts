@@ -1,5 +1,6 @@
+import { lstat, readdir } from 'node:fs/promises'
 import { join } from 'node:path'
-import { runGit } from './git-command'
+import { GitError, runGit } from './git-command'
 
 /** Names in `folder` that git ignores; none when git can't say (not a repository, a submodule's files). */
 export async function ignoredNames(folder: string, names: string[]): Promise<Set<string>> {
@@ -17,25 +18,42 @@ export async function ignoredNames(folder: string, names: string[]): Promise<Set
 
 /**
  * What git ignores under `folder`, each wholly ignored folder named once instead of its contents;
- * nothing when git can't say.
+ * nothing when git can't say. A folder that isn't a repository (a multi-repo folder) gets what each
+ * repository directly inside it ignores.
  */
 export async function ignoredPaths(folder: string): Promise<string[]> {
   try {
-    const output = await runGit(folder, [
-      'ls-files',
-      '--others',
-      '--ignored',
-      '--exclude-standard',
-      '--directory',
-      '-z'
-    ])
-    return output
-      .split('\0')
-      .filter((path) => path !== '')
-      .map((path) => join(folder, path.replace(/\/$/, '')))
-  } catch {
-    return []
+    return await repositoryIgnoredPaths(folder)
+  } catch (error) {
+    if (!(error instanceof GitError) || error.reason !== 'not-git') return []
+    const names = await readdir(folder).catch((): string[] => [])
+    const inside = await Promise.all(
+      names.map(async (name) => {
+        const path = join(folder, name)
+        const repository = await lstat(join(path, '.git')).then(
+          () => true,
+          () => false
+        )
+        return repository ? repositoryIgnoredPaths(path).catch((): string[] => []) : []
+      })
+    )
+    return inside.flat()
   }
+}
+
+async function repositoryIgnoredPaths(folder: string): Promise<string[]> {
+  const output = await runGit(folder, [
+    'ls-files',
+    '--others',
+    '--ignored',
+    '--exclude-standard',
+    '--directory',
+    '-z'
+  ])
+  return output
+    .split('\0')
+    .filter((path) => path !== '')
+    .map((path) => join(folder, path.replace(/\/$/, '')))
 }
 
 /**

@@ -6,10 +6,13 @@ import type { WorkspaceFolderKind } from '../../shared/workspace-api'
 /** On-disk format of a `.hatfield-workspace` file. Bump the version when the shape changes. */
 const WORKSPACE_DOCUMENT_VERSION = 1
 
+/** A saved folder; `multiRepo` marks a project whose repositories are the folders directly inside it. */
+type WorkspaceDocumentFolder = { path: string; kind: WorkspaceFolderKind; multiRepo?: true }
+
 export type WorkspaceDocument = {
   version: typeof WORKSPACE_DOCUMENT_VERSION
   terminals?: TerminalLayout
-  folders: { path: string; kind: WorkspaceFolderKind }[]
+  folders: WorkspaceDocumentFolder[]
   /** The chat's workspace map file, relative to the workspace file or absolute; a default when absent. */
   instructions?: string
 }
@@ -39,14 +42,20 @@ export function parseWorkspaceDocument(text: string): ParsedWorkspaceDocument {
   }
   if (version > WORKSPACE_DOCUMENT_VERSION) return { status: 'newer', version }
   if (!Array.isArray(folders)) return { status: 'corrupt', reason: 'folders is not a list' }
-  const read = new Map<string, WorkspaceFolderKind>()
+  const read = new Map<string, WorkspaceDocumentFolder>()
   for (const folder of folders) {
     if (!isPlainObject(folder) || typeof folder.path !== 'string' || folder.path === '') {
       return { status: 'corrupt', reason: 'a folder entry has no path' }
     }
     // Folders saved before kinds existed, or with a kind this version doesn't know, are projects.
-    if (!read.has(folder.path))
-      read.set(folder.path, folder.kind === 'folder' ? 'folder' : 'project')
+    if (read.has(folder.path)) continue
+    if (folder.kind === 'folder') read.set(folder.path, { path: folder.path, kind: 'folder' })
+    else
+      read.set(folder.path, {
+        path: folder.path,
+        kind: 'project',
+        ...(folder.multiRepo === true ? { multiRepo: true } : {})
+      })
   }
   const terminals = parseTerminalLayout(data.terminals, false, true)
   // A path the user broke is dropped, so the chat falls back to the default map file.
@@ -59,7 +68,7 @@ export function parseWorkspaceDocument(text: string): ParsedWorkspaceDocument {
     document: {
       version: WORKSPACE_DOCUMENT_VERSION,
       ...(terminals ? { terminals } : {}),
-      folders: [...read].map(([path, kind]) => ({ path, kind })),
+      folders: [...read.values()],
       ...(instructions === undefined ? {} : { instructions })
     }
   }

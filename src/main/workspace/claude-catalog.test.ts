@@ -62,7 +62,7 @@ test('loads existing Claude sessions and filters by workspace scope and provider
       '2025-02-06T00:00:00Z'
     )
     const results = await listClaudeCatalog(
-      [{ kind: 'project', path: project, missing: false, name: 'project' }],
+      [{ kind: 'project', path: project, missing: false, name: 'project', multiRepo: false }],
       [],
       Date.parse('2025-02-07T00:00:00Z')
     )

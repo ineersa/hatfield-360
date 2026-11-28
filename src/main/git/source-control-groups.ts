@@ -1,9 +1,13 @@
 import { basename } from 'node:path'
+import { projectRepositories } from '../../shared/project-repositories'
 import type { SourceControlGroup } from '../../shared/source-control-api'
 import type { ProjectWorktrees } from '../../shared/worktree-api'
 import { readWorkingTreeStatus } from './source-control'
 
-type Place = Pick<SourceControlGroup, 'project' | 'root' | 'name' | 'worktree'>
+type Place = Pick<SourceControlGroup, 'project' | 'root' | 'name' | 'worktree'> & {
+  /** The repository the working tree belongs to: the project's own, or one inside a multi-repo project. */
+  repository: string
+}
 
 type GroupPlace =
   | (Place & { status: 'git' })
@@ -15,31 +19,53 @@ type GroupPlace =
  * still has a folder for, each listed once even when two projects share a repository. A project's
  * own working tree goes by its workspace folder, as the Files tree and editor tabs name its files,
  * even when that folder is a symlink and git prints the resolved path; linked worktrees go by git's
- * path, as the Files tree lists them.
+ * path, as the Files tree lists them. A repository inside a multi-repo project goes by
+ * `project/repository`; a multi-repo project with repositories has no "not git" place of its own.
  */
 function groupPlaces(projects: ProjectWorktrees[]): GroupPlace[] {
   const ownFolder = new Map<string, string>()
   for (const project of projects)
-    if (project.status === 'git')
-      for (const tree of project.worktrees)
-        if (tree.project && !ownFolder.has(tree.path)) ownFolder.set(tree.path, project.folder)
+    for (const repository of projectRepositories(project))
+      if (repository.status === 'git')
+        for (const tree of repository.worktrees)
+          if (tree.project && !ownFolder.has(tree.path)) ownFolder.set(tree.path, repository.folder)
   const places = projects.flatMap((project): GroupPlace[] => {
-    const own = { project: project.folder, root: project.folder, name: basename(project.folder) }
-    if (project.status === 'not-git') return [{ ...own, worktree: false, status: 'not-git' }]
-    if (project.status === 'error')
-      return [{ ...own, worktree: false, status: 'error', message: project.message }]
-    return project.worktrees
-      .filter((tree) => !tree.prunable)
-      .map((tree) => {
-        const folder = ownFolder.get(tree.path)
-        return {
-          project: project.folder,
-          root: folder ?? tree.path,
-          name: folder === undefined ? tree.name : basename(folder),
-          worktree: !tree.project,
-          status: 'git'
-        }
-      })
+    const repositories = projectRepositories(project)
+    if (repositories.length === 0) {
+      const own = { project: project.folder, repository: project.folder, root: project.folder }
+      return [{ ...own, name: basename(project.folder), worktree: false, status: 'not-git' }]
+    }
+    return repositories.flatMap((repository): GroupPlace[] => {
+      const inside = repository.folder !== project.folder
+      const label = (folder: string): string =>
+        inside && folder === repository.folder
+          ? `${basename(project.folder)}/${basename(folder)}`
+          : basename(folder)
+      const place = { project: project.folder, repository: repository.folder }
+      if (repository.status === 'error')
+        return [
+          {
+            ...place,
+            root: repository.folder,
+            name: label(repository.folder),
+            worktree: false,
+            status: 'error',
+            message: repository.message
+          }
+        ]
+      return repository.worktrees
+        .filter((tree) => !tree.prunable)
+        .map((tree) => {
+          const folder = ownFolder.get(tree.path)
+          return {
+            ...place,
+            root: folder ?? tree.path,
+            name: folder === undefined ? tree.name : label(folder),
+            worktree: !tree.project,
+            status: 'git'
+          }
+        })
+    })
   })
   return places.filter(
     (place, index) => places.findIndex((other) => other.root === place.root) === index
@@ -50,12 +76,13 @@ function groupPlaces(projects: ProjectWorktrees[]): GroupPlace[] {
 export function sourceControlStatus(projects: ProjectWorktrees[]): Promise<SourceControlGroup[]> {
   return Promise.all(
     groupPlaces(projects).map(async (place): Promise<SourceControlGroup> => {
-      if (place.status !== 'git') return place
+      const { repository: _repository, ...group } = place
+      if (group.status !== 'git') return group
       try {
-        return { ...place, ...(await readWorkingTreeStatus(place.root)) }
+        return { ...group, ...(await readWorkingTreeStatus(group.root)) }
       } catch (error) {
         return {
-          ...place,
+          ...group,
           status: 'error',
           message: error instanceof Error ? error.message : String(error)
         }

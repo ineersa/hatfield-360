@@ -9,6 +9,8 @@ export type WorkspaceFolder = {
   path: string
   name: string
   kind: WorkspaceFolderKind
+  /** A project whose git repositories are the folders directly inside it, marked by the user. */
+  multiRepo: boolean
   /** The folder no longer exists on disk; it stays listed until the user removes it. */
   missing: boolean
 }
@@ -49,6 +51,7 @@ export const WORKSPACE_CHANNELS = {
   addFolder: 'workspace:add-folder',
   removeFolder: 'workspace:remove-folder',
   setFolderKind: 'workspace:set-folder-kind',
+  setFolderMultiRepo: 'workspace:set-folder-multi-repo',
   openFile: 'workspace:open-file',
   openRecent: 'workspace:open-recent',
   removeRecent: 'workspace:remove-recent',
@@ -65,6 +68,8 @@ export type WorkspaceApi = {
   removeWorkspaceFolder: (path: string) => Promise<void>
   /** Hide from Projects (`folder`) or Show in Projects (`project`). */
   setWorkspaceFolderKind: (path: string, kind: WorkspaceFolderKind) => Promise<void>
+  /** Mark as Multi-Repo Folder (also makes it a project) or Unmark. */
+  setWorkspaceFolderMultiRepo: (path: string, multiRepo: boolean) => Promise<void>
   /** Opens the native file picker in main and switches to the chosen workspace file. */
   openWorkspaceFile: () => Promise<void>
   /** Opens a Recent entry; main accepts only entries in its own Recent list. */

@@ -1,5 +1,6 @@
 import type { DirectoryEntry, DirectoryListing } from '../../../../shared/file-tree-api'
 import type { WorkspaceFolder } from '../../../../shared/workspace-api'
+import { linkedWorktrees } from '../../../../shared/project-repositories'
 import type { ProjectWorktrees, Worktree } from '../../../../shared/worktree-api'
 import { separatorOf } from '../editor/editor-tab-labels'
 
@@ -39,16 +40,17 @@ export function treeRoots(
   projects: Record<string, ProjectWorktrees>
 ): TreeRoot[] {
   return folders.map((folder) => {
-    const project = folder.kind === 'project' ? projects[folder.path] : undefined
-    const worktrees = project?.status === 'git' && !folder.missing ? project.worktrees : []
-    const checkout = worktrees.find((worktree) => worktree.project)
+    const project = folder.kind === 'project' && !folder.missing ? projects[folder.path] : undefined
+    const checkout =
+      project?.status === 'git' ? project.worktrees.find((worktree) => worktree.project) : undefined
     return {
       path: folder.path,
       name: folder.name,
       branch: checkout ? branchOf(checkout) : null,
       folder,
-      worktrees: worktrees
-        .filter((worktree) => !worktree.project && !worktree.prunable)
+      // Also the linked worktrees of the repositories inside a multi-repo folder.
+      worktrees: linkedWorktrees(project)
+        .filter((worktree) => !worktree.prunable)
         .map((worktree) => ({
           path: worktree.path,
           name: worktree.name,
